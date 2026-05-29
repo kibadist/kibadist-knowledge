@@ -28,6 +28,11 @@ export class InboxController {
     return this.inbox.list(user.userId)
   }
 
+  @Get(':id')
+  get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.inbox.findOne(user.userId, id)
+  }
+
   @Post('text')
   captureText(@CurrentUser() user: AuthUser, @Body() dto: CaptureTextDto) {
     return this.inbox.captureText(user.userId, dto)

@@ -108,6 +108,19 @@ export interface InboxItem {
   createdAt: string
 }
 
+export interface InboxItemDetail extends InboxItem {
+  sourceText: string | null
+}
+
+export interface IntakeQuestion {
+  id: string
+  conceptId: string
+  prompt: string
+  kind: string | null
+  answer: string | null
+  order: number
+}
+
 export const api = {
   register: (input: { email: string; password: string; name?: string }) =>
     request<AuthResponse>('/auth/register', {
@@ -146,4 +159,21 @@ export const api = {
   },
   discardInboxItem: (id: string) =>
     request<void>(`/inbox/${id}`, { method: 'DELETE' }),
+  getInboxItem: (id: string) => request<InboxItemDetail>(`/inbox/${id}`),
+
+  // --- Intake interrogation (DET-188) ---
+  generateInterrogation: (conceptId: string) =>
+    request<IntakeQuestion[]>(`/intake/${conceptId}/questions`, {
+      method: 'POST',
+    }),
+  getInterrogation: (conceptId: string) =>
+    request<IntakeQuestion[]>(`/intake/${conceptId}`),
+  saveInterrogationAnswers: (
+    conceptId: string,
+    answers: { questionId: string; answer: string }[],
+  ) =>
+    request<IntakeQuestion[]>(`/intake/${conceptId}/answers`, {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
+    }),
 }

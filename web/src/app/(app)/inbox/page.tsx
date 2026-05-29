@@ -1,6 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import Link from 'next/link'
 import { type FormEvent, useRef, useState } from 'react'
 
 import { api, type CaptureSource, type InboxItem } from '@/lib/api'
@@ -212,7 +213,12 @@ function InboxRow({
         </button>
       </div>
 
-      <h2 className='mt-2 font-medium text-neutral-100'>{item.title}</h2>
+      <Link
+        href={`/inbox/${item.id}`}
+        className='mt-2 block font-medium text-neutral-100 hover:underline'
+      >
+        {item.title}
+      </Link>
 
       {item.sourceUrl && (
         <a
@@ -231,9 +237,17 @@ function InboxRow({
         </p>
       )}
 
-      <time className='mt-2 block text-xs text-neutral-600'>
-        Captured {new Date(item.createdAt).toLocaleString()}
-      </time>
+      <div className='mt-2 flex items-center justify-between'>
+        <time className='text-xs text-neutral-600'>
+          Captured {new Date(item.createdAt).toLocaleString()}
+        </time>
+        <Link
+          href={`/inbox/${item.id}`}
+          className='text-sm font-medium text-amber-400/90 hover:underline'
+        >
+          Process →
+        </Link>
+      </div>
     </li>
   )
 }

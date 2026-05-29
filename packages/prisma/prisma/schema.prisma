@@ -27,6 +27,7 @@ model User {
   articulations   Articulation[]
   links           Link[]
   retrievalEvents RetrievalEvent[]
+  intakeQuestions IntakeQuestion[]
 
   @@map("user")
 }
@@ -72,6 +73,7 @@ model Concept {
   outgoingLinks   Link[]           @relation("LinkSource")
   incomingLinks   Link[]           @relation("LinkTarget")
   retrievalEvents RetrievalEvent[]
+  intakeQuestions IntakeQuestion[]
 
   @@index([userId])
   @@index([userId, status])
@@ -151,6 +153,33 @@ model RetrievalEvent {
   @@index([userId])
   @@index([conceptId, createdAt])
   @@map("retrieval_event")
+}
+
+// The AI Intake Interrogator (DET-188): one probing question posed while the
+// user processes an inbox item. `prompt` is AI-authored metadata; `answer` is
+// the user's OWN words — the canonical input. The AI never writes `answer`, and
+// its text never becomes a concept's note.
+model IntakeQuestion {
+  id        String   @id @default(cuid())
+  conceptId String
+  userId    String
+  // The AI-generated question (metadata, never the saved note).
+  prompt    String
+  // Category of probe: central_claim | terminology | assumption | ambiguity |
+  // sharpen | connection. Advisory metadata for the UI.
+  kind      String?
+  // The user's own-words answer; null until they respond.
+  answer    String?
+  order     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conceptId])
+  @@index([userId])
+  @@map("intake_question")
 }
 
 enum ConceptStatus {

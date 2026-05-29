@@ -19,6 +19,11 @@ export interface InboxItem {
   createdAt: Date
 }
 
+/** A single inbox item with its full raw material (processing view). */
+export interface InboxItemDetail extends InboxItem {
+  sourceText: string | null
+}
+
 /**
  * The Capture Inbox (DET-187). Captures raw material into a deliberate holding
  * area — a `Concept` in `INBOX` status. Nothing here is knowledge yet: capture
@@ -91,6 +96,31 @@ export class InboxService {
       excerpt: excerpt(r.sourceText),
       createdAt: r.createdAt,
     }))
+  }
+
+  /** A single inbox item with its full raw material — for the processing view. */
+  async findOne(userId: string, id: string): Promise<InboxItemDetail> {
+    const row = await this.prisma.concept.findFirst({
+      where: { id, userId, status: ConceptStatus.INBOX },
+      select: {
+        id: true,
+        title: true,
+        sourceText: true,
+        captureSource: true,
+        sourceUrl: true,
+        createdAt: true,
+      },
+    })
+    if (!row) throw new NotFoundException('Inbox item not found')
+    return {
+      id: row.id,
+      title: row.title,
+      captureSource: row.captureSource,
+      sourceUrl: row.sourceUrl,
+      sourceText: row.sourceText,
+      excerpt: excerpt(row.sourceText),
+      createdAt: row.createdAt,
+    }
   }
 
   /** Discards an inbox item. Only INBOX items can be discarded this way. */
