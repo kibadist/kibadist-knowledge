@@ -1,0 +1,61 @@
+import '@fastify/multipart'
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Req,
+} from '@nestjs/common'
+import type { FastifyRequest } from 'fastify'
+
+import type { AuthUser } from '../auth/auth.types'
+import { CurrentUser } from '../auth/current-user.decorator'
+import { CaptureTextDto } from './dto/capture-text.dto'
+import { CaptureUrlDto } from './dto/capture-url.dto'
+import { MAX_PDF_BYTES } from './inbox.constants'
+import { InboxService } from './inbox.service'
+
+@Controller('inbox')
+export class InboxController {
+  constructor(private readonly inbox: InboxService) {}
+
+  @Get()
+  list(@CurrentUser() user: AuthUser) {
+    return this.inbox.list(user.userId)
+  }
+
+  @Post('text')
+  captureText(@CurrentUser() user: AuthUser, @Body() dto: CaptureTextDto) {
+    return this.inbox.captureText(user.userId, dto)
+  }
+
+  @Post('url')
+  captureUrl(@CurrentUser() user: AuthUser, @Body() dto: CaptureUrlDto) {
+    return this.inbox.captureUrl(user.userId, dto)
+  }
+
+  @Post('pdf')
+  async capturePdf(@CurrentUser() user: AuthUser, @Req() req: FastifyRequest) {
+    const data = await req.file({ limits: { fileSize: MAX_PDF_BYTES } })
+    if (!data) throw new BadRequestException('No file uploaded')
+    if (data.mimetype !== 'application/pdf') {
+      throw new BadRequestException('Only PDF files are accepted')
+    }
+    const buffer = await data.toBuffer()
+    // @fastify/multipart sets `truncated` when the stream hit the size limit.
+    if (data.file.truncated) {
+      throw new BadRequestException('PDF exceeds the 10MB limit')
+    }
+    return this.inbox.capturePdf(user.userId, data.filename, buffer)
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  async discard(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    await this.inbox.discard(user.userId, id)
+  }
+}

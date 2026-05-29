@@ -26,7 +26,8 @@ export class RetrievalService {
     userId: string,
     dto: CreateRetrievalEventDto,
   ): Promise<RetrievalEvent> {
-    await this.concepts.assertOwned(userId, dto.conceptId)
+    // Inbox items have no retrieval cards (DET-187) — only earned concepts.
+    await this.concepts.assertOwnedNonInbox(userId, dto.conceptId)
     return this.prisma.retrievalEvent.create({
       data: {
         conceptId: dto.conceptId,

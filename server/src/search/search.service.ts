@@ -66,6 +66,10 @@ export class SearchService {
   ): Promise<ArticulationMatch[]> {
     const literal = await this.embedToVectorLiteral(query)
     if (!literal) return []
+    // Join to concept and exclude INBOX: captured-but-unprocessed items must
+    // never surface in semantic search (DET-187). Articulations can no longer
+    // attach to INBOX concepts, but this keeps the guarantee airtight at the
+    // query layer too.
     return this.prisma.$queryRaw<ArticulationMatch[]>`
       SELECT
         a."id",
@@ -74,7 +78,10 @@ export class SearchService {
         a."createdAt",
         1 - (a."embedding" <=> ${literal}::vector) AS similarity
       FROM "articulation" a
-      WHERE a."userId" = ${userId} AND a."embedding" IS NOT NULL
+      JOIN "concept" c ON c."id" = a."conceptId"
+      WHERE a."userId" = ${userId}
+        AND a."embedding" IS NOT NULL
+        AND c."status"::text <> 'INBOX'
       ORDER BY a."embedding" <=> ${literal}::vector
       LIMIT ${limit}
     `

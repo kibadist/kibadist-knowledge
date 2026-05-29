@@ -46,9 +46,10 @@ export class LinksService {
     if (dto.sourceConceptId === dto.targetConceptId) {
       throw new BadRequestException('A concept cannot link to itself')
     }
-    // Both endpoints must belong to the user.
-    await this.concepts.assertOwned(userId, dto.sourceConceptId)
-    await this.concepts.assertOwned(userId, dto.targetConceptId)
+    // Both endpoints must belong to the user and be earned concepts — inbox
+    // items have no graph links (DET-187).
+    await this.concepts.assertOwnedNonInbox(userId, dto.sourceConceptId)
+    await this.concepts.assertOwnedNonInbox(userId, dto.targetConceptId)
 
     try {
       return await this.prisma.link.create({

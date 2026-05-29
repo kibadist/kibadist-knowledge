@@ -1,4 +1,4 @@
-import type { Concept } from '@kibadist/prisma'
+import { type Concept, ConceptStatus } from '@kibadist/prisma'
 import { Injectable, NotFoundException } from '@nestjs/common'
 
 import { PrismaService } from '../prisma/prisma.service'
@@ -9,9 +9,12 @@ import type { UpdateConceptDto } from './dto/update-concept.dto'
 export class ConceptsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Inbox items are Concepts in INBOX status. They are *not* knowledge yet, so
+  // they must never surface in the concept list or a concept view (DET-187).
+  // Enforced here as the single read path the rest of the app uses.
   findAllForUser(userId: string): Promise<Concept[]> {
     return this.prisma.concept.findMany({
-      where: { userId },
+      where: { userId, status: { not: ConceptStatus.INBOX } },
       orderBy: { createdAt: 'desc' },
     })
   }
@@ -19,7 +22,7 @@ export class ConceptsService {
   /** Returns the concept with its articulations, edges, and recent retrievals. */
   async findOne(userId: string, id: string) {
     const concept = await this.prisma.concept.findFirst({
-      where: { id, userId },
+      where: { id, userId, status: { not: ConceptStatus.INBOX } },
       include: {
         articulations: { orderBy: { createdAt: 'desc' } },
         outgoingLinks: {
@@ -64,10 +67,28 @@ export class ConceptsService {
     })
   }
 
-  /** Throws NotFound unless the concept exists and belongs to the user. */
+  /**
+   * Throws NotFound unless the concept exists and belongs to the user.
+   * Intentionally status-blind: promotion/update flows must be able to act on
+   * an INBOX concept by id. Surfaces where inbox items must NOT participate
+   * (articulations, links, retrieval) use {@link assertOwnedNonInbox} instead.
+   */
   async assertOwned(userId: string, id: string): Promise<void> {
     const found = await this.prisma.concept.findFirst({
       where: { id, userId },
+      select: { id: true },
+    })
+    if (!found) throw new NotFoundException('Concept not found')
+  }
+
+  /**
+   * Like {@link assertOwned}, but also rejects INBOX items. Inbox captures are
+   * not knowledge yet (DET-187): they must never gain articulations, embeddings,
+   * graph links, or retrieval events. This is the single gate enforcing that.
+   */
+  async assertOwnedNonInbox(userId: string, id: string): Promise<void> {
+    const found = await this.prisma.concept.findFirst({
+      where: { id, userId, status: { not: ConceptStatus.INBOX } },
       select: { id: true },
     })
     if (!found) throw new NotFoundException('Concept not found')

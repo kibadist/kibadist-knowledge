@@ -54,6 +54,12 @@ model Concept {
   summary      String?
   // Raw captured material from the low-friction inbox, before articulation.
   sourceText   String?
+  // How the raw material entered the inbox (null for items created before the
+  // capture inbox existed). Drives the inbox's "source" badge.
+  captureSource CaptureSource?
+  // Origin URL when captured from a link. Provenance that survives promotion
+  // (feeds the attribution work in DET-199).
+  sourceUrl    String?
   status       ConceptStatus @default(INBOX)
   // When this concept is next due for spaced resurfacing (null = not scheduled).
   nextReviewAt DateTime?
@@ -83,6 +89,13 @@ model Articulation {
   // Semantic embedding of `body` (OpenAI text-embedding-3-small = 1536 dims).
   // Unsupported: written/queried via raw SQL; the HNSW cosine index lives in
   // the migration. Null until the embed-on-write path populates it.
+  //
+  // ⚠️ MIGRATION LANDMINE: the HNSW index (articulation_embedding_hnsw_idx) is
+  // hand-written raw SQL because Prisma can't express vector operator classes.
+  // Prisma therefore sees it as drift and EVERY `migrate dev` adds a
+  // `DROP INDEX "articulation_embedding_hnsw_idx"` to the generated migration.
+  // Always delete that line from new migrations (and recreate the index if a
+  // run already dropped it) — otherwise semantic search silently degrades.
   embedding Unsupported("vector(1536)")?
   createdAt DateTime                     @default(now())
   updatedAt DateTime                     @updatedAt
@@ -144,6 +157,14 @@ enum ConceptStatus {
   INBOX
   ARTICULATED
   PERMANENT
+}
+
+// Where a captured inbox item came from. Pure provenance — capture never infers
+// meaning from the source (no auto-tagging, no AI summary, no auto-linking).
+enum CaptureSource {
+  PASTE
+  URL
+  PDF
 }
 
 enum LinkStatus {

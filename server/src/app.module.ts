@@ -9,6 +9,7 @@ import { ArticulationsModule } from './articulations/articulations.module'
 import { AuthModule } from './auth/auth.module'
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard'
 import { ConceptsModule } from './concepts/concepts.module'
+import { InboxModule } from './inbox/inbox.module'
 import { LinksModule } from './links/links.module'
 import { NotesModule } from './notes/notes.module'
 import { PrismaModule } from './prisma/prisma.module'
@@ -59,6 +60,7 @@ import { UsersModule } from './users/users.module'
     UsersModule,
     NotesModule,
     ConceptsModule,
+    InboxModule,
     ArticulationsModule,
     LinksModule,
     RetrievalModule,

@@ -29,17 +29,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  })
-
+async function parseResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = res.statusText
     try {
@@ -57,6 +47,31 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken()
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  })
+  return parseResponse<T>(res)
+}
+
+// Multipart upload: never set Content-Type — the browser must add the
+// multipart boundary itself.
+async function upload<T>(path: string, form: FormData): Promise<T> {
+  const token = getToken()
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: form,
+  })
+  return parseResponse<T>(res)
 }
 
 export interface AuthUser {
@@ -82,6 +97,17 @@ export interface Note {
   createdAt: string
 }
 
+export type CaptureSource = 'PASTE' | 'URL' | 'PDF'
+
+export interface InboxItem {
+  id: string
+  title: string
+  captureSource: CaptureSource | null
+  sourceUrl: string | null
+  excerpt: string
+  createdAt: string
+}
+
 export const api = {
   register: (input: { email: string; password: string; name?: string }) =>
     request<AuthResponse>('/auth/register', {
@@ -100,4 +126,24 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  // --- Capture inbox (DET-187) ---
+  listInbox: () => request<InboxItem[]>('/inbox'),
+  captureText: (input: { text: string; title?: string }) =>
+    request<InboxItem>('/inbox/text', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  captureUrl: (input: { url: string }) =>
+    request<InboxItem>('/inbox/url', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  capturePdf: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return upload<InboxItem>('/inbox/pdf', form)
+  },
+  discardInboxItem: (id: string) =>
+    request<void>(`/inbox/${id}`, { method: 'DELETE' }),
 }

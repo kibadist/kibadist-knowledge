@@ -18,7 +18,7 @@ export class ArticulationsService {
     userId: string,
     conceptId: string,
   ): Promise<Articulation[]> {
-    await this.concepts.assertOwned(userId, conceptId)
+    await this.concepts.assertOwnedNonInbox(userId, conceptId)
     return this.prisma.articulation.findMany({
       where: { conceptId },
       orderBy: { createdAt: 'desc' },
@@ -30,7 +30,7 @@ export class ArticulationsService {
     conceptId: string,
     dto: CreateArticulationDto,
   ): Promise<Articulation> {
-    await this.concepts.assertOwned(userId, conceptId)
+    await this.concepts.assertOwnedNonInbox(userId, conceptId)
     const articulation = await this.prisma.articulation.create({
       data: { body: dto.body, conceptId, userId },
     })
