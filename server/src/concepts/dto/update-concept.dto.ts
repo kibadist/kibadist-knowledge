@@ -1,12 +1,7 @@
-import { ConceptStatus } from '@kibadist/prisma'
-import {
-  IsEnum,
-  IsOptional,
-  IsString,
-  MaxLength,
-  MinLength,
-} from 'class-validator'
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator'
 
+// NOTE: no `status` field by design — status transitions are owned solely by the
+// Proof-of-Learning Gate (DET-189), never by a generic PATCH. See CreateConceptDto.
 export class UpdateConceptDto {
   @IsOptional()
   @IsString()
@@ -23,8 +18,4 @@ export class UpdateConceptDto {
   @IsString()
   @MaxLength(20000)
   sourceText?: string
-
-  @IsOptional()
-  @IsEnum(ConceptStatus)
-  status?: ConceptStatus
 }

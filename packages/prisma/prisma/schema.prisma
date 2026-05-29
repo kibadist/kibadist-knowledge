@@ -28,6 +28,7 @@ model User {
   links           Link[]
   retrievalEvents RetrievalEvent[]
   intakeQuestions IntakeQuestion[]
+  promotionDrafts PromotionDraft[]
 
   @@map("user")
 }
@@ -62,6 +63,12 @@ model Concept {
   // (feeds the attribution work in DET-199).
   sourceUrl    String?
   status       ConceptStatus @default(INBOX)
+  // Cognitive state once earned (DET-189): EXPLAINED (articulated, no links) or
+  // LINKED (articulated + connected). Null while still an inbox capture.
+  cognitiveState CognitiveState?
+  // Which proof-of-learning gate mode earned this concept (provenance). Null
+  // until promoted.
+  gateMode     GateMode?
   // When this concept is next due for spaced resurfacing (null = not scheduled).
   nextReviewAt DateTime?
   userId       String
@@ -74,6 +81,7 @@ model Concept {
   incomingLinks   Link[]           @relation("LinkTarget")
   retrievalEvents RetrievalEvent[]
   intakeQuestions IntakeQuestion[]
+  promotionDraft  PromotionDraft?
 
   @@index([userId])
   @@index([userId, status])
@@ -182,6 +190,42 @@ model IntakeQuestion {
   @@map("intake_question")
 }
 
+// The Proof-of-Learning Gate's staging area (DET-189). While a user works an
+// inbox item toward promotion, their inputs live here — NOT as real
+// Articulation/Link/RetrievalEvent rows, which would violate the DET-187
+// invariant that inbox concepts carry no knowledge artifacts. The real rows are
+// written only inside the commit transaction, as the concept flips to PERMANENT.
+// One draft per inbox concept; deleted on commit or abandon.
+//
+// `retrieval*` is the one server-authoritative gate: the client cannot
+// self-certify a passing recall, so the generated question, the user's response,
+// and the AI grade are persisted here and re-checked at commit.
+model PromotionDraft {
+  id                String   @id @default(cuid())
+  conceptId         String   @unique
+  userId            String
+  mode              GateMode @default(QUICK)
+  // Gate 1 (Articulate): the user's own-words core claim, canonical-to-be.
+  articulation      String?
+  // Gate 4 (Validate): set true once the user has been shown the AI-proposed
+  // connections and explicitly acknowledged reviewing them. Server-recorded so
+  // the gate can't be self-certified by a client (the commit re-checks it).
+  connectionsReviewed Boolean @default(false)
+  // Gate 3 (Retrieve): server-generated question + the user's graded recall.
+  retrievalQuestion String?
+  retrievalResponse String?
+  retrievalScore    Int?
+  retrievalPassed   Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("promotion_draft")
+}
+
 enum ConceptStatus {
   INBOX
   ARTICULATED
@@ -200,4 +244,18 @@ enum LinkStatus {
   SUGGESTED
   CONFIRMED
   REJECTED
+}
+
+// Proof-of-learning gate depth (DET-189). QUICK = routine notes; DEEP = new
+// concepts in core domains (requires a real connection + a higher recall bar).
+enum GateMode {
+  QUICK
+  DEEP
+}
+
+// A promoted concept's initial cognitive state (DET-189). EXPLAINED = articulated
+// as a standalone root; LINKED = articulated and connected to the graph.
+enum CognitiveState {
+  EXPLAINED
+  LINKED
 }

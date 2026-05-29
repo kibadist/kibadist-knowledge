@@ -84,6 +84,12 @@ export default function ProcessInboxItemPage() {
           Answer in your own words. We ask the questions — we won’t write your
           understanding for you.
         </p>
+        <Link
+          href={`/inbox/${id}/promote`}
+          className='mt-3 inline-block rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200'
+        >
+          Promote to a concept →
+        </Link>
       </div>
 
       {itemQuery.data?.sourceText && (

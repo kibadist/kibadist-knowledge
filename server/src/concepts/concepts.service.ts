@@ -38,13 +38,14 @@ export class ConceptsService {
     return concept
   }
 
+  // Always lands in the inbox (status defaults to INBOX). Promotion to a
+  // permanent concept is gated and lives in PromotionService (DET-189).
   create(userId: string, dto: CreateConceptDto): Promise<Concept> {
     return this.prisma.concept.create({
       data: {
         title: dto.title,
         summary: dto.summary,
         sourceText: dto.sourceText,
-        status: dto.status,
         userId,
       },
     })
@@ -56,13 +57,14 @@ export class ConceptsService {
     dto: UpdateConceptDto,
   ): Promise<Concept> {
     await this.assertOwned(userId, id)
+    // Note: status is deliberately not updatable here — only the gate moves a
+    // concept between INBOX/ARTICULATED/PERMANENT (DET-189).
     return this.prisma.concept.update({
       where: { id },
       data: {
         title: dto.title,
         summary: dto.summary,
         sourceText: dto.sourceText,
-        status: dto.status,
       },
     })
   }

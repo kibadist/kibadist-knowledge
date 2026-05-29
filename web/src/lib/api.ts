@@ -121,6 +121,106 @@ export interface IntakeQuestion {
   order: number
 }
 
+// --- Proof-of-Learning Gate (DET-189) ---
+export type GateMode = 'QUICK' | 'DEEP'
+export type CognitiveState = 'EXPLAINED' | 'LINKED'
+export type ConceptStatus = 'INBOX' | 'ARTICULATED' | 'PERMANENT'
+
+export interface GateChecklist {
+  articulate: boolean
+  connect: boolean
+  retrieve: boolean
+  validate: boolean
+  ready: boolean
+  cognitiveState: CognitiveState
+}
+
+export interface PromotionDraft {
+  conceptId: string
+  mode: GateMode
+  articulation: string | null
+  connectionsReviewed: boolean
+  retrievalQuestion: string | null
+  retrievalResponse: string | null
+  retrievalScore: number | null
+}
+
+export interface PromotionState {
+  conceptId: string
+  title: string
+  sourceText: string | null
+  draft: PromotionDraft
+  checklist: GateChecklist
+  suggestedMode: GateMode
+}
+
+export interface SuggestedConnection {
+  targetConceptId: string
+  title: string
+  similarity: number
+  snippet: string
+}
+
+export interface RetrievalGrade {
+  score: number
+  passed: boolean
+  feedback: string | null
+}
+
+export interface ConnectionInput {
+  targetConceptId: string
+  relation?: string
+}
+
+export interface CommitPromotionInput {
+  mode: GateMode
+  isRoot: boolean
+  connections: ConnectionInput[]
+}
+
+export interface Concept {
+  id: string
+  title: string
+  summary: string | null
+  sourceText: string | null
+  captureSource: CaptureSource | null
+  sourceUrl: string | null
+  status: ConceptStatus
+  cognitiveState: CognitiveState | null
+  gateMode: GateMode | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ConceptLinkEnd {
+  id: string
+  status: 'SUGGESTED' | 'CONFIRMED' | 'REJECTED'
+  relation: string | null
+  targetConcept?: { id: string; title: string }
+  sourceConcept?: { id: string; title: string }
+}
+
+export interface ConceptArticulation {
+  id: string
+  body: string
+  createdAt: string
+}
+
+export interface ConceptRetrievalEvent {
+  id: string
+  question: string | null
+  response: string | null
+  score: number | null
+  createdAt: string
+}
+
+export interface ConceptDetail extends Concept {
+  articulations: ConceptArticulation[]
+  outgoingLinks: ConceptLinkEnd[]
+  incomingLinks: ConceptLinkEnd[]
+  retrievalEvents: ConceptRetrievalEvent[]
+}
+
 export const api = {
   register: (input: { email: string; password: string; name?: string }) =>
     request<AuthResponse>('/auth/register', {
@@ -176,4 +276,44 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ answers }),
     }),
+
+  // --- Proof-of-Learning Gate (DET-189) ---
+  getPromotion: (conceptId: string) =>
+    request<PromotionState>(`/promotion/${conceptId}`),
+  saveArticulation: (conceptId: string, body: string) =>
+    request<PromotionState>(`/promotion/${conceptId}/articulation`, {
+      method: 'PUT',
+      body: JSON.stringify({ body }),
+    }),
+  setPromotionMode: (conceptId: string, mode: GateMode) =>
+    request<PromotionState>(`/promotion/${conceptId}/mode`, {
+      method: 'PUT',
+      body: JSON.stringify({ mode }),
+    }),
+  getConnectionSuggestions: (conceptId: string) =>
+    request<SuggestedConnection[]>(`/promotion/${conceptId}/connections`),
+  markConnectionsReviewed: (conceptId: string) =>
+    request<PromotionState>(`/promotion/${conceptId}/connections/reviewed`, {
+      method: 'POST',
+    }),
+  generateRetrieval: (conceptId: string) =>
+    request<{ question: string }>(`/promotion/${conceptId}/retrieval`, {
+      method: 'POST',
+    }),
+  answerRetrieval: (conceptId: string, response: string) =>
+    request<RetrievalGrade>(`/promotion/${conceptId}/retrieval/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ response }),
+    }),
+  commitPromotion: (conceptId: string, input: CommitPromotionInput) =>
+    request<ConceptDetail>(`/promotion/${conceptId}/commit`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  abandonPromotion: (conceptId: string) =>
+    request<void>(`/promotion/${conceptId}`, { method: 'DELETE' }),
+
+  // --- Concepts (the earned, permanent layer) ---
+  listConcepts: () => request<Concept[]>('/concepts'),
+  getConcept: (id: string) => request<ConceptDetail>(`/concepts/${id}`),
 }

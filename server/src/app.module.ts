@@ -14,6 +14,7 @@ import { IntakeModule } from './intake/intake.module'
 import { LinksModule } from './links/links.module'
 import { NotesModule } from './notes/notes.module'
 import { PrismaModule } from './prisma/prisma.module'
+import { PromotionModule } from './promotion/promotion.module'
 import { RetrievalModule } from './retrieval/retrieval.module'
 import { SearchModule } from './search/search.module'
 import { UsersModule } from './users/users.module'
@@ -63,6 +64,7 @@ import { UsersModule } from './users/users.module'
     ConceptsModule,
     InboxModule,
     IntakeModule,
+    PromotionModule,
     ArticulationsModule,
     LinksModule,
     RetrievalModule,
