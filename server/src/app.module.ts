@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { APP_GUARD } from '@nestjs/core'
 import { LoggerModule } from 'nestjs-pino'
+import { stdSerializers } from 'pino'
 
+import { AiModule } from './ai/ai.module'
 import { ArticulationsModule } from './articulations/articulations.module'
 import { AuthModule } from './auth/auth.module'
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard'
@@ -36,6 +38,19 @@ import { UsersModule } from './users/users.module'
           ],
           censor: '[REDACTED]',
         },
+        serializers: {
+          // Defense-in-depth: strip any API key that slips into a logged
+          // error message/stack (e.g. an upstream SDK error we didn't translate).
+          err: (error: Error) => {
+            const serialized = stdSerializers.err(error)
+            const scrub = (value: string) =>
+              value.replace(/sk-[A-Za-z0-9_-]+/g, 'sk-***')
+            if (serialized.message)
+              serialized.message = scrub(serialized.message)
+            if (serialized.stack) serialized.stack = scrub(serialized.stack)
+            return serialized
+          },
+        },
       },
     }),
     PrismaModule,
@@ -46,6 +61,7 @@ import { UsersModule } from './users/users.module'
     ArticulationsModule,
     LinksModule,
     RetrievalModule,
+    AiModule,
   ],
   providers: [
     // Global authentication: every route requires a valid JWT unless marked @Public().
