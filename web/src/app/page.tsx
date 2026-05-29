@@ -1052,9 +1052,9 @@ export default function HomePage() {
           </div>
 
           <div className='method-trace'>
-            <span>capture →</span> parse <span>→</span> challenge{' '}
-            <span>→</span> connect <span>→</span> remember <span>→</span>{' '}
-            capture <span>→</span> <em>(repeat, until fluency)</em>
+            <span>capture →</span> parse <span>→</span> challenge <span>→</span>{' '}
+            connect <span>→</span> remember <span>→</span> capture{' '}
+            <span>→</span> <em>(repeat, until fluency)</em>
           </div>
         </div>
       </div>
@@ -1176,7 +1176,9 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <div className='meta'>No spam. One letter per fortnight, at most.</div>
+            <div className='meta'>
+              No spam. One letter per fortnight, at most.
+            </div>
           </div>
         </div>
       </section>

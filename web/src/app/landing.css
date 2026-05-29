@@ -19,7 +19,7 @@
   min-height: 100vh;
   background: var(--paper);
   color: var(--ink);
-  font-family: 'Newsreader', Georgia, serif;
+  font-family: "Newsreader", Georgia, serif;
   font-size: 18px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -28,24 +28,29 @@
 
 /* Paper texture overlay */
 .landing::before {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 1000;
   opacity: 0.35;
   mix-blend-mode: multiply;
-  background-image: radial-gradient(
+  background-image:
+    radial-gradient(
       circle at 20% 30%,
       rgba(60, 40, 20, 0.04) 0%,
       transparent 50%
     ),
-    radial-gradient(circle at 80% 70%, rgba(60, 40, 20, 0.05) 0%, transparent 50%),
+    radial-gradient(
+      circle at 80% 70%,
+      rgba(60, 40, 20, 0.05) 0%,
+      transparent 50%
+    ),
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.08  0 0 0 0 0.05  0 0 0 0.4 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
 .landing::after {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -69,10 +74,10 @@
 }
 
 .landing .mono {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
 }
 .landing .serif-display {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: "Fraunces", Georgia, serif;
 }
 
 .landing .wrap {
@@ -93,7 +98,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 10px 48px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -132,21 +137,23 @@
   position: relative;
 }
 .landing .masthead .title {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: "Fraunces", Georgia, serif;
   font-weight: 900;
   font-size: clamp(56px, 11vw, 144px);
   line-height: 0.9;
   letter-spacing: -0.04em;
   margin: 0;
-  font-variation-settings: 'SOFT' 30, 'opsz' 144;
+  font-variation-settings:
+    "SOFT" 30,
+    "opsz" 144;
 }
 .landing .masthead .title em {
   font-style: italic;
   color: var(--accent);
-  font-variation-settings: 'SOFT' 100;
+  font-variation-settings: "SOFT" 100;
 }
 .landing .masthead .subtitle {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: "Fraunces", Georgia, serif;
   font-style: italic;
   font-size: 19px;
   color: var(--ink-soft);
@@ -156,7 +163,7 @@
 .landing .masthead-meta {
   display: flex;
   justify-content: space-between;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.18em;
@@ -180,7 +187,7 @@
   justify-content: center;
   gap: 44px;
   padding: 14px 48px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
@@ -191,7 +198,7 @@
   transition: color 0.2s;
 }
 .landing nav.primary a::before {
-  content: '§ ';
+  content: "§ ";
   color: var(--accent);
   font-weight: 700;
 }
@@ -213,7 +220,7 @@
 }
 
 .landing .section-label {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.25em;
@@ -225,31 +232,33 @@
   margin-bottom: 28px;
 }
 .landing .section-label::before {
-  content: '';
+  content: "";
   width: 24px;
   height: 1px;
   background: var(--accent);
 }
 
 .landing .hero h1 {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: "Fraunces", Georgia, serif;
   font-weight: 400;
   font-size: clamp(46px, 6vw, 88px);
   line-height: 0.95;
   letter-spacing: -0.03em;
   margin: 0 0 32px;
   color: var(--ink);
-  font-variation-settings: 'SOFT' 50, 'opsz' 144;
+  font-variation-settings:
+    "SOFT" 50,
+    "opsz" 144;
 }
 .landing .hero h1 em {
   font-style: italic;
   font-weight: 600;
   color: var(--accent);
   position: relative;
-  font-variation-settings: 'SOFT' 100;
+  font-variation-settings: "SOFT" 100;
 }
 .landing .hero h1 em::after {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   right: 0;
@@ -261,7 +270,7 @@
 }
 
 .landing .hero-lede {
-  font-family: 'Newsreader', Georgia, serif;
+  font-family: "Newsreader", Georgia, serif;
   font-size: 22px;
   line-height: 1.45;
   color: var(--ink-soft);
@@ -279,7 +288,7 @@
   background: var(--ink);
   color: var(--paper);
   padding: 14px 28px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
@@ -297,7 +306,7 @@
   box-shadow: 4px 4px 0 var(--ink);
 }
 .landing .btn-primary::after {
-  content: '→';
+  content: "→";
   transition: transform 0.2s;
 }
 .landing .btn-primary:hover::after {
@@ -308,7 +317,7 @@
   background: transparent;
   color: var(--ink);
   padding: 14px 28px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
@@ -338,14 +347,14 @@
   margin-bottom: 24px;
 }
 .landing .abstract-head .lbl {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
   color: var(--ink-muted);
 }
 .landing .abstract-head .fig {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-style: italic;
   color: var(--accent);
   font-size: 15px;
@@ -357,14 +366,14 @@
   color: var(--ink-soft);
 }
 .landing .abstract .dropcap::first-letter {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-weight: 900;
   font-size: 70px;
   float: left;
   line-height: 0.85;
   padding: 6px 12px 0 0;
   color: var(--accent);
-  font-variation-settings: 'SOFT' 0;
+  font-variation-settings: "SOFT" 0;
 }
 .landing .keywords {
   margin-top: 24px;
@@ -375,7 +384,7 @@
   gap: 8px;
 }
 .landing .keywords span {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -402,12 +411,12 @@
   border-right: none;
 }
 .landing .cite .num {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-weight: 300;
   font-size: 56px;
   line-height: 1;
   color: var(--ink);
-  font-variation-settings: 'SOFT' 100;
+  font-variation-settings: "SOFT" 100;
 }
 .landing .cite .num sup {
   font-size: 22px;
@@ -416,7 +425,7 @@
   margin-left: 4px;
 }
 .landing .cite .desc {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -440,16 +449,18 @@
   align-items: start;
 }
 .landing .sec-num {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-weight: 200;
   font-size: 120px;
   line-height: 0.85;
   color: var(--accent);
-  font-variation-settings: 'SOFT' 100, 'opsz' 144;
+  font-variation-settings:
+    "SOFT" 100,
+    "opsz" 144;
 }
 .landing .sec-num small {
   display: block;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.25em;
@@ -459,18 +470,20 @@
   font-variation-settings: normal;
 }
 .landing .sec-title {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-weight: 500;
   font-size: clamp(36px, 4.5vw, 64px);
   line-height: 1.02;
   letter-spacing: -0.02em;
   margin: 0 0 22px;
-  font-variation-settings: 'SOFT' 30, 'opsz' 144;
+  font-variation-settings:
+    "SOFT" 30,
+    "opsz" 144;
 }
 .landing .sec-title em {
   font-style: italic;
   color: var(--accent);
-  font-variation-settings: 'SOFT' 100;
+  font-variation-settings: "SOFT" 100;
 }
 .landing .sec-lede {
   font-size: 21px;
@@ -496,25 +509,25 @@
   box-shadow: 10px 10px 0 var(--rule);
 }
 .landing .gate-svg-wrap::before {
-  content: 'FIG. 1.1';
+  content: "FIG. 1.1";
   position: absolute;
   top: -10px;
   left: 32px;
   background: var(--paper);
   padding: 0 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 10.5px;
   letter-spacing: 0.22em;
   color: var(--accent);
 }
 .landing .gate-svg-wrap::after {
-  content: 'The Proof-of-Learning gate, in schematic form.';
+  content: "The Proof-of-Learning gate, in schematic form.";
   position: absolute;
   bottom: -10px;
   right: 32px;
   background: var(--paper);
   padding: 0 12px;
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-style: italic;
   font-size: 13px;
   color: var(--ink-muted);
@@ -536,16 +549,16 @@
   border-bottom: 1px solid var(--rule-soft);
 }
 .landing .step-num {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-style: italic;
   font-weight: 400;
   font-size: 44px;
   line-height: 1;
   color: var(--accent);
-  font-variation-settings: 'SOFT' 100;
+  font-variation-settings: "SOFT" 100;
 }
 .landing .step h4 {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-weight: 600;
   font-size: 24px;
   margin: 0 0 8px;
@@ -574,16 +587,16 @@
   text-align: left;
 }
 .landing .pullquote p {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-style: italic;
   font-size: clamp(28px, 3.5vw, 44px);
   line-height: 1.15;
   margin: 0;
   letter-spacing: -0.015em;
-  font-variation-settings: 'SOFT' 100;
+  font-variation-settings: "SOFT" 100;
 }
 .landing .pullquote p::before {
-  content: '\201C';
+  content: "\201C";
   font-size: 1.5em;
   color: var(--accent);
   line-height: 0;
@@ -591,11 +604,11 @@
   margin-right: 4px;
 }
 .landing .pullquote p::after {
-  content: '\201D';
+  content: "\201D";
   color: var(--accent);
 }
 .landing .pullquote .attr {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
@@ -626,7 +639,7 @@
   position: absolute;
   left: 0;
   top: 22px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 12px;
   font-weight: 500;
   color: var(--accent);
@@ -646,19 +659,19 @@
   box-shadow: 10px 10px 0 var(--rule);
 }
 .landing .policy-card::before {
-  content: 'DOCUMENT 02 · WORKSPACE POLICY';
+  content: "DOCUMENT 02 · WORKSPACE POLICY";
   position: absolute;
   top: -10px;
   left: 24px;
   background: var(--paper);
   color: var(--accent);
   padding: 0 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 10.5px;
   letter-spacing: 0.22em;
 }
 .landing .policy-card h3 {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-weight: 500;
   font-size: 32px;
   margin: 12px 0 4px;
@@ -668,7 +681,7 @@
   display: inline-block;
   border: 2px solid var(--olive);
   color: var(--olive);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
@@ -686,14 +699,14 @@
   align-items: baseline;
 }
 .landing .policy-row .k {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
   color: #b5a896;
 }
 .landing .policy-row .v {
-  font-family: 'Newsreader', serif;
+  font-family: "Newsreader", serif;
   font-size: 17px;
   color: var(--paper);
 }
@@ -727,7 +740,7 @@
   background: var(--paper-2);
 }
 .landing .feat .feat-num {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 10.5px;
   color: var(--accent);
   letter-spacing: 0.22em;
@@ -738,7 +751,7 @@
   color: var(--ink);
 }
 .landing .feat h3 {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-weight: 600;
   font-size: 26px;
   margin: 0 0 12px;
@@ -754,7 +767,7 @@
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px dashed var(--rule-soft);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   color: var(--ink-muted);
   letter-spacing: 0.05em;
@@ -812,7 +825,7 @@
   padding-left: 0;
 }
 .landing .proc::before {
-  content: '';
+  content: "";
   position: absolute;
   left: -4px;
   top: 32px;
@@ -826,7 +839,7 @@
 }
 
 .landing .proc .proc-step {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   color: var(--highlight);
   letter-spacing: 0.2em;
@@ -834,14 +847,14 @@
   text-transform: uppercase;
 }
 .landing .proc h4 {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-style: italic;
   font-weight: 400;
   font-size: 38px;
   margin: 0 0 16px;
   letter-spacing: -0.01em;
   color: var(--paper);
-  font-variation-settings: 'SOFT' 100;
+  font-variation-settings: "SOFT" 100;
 }
 .landing .proc p {
   font-size: 15.5px;
@@ -854,7 +867,7 @@
   margin-top: 72px;
   padding-top: 32px;
   border-top: 1px dashed rgba(241, 235, 222, 0.2);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 12px;
   color: #b5a896;
   text-align: center;
@@ -882,17 +895,17 @@
   border-right: none;
 }
 .landing .principle .p-num {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-style: italic;
   font-weight: 200;
   font-size: 64px;
   line-height: 1;
   color: var(--accent);
   margin-bottom: 12px;
-  font-variation-settings: 'SOFT' 100;
+  font-variation-settings: "SOFT" 100;
 }
 .landing .principle h4 {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-weight: 600;
   font-size: 21px;
   margin: 0 0 10px;
@@ -906,7 +919,7 @@
 }
 .landing .principle .ref {
   margin-top: 16px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 10px;
   color: var(--ink-muted);
   letter-spacing: 0.08em;
@@ -936,7 +949,8 @@
 .landing .submission {
   padding: 120px 0;
   text-align: center;
-  background: repeating-linear-gradient(
+  background:
+    repeating-linear-gradient(
       90deg,
       transparent 0,
       transparent 23px,
@@ -987,18 +1001,20 @@
 }
 
 .landing .submission h2 {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-weight: 500;
   font-size: clamp(40px, 5.5vw, 76px);
   line-height: 0.98;
   letter-spacing: -0.03em;
   margin: 0 0 24px;
-  font-variation-settings: 'SOFT' 50, 'opsz' 144;
+  font-variation-settings:
+    "SOFT" 50,
+    "opsz" 144;
 }
 .landing .submission h2 em {
   font-style: italic;
   color: var(--accent);
-  font-variation-settings: 'SOFT' 100;
+  font-variation-settings: "SOFT" 100;
 }
 .landing .submission p {
   font-size: 19px;
@@ -1013,7 +1029,7 @@
 }
 .landing .submission .meta {
   margin-top: 40px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   color: var(--ink-muted);
   letter-spacing: 0.2em;
@@ -1022,7 +1038,7 @@
 /* ====================  COLOPHON  ==================== */
 .landing .colophon {
   padding: 56px 0 80px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   color: var(--ink-muted);
   letter-spacing: 0.1em;
@@ -1034,7 +1050,7 @@
   align-items: start;
 }
 .landing .colophon h5 {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
@@ -1058,7 +1074,7 @@
   color: var(--accent);
 }
 .landing .colophon .imprint {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-style: italic;
   font-size: 16px;
   line-height: 1.55;
@@ -1067,7 +1083,7 @@
   letter-spacing: 0;
 }
 .landing .colophon .imprint strong {
-  font-family: 'Fraunces', serif;
+  font-family: "Fraunces", serif;
   font-weight: 900;
   font-style: normal;
   color: var(--ink);
@@ -1197,7 +1213,9 @@
 .landing .reveal {
   opacity: 0;
   transform: translateY(20px);
-  transition: opacity 0.8s ease, transform 0.8s ease;
+  transition:
+    opacity 0.8s ease,
+    transform 0.8s ease;
 }
 .landing .reveal.in {
   opacity: 1;
