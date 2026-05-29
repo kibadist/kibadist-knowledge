@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
+import { ArticleReader } from '@/components/reader/article-reader'
 import {
   api,
   type GateMode,
@@ -200,9 +201,12 @@ export default function PromoteConceptPage() {
           />
 
           {promotion.sourceText && (
-            <section className='max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-neutral-800 bg-neutral-950/50 p-4 text-sm text-neutral-400'>
-              {promotion.sourceText}
-            </section>
+            <ArticleReader
+              content={promotion.sourceText}
+              variant='compact'
+              showHeader={false}
+              storageKey={`promote-${id}`}
+            />
           )}
 
           {/* Mode picker */}

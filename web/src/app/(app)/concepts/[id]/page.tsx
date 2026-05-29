@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
+import { ArticleReader } from '@/components/reader/article-reader'
 import {
   api,
   type ConceptArticulation,
@@ -168,9 +169,12 @@ export default function ConceptViewPage() {
               )}
             </div>
             {concept.sourceText && (
-              <div className='max-h-60 overflow-y-auto whitespace-pre-wrap rounded-lg border border-neutral-800 bg-neutral-950/50 p-4 text-sm text-neutral-400'>
-                {concept.sourceText}
-              </div>
+              <ArticleReader
+                content={concept.sourceText}
+                variant='compact'
+                showHeader={false}
+                storageKey={`concept-${id}`}
+              />
             )}
           </section>
         </>

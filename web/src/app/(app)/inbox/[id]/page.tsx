@@ -5,6 +5,11 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
+import {
+  ArticleReader,
+  ReaderError,
+  ReaderSkeleton,
+} from '@/components/reader/article-reader'
 import { api, type IntakeQuestion, type SourceQuestion } from '@/lib/api'
 
 const KIND_LABEL: Record<string, string> = {
@@ -96,10 +101,25 @@ export default function ProcessInboxItemPage() {
         </Link>
       </div>
 
+      {itemQuery.isLoading && <ReaderSkeleton />}
+      {itemQuery.isError && (
+        <ReaderError
+          message={
+            itemQuery.error instanceof Error
+              ? itemQuery.error.message
+              : 'Could not load this source.'
+          }
+          onRetry={() => itemQuery.refetch()}
+        />
+      )}
+
       {itemQuery.data?.sourceText && (
-        <section className='max-h-60 overflow-y-auto whitespace-pre-wrap rounded-lg border border-neutral-800 bg-neutral-950/50 p-4 text-sm text-neutral-400'>
-          {itemQuery.data.sourceText}
-        </section>
+        <ArticleReader
+          content={itemQuery.data.sourceText}
+          sourceUrl={itemQuery.data.sourceUrl}
+          captureSource={itemQuery.data.captureSource}
+          capturedAt={itemQuery.data.createdAt}
+        />
       )}
 
       {itemQuery.data?.sourceText && <ReferenceQaPanel conceptId={id} />}
