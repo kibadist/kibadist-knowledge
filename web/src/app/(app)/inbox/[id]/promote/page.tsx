@@ -253,6 +253,29 @@ export default function PromoteConceptPage() {
                 you understand it.
               </p>
             </div>
+            {promotion.referenceQa.length > 0 && (
+              <details className='rounded-md border border-neutral-800 bg-neutral-950/40 p-3'>
+                <summary className='cursor-pointer text-xs uppercase tracking-wide text-neutral-500'>
+                  Your reference Q&A ({promotion.referenceQa.length}) — scaffold
+                  only
+                </summary>
+                <p className='mt-2 text-xs text-neutral-600'>
+                  What you explored while reading. For reference only — write
+                  your own words above; we won’t fill this in for you.
+                </p>
+                <ul className='mt-2 flex flex-col gap-2'>
+                  {promotion.referenceQa.map((qa, i) => (
+                    <li
+                      key={i}
+                      className='border-l border-neutral-700 pl-3 text-sm'
+                    >
+                      <p className='text-neutral-300'>{qa.questionText}</p>
+                      <p className='mt-0.5 text-neutral-500'>{qa.answerText}</p>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             <textarea
               value={articulation}
               onChange={(e) => setArticulation(e.target.value)}

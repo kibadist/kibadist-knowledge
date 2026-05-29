@@ -3,11 +3,12 @@ import { Module } from '@nestjs/common'
 import { AiModule } from '../ai/ai.module'
 import { ConceptsModule } from '../concepts/concepts.module'
 import { SearchModule } from '../search/search.module'
+import { SourceQaModule } from '../source-qa/source-qa.module'
 import { PromotionController } from './promotion.controller'
 import { PromotionService } from './promotion.service'
 
 @Module({
-  imports: [ConceptsModule, AiModule, SearchModule],
+  imports: [ConceptsModule, AiModule, SearchModule, SourceQaModule],
   controllers: [PromotionController],
   providers: [PromotionService],
 })

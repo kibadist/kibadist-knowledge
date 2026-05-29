@@ -17,6 +17,7 @@ import { PrismaModule } from './prisma/prisma.module'
 import { PromotionModule } from './promotion/promotion.module'
 import { RetrievalModule } from './retrieval/retrieval.module'
 import { SearchModule } from './search/search.module'
+import { SourceQaModule } from './source-qa/source-qa.module'
 import { UsersModule } from './users/users.module'
 
 @Module({
@@ -65,6 +66,7 @@ import { UsersModule } from './users/users.module'
     InboxModule,
     IntakeModule,
     PromotionModule,
+    SourceQaModule,
     ArticulationsModule,
     LinksModule,
     RetrievalModule,

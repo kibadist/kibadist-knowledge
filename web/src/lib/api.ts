@@ -54,7 +54,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      // Only declare a JSON content-type when we actually send a body. Fastify
+      // rejects an empty body sent with `application/json` (FST_ERR_CTP_EMPTY_
+      // JSON_BODY), which would otherwise break bodyless POSTs (e.g. generating
+      // interrogation questions, retrieval prompts, marking connections reviewed).
+      ...(options.body != null ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
@@ -145,6 +149,35 @@ export interface PromotionDraft {
   retrievalScore: number | null
 }
 
+// --- Reference Q&A (DET-208) ---
+export type QuestionActor = 'USER' | 'AI'
+export type AnswerKind =
+  | 'REFERENCE_SCAFFOLD'
+  | 'USER_ATTEMPT'
+  | 'VALIDATED_ARTICULATION'
+
+// A question asked while reading a source, optionally AI-answered as a
+// source-grounded scaffold. NEVER knowledge — provenance is explicit so the UI
+// can label scaffold distinctly from earned articulations.
+export interface SourceQuestion {
+  id: string
+  conceptId: string
+  askedBy: QuestionActor
+  questionText: string
+  answerText: string | null
+  answeredBy: QuestionActor | null
+  answerKind: AnswerKind | null
+  citations: string[]
+  createdAt: string
+}
+
+// Read-only prior Q&A surfaced to the promote/compression wizard as reference
+// scaffold. It must never prefill the user's articulation.
+export interface ReferenceQa {
+  questionText: string
+  answerText: string
+}
+
 export interface PromotionState {
   conceptId: string
   title: string
@@ -152,6 +185,7 @@ export interface PromotionState {
   draft: PromotionDraft
   checklist: GateChecklist
   suggestedMode: GateMode
+  referenceQa: ReferenceQa[]
 }
 
 export interface SuggestedConnection {
@@ -312,6 +346,17 @@ export const api = {
     }),
   abandonPromotion: (conceptId: string) =>
     request<void>(`/promotion/${conceptId}`, { method: 'DELETE' }),
+
+  // --- Reference Q&A (DET-208) ---
+  askSourceQuestion: (conceptId: string, questionText: string) =>
+    request<SourceQuestion>(`/source-qa/${conceptId}/ask`, {
+      method: 'POST',
+      body: JSON.stringify({ questionText }),
+    }),
+  listSourceQuestions: (conceptId: string) =>
+    request<SourceQuestion[]>(`/source-qa/${conceptId}`),
+  deleteSourceQuestion: (id: string) =>
+    request<void>(`/source-qa/entry/${id}`, { method: 'DELETE' }),
 
   // --- Concepts (the earned, permanent layer) ---
   listConcepts: () => request<Concept[]>('/concepts'),

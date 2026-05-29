@@ -29,6 +29,7 @@ model User {
   retrievalEvents RetrievalEvent[]
   intakeQuestions IntakeQuestion[]
   promotionDrafts PromotionDraft[]
+  sourceQuestions SourceQuestion[]
 
   @@map("user")
 }
@@ -82,6 +83,7 @@ model Concept {
   retrievalEvents RetrievalEvent[]
   intakeQuestions IntakeQuestion[]
   promotionDraft  PromotionDraft?
+  sourceQuestions SourceQuestion[]
 
   @@index([userId])
   @@index([userId, status])
@@ -226,6 +228,49 @@ model PromotionDraft {
   @@map("promotion_draft")
 }
 
+// Reference Q&A (DET-208). A separate cognitive layer from earned knowledge: a
+// question asked while READING a source, optionally answered by the AI as a
+// source-grounded SCAFFOLD to aid comprehension. This is deliberately NOT an
+// Articulation — scaffold is borrowed understanding, not earned cognition. The
+// Proof-of-Learning Gate (DET-189) never reads from here: there is no code path
+// that turns a REFERENCE_SCAFFOLD answer into a canonical Articulation. The
+// provenance fields (askedBy/answeredBy/answerKind) make that boundary a
+// queryable fact, not just a UI label, and `answerKind` keeps scaffold
+// structurally distinct from any user-authored attempt.
+//
+// Lives against the INBOX concept being read; feeds forward as read-only context
+// to the Interrogator (DET-188) and Compression (DET-190), which may DISPLAY it
+// but must never prefill or write the user's canonical articulation from it.
+model SourceQuestion {
+  id           String         @id @default(cuid())
+  conceptId    String
+  userId       String
+  // Who posed the question. Today always USER (the reader asks); modeled
+  // explicitly so the Interrogator can also persist AI-asked follow-ups later.
+  askedBy      QuestionActor  @default(USER)
+  questionText String
+  // The answer, null until answered. For a reference answer this is AI-authored
+  // scaffold; it is never promoted to knowledge.
+  answerText   String?
+  answeredBy   QuestionActor?
+  // Provenance of the answer text. REFERENCE_SCAFFOLD = AI comprehension aid
+  // (never knowledge). USER_ATTEMPT / VALIDATED_ARTICULATION are reserved for
+  // user-authored cognition so the gate can tell borrowed from earned text.
+  answerKind   AnswerKind?
+  // Source ranges / citation metadata grounding a reference answer (jsonb).
+  citations    Json?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conceptId])
+  @@index([userId])
+  @@index([conceptId, createdAt])
+  @@map("source_question")
+}
+
 enum ConceptStatus {
   INBOX
   ARTICULATED
@@ -258,4 +303,22 @@ enum GateMode {
 enum CognitiveState {
   EXPLAINED
   LINKED
+}
+
+// Who produced a question or answer in Reference Q&A (DET-208). Provenance that
+// keeps AI scaffold distinguishable from user cognition at the data layer.
+enum QuestionActor {
+  USER
+  AI
+}
+
+// What a Reference Q&A answer's text IS, epistemically (DET-208).
+// REFERENCE_SCAFFOLD = AI-authored comprehension aid, never promotable to
+// knowledge. USER_ATTEMPT / VALIDATED_ARTICULATION are reserved for
+// user-authored cognition (the gate's domain), kept here so a single column can
+// distinguish borrowed scaffold from earned articulation.
+enum AnswerKind {
+  REFERENCE_SCAFFOLD
+  USER_ATTEMPT
+  VALIDATED_ARTICULATION
 }

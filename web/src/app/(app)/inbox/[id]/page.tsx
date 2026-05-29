@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
-import { api, type IntakeQuestion } from '@/lib/api'
+import { api, type IntakeQuestion, type SourceQuestion } from '@/lib/api'
 
 const KIND_LABEL: Record<string, string> = {
   central_claim: 'Central claim',
@@ -21,6 +21,10 @@ const KIND_LABEL: Record<string, string> = {
  * to make the user think. The user answers in their OWN words; the AI never
  * drafts or pre-fills. This screen only captures answers; promoting the item
  * into a permanent concept is a later step.
+ *
+ * Reference Q&A (DET-208) lives alongside: the user may ask the AI questions
+ * about the source and get source-grounded SCAFFOLD answers. Scaffold is clearly
+ * labeled and is never knowledge — promotion still goes through the gate.
  */
 export default function ProcessInboxItemPage() {
   const params = useParams<{ id: string }>()
@@ -97,6 +101,8 @@ export default function ProcessInboxItemPage() {
           {itemQuery.data.sourceText}
         </section>
       )}
+
+      {itemQuery.data?.sourceText && <ReferenceQaPanel conceptId={id} />}
 
       {questionsQuery.isLoading && (
         <p className='text-neutral-400'>
@@ -180,5 +186,135 @@ export default function ProcessInboxItemPage() {
         </form>
       )}
     </div>
+  )
+}
+
+/**
+ * Reference Q&A (DET-208). Ask the source questions while reading; the AI answers
+ * with a source-grounded scaffold. Every answer is visibly marked as scaffold —
+ * a comprehension aid, NOT the user's knowledge. None of this can be promoted;
+ * the user still has to articulate in their own words at the gate.
+ */
+function ReferenceQaPanel({ conceptId }: { conceptId: string }) {
+  const queryClient = useQueryClient()
+  const [question, setQuestion] = useState('')
+
+  const historyQuery = useQuery({
+    queryKey: ['source-qa', conceptId],
+    queryFn: () => api.listSourceQuestions(conceptId),
+  })
+
+  const ask = useMutation({
+    mutationFn: (q: string) => api.askSourceQuestion(conceptId, q),
+    onSuccess: (created) => {
+      queryClient.setQueryData<SourceQuestion[]>(
+        ['source-qa', conceptId],
+        (prev) => [...(prev ?? []), created],
+      )
+      setQuestion('')
+    },
+  })
+
+  const remove = useMutation({
+    mutationFn: (entryId: string) => api.deleteSourceQuestion(entryId),
+    onSuccess: (_void, entryId) => {
+      queryClient.setQueryData<SourceQuestion[]>(
+        ['source-qa', conceptId],
+        (prev) => (prev ?? []).filter((e) => e.id !== entryId),
+      )
+    },
+  })
+
+  const trimmed = question.trim()
+
+  return (
+    <section className='flex flex-col gap-4 rounded-lg border border-neutral-800 bg-neutral-950/30 p-4'>
+      <div>
+        <h2 className='text-sm font-semibold text-neutral-200'>
+          Ask about the source
+        </h2>
+        <p className='text-xs text-neutral-500'>
+          Answers are grounded in the text to help you read. They’re reference
+          scaffold — not your knowledge. You’ll still articulate it yourself.
+        </p>
+      </div>
+
+      {historyQuery.data && historyQuery.data.length > 0 && (
+        <ul className='flex flex-col gap-3'>
+          {historyQuery.data.map((entry) => (
+            <li
+              key={entry.id}
+              className='rounded-md border border-neutral-800 bg-neutral-900/40 p-3'
+            >
+              <div className='flex items-start justify-between gap-2'>
+                <p className='text-sm font-medium text-neutral-200'>
+                  {entry.questionText}
+                </p>
+                <button
+                  type='button'
+                  onClick={() => remove.mutate(entry.id)}
+                  className='shrink-0 text-xs text-neutral-600 transition hover:text-neutral-300'
+                  aria-label='Discard this question'
+                >
+                  ✕
+                </button>
+              </div>
+              {entry.answerText && (
+                <div className='mt-2 border-l-2 border-amber-700/40 pl-3'>
+                  <span className='inline-block rounded border border-amber-700/40 bg-amber-950/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300/80'>
+                    Reference · AI scaffold
+                  </span>
+                  <p className='mt-1.5 whitespace-pre-wrap text-sm text-neutral-400'>
+                    {entry.answerText}
+                  </p>
+                  {entry.citations.length > 0 && (
+                    <ul className='mt-2 flex flex-col gap-1'>
+                      {entry.citations.map((c, i) => (
+                        <li
+                          key={i}
+                          className='border-l border-neutral-700 pl-2 text-xs italic text-neutral-500'
+                        >
+                          “{c}”
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (trimmed) ask.mutate(trimmed)
+        }}
+        className='flex flex-col gap-2'
+      >
+        <textarea
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          placeholder='e.g. What does the author mean by this term?'
+          rows={2}
+          className='resize-y rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-neutral-400'
+        />
+        {ask.isError && (
+          <p className='text-sm text-red-400'>
+            {ask.error instanceof Error
+              ? ask.error.message
+              : 'Could not answer right now'}
+          </p>
+        )}
+        <button
+          type='submit'
+          disabled={ask.isPending || !trimmed}
+          className='self-start rounded-md border border-neutral-700 px-3 py-1.5 text-sm transition hover:bg-neutral-900 disabled:opacity-50'
+        >
+          {ask.isPending ? 'Asking…' : 'Ask the source'}
+        </button>
+      </form>
+    </section>
   )
 }

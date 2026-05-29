@@ -18,6 +18,10 @@ import { AiService } from '../ai/ai.service'
 import { ConceptsService } from '../concepts/concepts.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { SearchService } from '../search/search.service'
+import {
+  type ReferenceQaContext,
+  SourceQaService,
+} from '../source-qa/source-qa.service'
 import type { CommitPromotionDto } from './dto/commit-promotion.dto'
 import {
   buildGradePrompt,
@@ -61,6 +65,10 @@ export interface PromotionStateDto {
   draft: PromotionDraftDto
   checklist: GateChecklist
   suggestedMode: GateMode
+  /** Read-only reference Q&A (DET-208) the user explored while reading. Surfaced
+   *  so Compression can DISPLAY it as scaffold — it never prefills or writes the
+   *  canonical articulation, which stays user-authored via {@link saveArticulation}. */
+  referenceQa: ReferenceQaContext[]
 }
 
 /**
@@ -81,6 +89,7 @@ export class PromotionService {
     private readonly concepts: ConceptsService,
     private readonly ai: AiService,
     private readonly search: SearchService,
+    private readonly sourceQa: SourceQaService,
   ) {}
 
   /** Current promotion state for an inbox item: draft + gate checklist + the
@@ -92,6 +101,19 @@ export class PromotionService {
     const concept = await this.requireInboxConcept(userId, conceptId)
     const draft = await this.ensureDraft(userId, conceptId)
     const suggestedMode = await this.suggestMode(userId, draft.articulation)
+    // Read-only feed-forward (DET-208): show prior reference Q&A as scaffold the
+    // user may consult while articulating. This NEVER seeds draft.articulation —
+    // the canonical text comes only from saveArticulation's user-supplied body.
+    let referenceQa: ReferenceQaContext[] = []
+    try {
+      referenceQa = await this.sourceQa.recentForContext(userId, conceptId)
+    } catch (error) {
+      this.logger.warn(
+        `Reference Q&A context lookup failed for ${conceptId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
     return {
       conceptId,
       title: concept.title,
@@ -99,6 +121,7 @@ export class PromotionService {
       draft: this.toDraftDto(draft),
       checklist: this.checklistFor(draft, draft.mode),
       suggestedMode,
+      referenceQa,
     }
   }
 

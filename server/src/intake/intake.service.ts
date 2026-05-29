@@ -10,6 +10,7 @@ import {
 import { AiService } from '../ai/ai.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { SearchService } from '../search/search.service'
+import { SourceQaService } from '../source-qa/source-qa.service'
 import type { SaveAnswersDto } from './dto/save-answers.dto'
 import {
   buildInterrogatorPrompt,
@@ -45,6 +46,7 @@ export class IntakeService {
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
     private readonly search: SearchService,
+    private readonly sourceQa: SourceQaService,
   ) {}
 
   /**
@@ -70,10 +72,24 @@ export class IntakeService {
       userId,
       source,
     )
+    // Read-only feed-forward (DET-208): any reference Q&A the user already
+    // explored becomes context so the interrogator probes deeper rather than
+    // re-asking. Best-effort — never block interrogation if this read fails.
+    let priorQa: { questionText: string; answerText: string }[] = []
+    try {
+      priorQa = await this.sourceQa.recentForContext(userId, conceptId)
+    } catch (error) {
+      this.logger.warn(
+        `Prior Q&A context lookup failed for ${conceptId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
     const { system, prompt } = buildInterrogatorPrompt({
       source,
       relatedTitles,
       familiar,
+      priorQa,
     })
 
     let text: string
