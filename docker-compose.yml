@@ -1,6 +1,8 @@
 services:
   db:
-    image: postgres:16-alpine
+    # pgvector image (PostgreSQL 16 + the `vector` extension). Drop-in for the
+    # previous postgres:16-alpine — same PG major, so the data volume is reused.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     ports:
       - '5432:5432'

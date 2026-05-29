@@ -13,6 +13,7 @@ import { LinksModule } from './links/links.module'
 import { NotesModule } from './notes/notes.module'
 import { PrismaModule } from './prisma/prisma.module'
 import { RetrievalModule } from './retrieval/retrieval.module'
+import { SearchModule } from './search/search.module'
 import { UsersModule } from './users/users.module'
 
 @Module({
@@ -62,6 +63,7 @@ import { UsersModule } from './users/users.module'
     LinksModule,
     RetrievalModule,
     AiModule,
+    SearchModule,
   ],
   providers: [
     // Global authentication: every route requires a valid JWT unless marked @Public().

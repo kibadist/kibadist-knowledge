@@ -3,13 +3,15 @@
 // via the @kibadist/prisma package (see src/index.ts).
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/client"
+  provider        = "prisma-client-js"
+  output          = "../src/generated/client"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model User {
@@ -74,12 +76,16 @@ model Concept {
 // The Compression step: the user's own-words explanation of a concept.
 // A concept accrues many articulations over time, tracking improving clarity.
 model Articulation {
-  id        String   @id @default(cuid())
+  id        String                       @id @default(cuid())
   conceptId String
   userId    String
   body      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Semantic embedding of `body` (OpenAI text-embedding-3-small = 1536 dims).
+  // Unsupported: written/queried via raw SQL; the HNSW cosine index lives in
+  // the migration. Null until the embed-on-write path populates it.
+  embedding Unsupported("vector(1536)")?
+  createdAt DateTime                     @default(now())
+  updatedAt DateTime                     @updatedAt
 
   concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
