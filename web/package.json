@@ -1,0 +1,36 @@
+{
+  "name": "kibadist-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'Linting disabled - Biome configured for formatting only'"
+  },
+  "dependencies": {
+    "@lexical/code": "^0.45.0",
+    "@lexical/link": "^0.45.0",
+    "@lexical/list": "^0.45.0",
+    "@lexical/markdown": "^0.45.0",
+    "@lexical/react": "^0.45.0",
+    "@lexical/rich-text": "^0.45.0",
+    "@lexical/selection": "^0.45.0",
+    "@lexical/utils": "^0.45.0",
+    "@tanstack/react-query": "^5.90.5",
+    "lexical": "^0.45.0",
+    "next": "16.1.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.2",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/node": "20.19.24",
+    "@types/react": "19.1.10",
+    "@types/react-dom": "19.1.7",
+    "tailwindcss": "^4.1.18",
+    "typescript": "5.9.3"
+  }
+}

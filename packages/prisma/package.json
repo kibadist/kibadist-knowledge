@@ -1,0 +1,32 @@
+{
+  "name": "@kibadist/prisma",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "postgenerate": "tsc -p tsconfig.json && rm -rf dist/generated && cp -R src/generated dist/generated",
+    "build": "rm -rf dist && pnpm run generate",
+    "db:push": "dotenv -e ../../server/.env -- prisma db push",
+    "migrate:dev": "dotenv -e ../../server/.env -- prisma migrate dev",
+    "migrate:deploy": "dotenv -e ../../server/.env -- prisma migrate deploy",
+    "db:reset": "dotenv -e ../../server/.env -- prisma db push --force-reset",
+    "studio": "dotenv -e ../../server/.env -- prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.24",
+    "dotenv-cli": "^11.0.0",
+    "prisma": "6.19.0",
+    "typescript": "5.9.3"
+  }
+}

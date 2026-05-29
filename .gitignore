@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build outputs
+dist/
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# prisma generated client
+packages/prisma/src/generated/
+packages/prisma/dist/
+
+# turbo
+.turbo/
+
+# omc orchestration state
+.omc/
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# test
+coverage/
