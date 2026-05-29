@@ -20,7 +20,11 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  notes Note[]
+  notes           Note[]
+  concepts        Concept[]
+  articulations   Articulation[]
+  links           Link[]
+  retrievalEvents RetrievalEvent[]
 
   @@map("user")
 }
@@ -37,4 +41,107 @@ model Note {
 
   @@index([userId])
   @@map("note")
+}
+
+// A unit of knowledge moving through the core loop: captured in the inbox,
+// then articulated, then earned into the permanent layer.
+model Concept {
+  id           String        @id @default(cuid())
+  title        String
+  // Optional one-line canonical summary of the core claim.
+  summary      String?
+  // Raw captured material from the low-friction inbox, before articulation.
+  sourceText   String?
+  status       ConceptStatus @default(INBOX)
+  // When this concept is next due for spaced resurfacing (null = not scheduled).
+  nextReviewAt DateTime?
+  userId       String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  articulations   Articulation[]
+  outgoingLinks   Link[]           @relation("LinkSource")
+  incomingLinks   Link[]           @relation("LinkTarget")
+  retrievalEvents RetrievalEvent[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, nextReviewAt])
+  @@map("concept")
+}
+
+// The Compression step: the user's own-words explanation of a concept.
+// A concept accrues many articulations over time, tracking improving clarity.
+model Articulation {
+  id        String   @id @default(cuid())
+  conceptId String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conceptId])
+  @@index([userId])
+  @@map("articulation")
+}
+
+// The Connection step: a directed concept-to-concept edge stored in Postgres
+// (no separate graph DB). Surfaced by the system, then validated by the user.
+model Link {
+  id              String     @id @default(cuid())
+  sourceConceptId String
+  targetConceptId String
+  userId          String
+  // Optional user-supplied relationship label (e.g. "supports", "contradicts").
+  relation        String?
+  status          LinkStatus @default(SUGGESTED)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  sourceConcept Concept @relation("LinkSource", fields: [sourceConceptId], references: [id], onDelete: Cascade)
+  targetConcept Concept @relation("LinkTarget", fields: [targetConceptId], references: [id], onDelete: Cascade)
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceConceptId, targetConceptId])
+  @@index([sourceConceptId])
+  @@index([targetConceptId])
+  @@index([userId])
+  @@map("link")
+}
+
+// The Retrieval/Reflection step: one spaced-resurfacing attempt — the question
+// posed, the user's recalled response, and a self/AI grade of the recall.
+model RetrievalEvent {
+  id        String   @id @default(cuid())
+  conceptId String
+  userId    String
+  question  String?
+  response  String?
+  // Recall grade, e.g. 0-5 (SM-2 style); null until evaluated.
+  score     Int?
+  createdAt DateTime @default(now())
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conceptId])
+  @@index([userId])
+  @@index([conceptId, createdAt])
+  @@map("retrieval_event")
+}
+
+enum ConceptStatus {
+  INBOX
+  ARTICULATED
+  PERMANENT
+}
+
+enum LinkStatus {
+  SUGGESTED
+  CONFIRMED
+  REJECTED
 }
