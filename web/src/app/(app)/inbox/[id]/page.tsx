@@ -115,6 +115,7 @@ export default function ProcessInboxItemPage() {
 
       {itemQuery.data?.sourceText && (
         <ArticleReader
+          document={itemQuery.data.sourceDocument}
           content={itemQuery.data.sourceText}
           sourceUrl={itemQuery.data.sourceUrl}
           captureSource={itemQuery.data.captureSource}
@@ -294,7 +295,7 @@ function ReferenceQaPanel({ conceptId }: { conceptId: string }) {
                           key={i}
                           className='border-l border-neutral-700 pl-2 text-xs italic text-neutral-500'
                         >
-                          “{c}”
+                          “{c.quote}”
                         </li>
                       ))}
                     </ul>

@@ -19,6 +19,10 @@ import { ConceptsService } from '../concepts/concepts.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { SearchService } from '../search/search.service'
 import {
+  asSourceDocument,
+  type SourceDocument,
+} from '../source-document/source-document'
+import {
   type ReferenceQaContext,
   SourceQaService,
 } from '../source-qa/source-qa.service'
@@ -62,6 +66,8 @@ export interface PromotionStateDto {
   conceptId: string
   title: string
   sourceText: string | null
+  /** Structured source for the Reader (DET-210); null for pre-DET-210 captures. */
+  sourceDocument: SourceDocument | null
   draft: PromotionDraftDto
   checklist: GateChecklist
   suggestedMode: GateMode
@@ -118,6 +124,7 @@ export class PromotionService {
       conceptId,
       title: concept.title,
       sourceText: concept.sourceText,
+      sourceDocument: asSourceDocument(concept.sourceDocument),
       draft: this.toDraftDto(draft),
       checklist: this.checklistFor(draft, draft.mode),
       suggestedMode,
@@ -492,7 +499,7 @@ export class PromotionService {
   private async requireInboxConcept(userId: string, conceptId: string) {
     const concept = await this.prisma.concept.findFirst({
       where: { id: conceptId, userId, status: ConceptStatus.INBOX },
-      select: { id: true, title: true, sourceText: true },
+      select: { id: true, title: true, sourceText: true, sourceDocument: true },
     })
     if (!concept) throw new NotFoundException('Inbox item not found')
     return concept

@@ -56,7 +56,17 @@ model Concept {
   // Optional one-line canonical summary of the core claim.
   summary      String?
   // Raw captured material from the low-friction inbox, before articulation.
+  // Kept verbatim as the provenance/fallback/search surface even after the
+  // structured `sourceDocument` is extracted (DET-210).
   sourceText   String?
+  // Structured article representation extracted at capture (DET-210): an ordered
+  // list of typed SourceBlocks (headings/paragraphs/lists/quotes/code/images/
+  // tables) with stable block ids. The Reader (DET-209) renders this, DET-208
+  // Reference Q&A cites its block ids, and DET-190 Compression uses it as
+  // context. Shape is the SourceDocument contract in
+  // server/src/source-document/source-document.types.ts. Null for items captured
+  // before DET-210 (the Reader falls back to `sourceText`).
+  sourceDocument Json?
   // How the raw material entered the inbox (null for items created before the
   // capture inbox existed). Drives the inbox's "source" badge.
   captureSource CaptureSource?

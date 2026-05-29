@@ -202,6 +202,7 @@ export default function PromoteConceptPage() {
 
           {promotion.sourceText && (
             <ArticleReader
+              document={promotion.sourceDocument}
               content={promotion.sourceText}
               variant='compact'
               showHeader={false}

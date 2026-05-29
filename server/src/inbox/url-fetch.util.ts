@@ -32,6 +32,9 @@ const USER_AGENT =
 export interface FetchedPage {
   title: string | null
   text: string
+  /** Raw (capped) HTML, for structured block extraction (DET-210). Empty when
+   *  the response wasn't HTML. */
+  html: string
 }
 
 function isBlockedV4(ip: string): boolean {
@@ -240,7 +243,7 @@ export async function fetchReadable(rawUrl: string): Promise<FetchedPage> {
     }
 
     const html = await readCapped(res)
-    return { title: extractTitle(html), text: htmlToText(html) }
+    return { title: extractTitle(html), text: htmlToText(html), html }
   }
 
   throw new BadRequestException('Too many redirects')

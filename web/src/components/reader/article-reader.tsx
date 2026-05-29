@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { CaptureSource } from '@/lib/api'
+import type { CaptureSource, SourceDocument } from '@/lib/api'
 
+import { ArticleBlocks } from './article-blocks'
 import { ArticleBody } from './article-body'
 import {
   captureSourceLabel,
@@ -17,8 +18,12 @@ import { ReaderToc } from './reader-toc'
 import './reader.css'
 
 export interface ArticleReaderProps {
-  /** Source content: Lexical state JSON, markdown, or plain text. */
-  content: string | null | undefined
+  /** Structured source (DET-210). Preferred when present — rendered as semantic
+   *  blocks with stable anchor ids. */
+  document?: SourceDocument | null
+  /** Fallback source content for pre-DET-210 captures: Lexical state JSON,
+   *  markdown, or plain text. Used only when `document` is absent/empty. */
+  content?: string | null | undefined
   /** Title of the source (rendered when `showHeader`). */
   title?: string | null
   /** Origin URL, if captured from the web. */
@@ -48,6 +53,7 @@ export interface ArticleReaderProps {
  * is passed.
  */
 export function ArticleReader({
+  document,
   content,
   title,
   sourceUrl,
@@ -57,12 +63,36 @@ export function ArticleReader({
   showHeader = true,
   storageKey,
 }: ArticleReaderProps) {
-  const [headings, setHeadings] = useState<ReaderHeading[]>([])
+  const [stringHeadings, setStringHeadings] = useState<ReaderHeading[]>([])
   const onHeadings = useCallback((next: ReaderHeading[]) => {
-    setHeadings(next)
+    setStringHeadings(next)
   }, [])
 
-  if (!hasReadableContent(content)) {
+  const doc = document && document.blocks.length > 0 ? document : null
+
+  // For the structured path, headings come straight from heading blocks (each
+  // block id is already its DOM anchor). The string path reports them via the
+  // Lexical HeadingAnchorsPlugin.
+  const docHeadings = useMemo<ReaderHeading[]>(
+    () =>
+      doc
+        ? doc.blocks
+            .filter((b) => b.type === 'heading')
+            .map((b) => {
+              const h = b as Extract<typeof b, { type: 'heading' }>
+              return {
+                id: h.id,
+                text: h.text,
+                level: Math.min(Math.max(h.level, 1), 3),
+                nodeKey: h.id,
+              }
+            })
+        : [],
+    [doc],
+  )
+  const headings = doc ? docHeadings : stringHeadings
+
+  if (!doc && !hasReadableContent(content)) {
     return <ReaderEmpty />
   }
 
@@ -106,10 +136,14 @@ export function ArticleReader({
       {!isCompact && headings.length >= 2 && <ReaderToc headings={headings} />}
 
       <ReaderScroll storageKey={isCompact ? storageKey : undefined}>
-        <ArticleBody
-          content={content}
-          onHeadings={isCompact ? undefined : onHeadings}
-        />
+        {doc ? (
+          <ArticleBlocks blocks={doc.blocks} />
+        ) : content ? (
+          <ArticleBody
+            content={content}
+            onHeadings={isCompact ? undefined : onHeadings}
+          />
+        ) : null}
       </ReaderScroll>
 
       <p className='kb-reader-footnote'>

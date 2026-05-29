@@ -1,4 +1,9 @@
-import { AnswerKind, ConceptStatus, QuestionActor } from '@kibadist/prisma'
+import {
+  AnswerKind,
+  ConceptStatus,
+  type Prisma,
+  QuestionActor,
+} from '@kibadist/prisma'
 import {
   BadRequestException,
   Injectable,
@@ -9,8 +14,17 @@ import {
 
 import { AiService } from '../ai/ai.service'
 import { PrismaService } from '../prisma/prisma.service'
+import {
+  asSourceDocument,
+  documentToPromptContext,
+} from '../source-document/source-document'
 import type { AskQuestionDto } from './dto/ask-question.dto'
-import { buildAnswerPrompt, parseAnswer } from './source-qa.prompt'
+import {
+  buildAnswerPrompt,
+  coerceCitations,
+  parseAnswer,
+  type ReferenceCitation,
+} from './source-qa.prompt'
 
 export interface SourceQuestionDto {
   id: string
@@ -20,7 +34,7 @@ export interface SourceQuestionDto {
   answerText: string | null
   answeredBy: QuestionActor | null
   answerKind: AnswerKind | null
-  citations: string[]
+  citations: ReferenceCitation[]
   createdAt: Date
 }
 
@@ -69,7 +83,12 @@ export class SourceQaService {
     dto: AskQuestionDto,
   ): Promise<SourceQuestionDto> {
     const concept = await this.requireInboxConcept(userId, conceptId)
-    const source = (concept.sourceText ?? '').trim()
+    // Prefer the structured document (DET-210): block-id-annotated context lets
+    // the AI attribute citations to specific blocks. Fall back to the flattened
+    // raw text for items captured before structured extraction existed.
+    const doc = asSourceDocument(concept.sourceDocument)
+    const structuredSource = doc ? documentToPromptContext(doc) : ''
+    const source = structuredSource || (concept.sourceText ?? '').trim()
     if (!source) {
       throw new BadRequestException('This item has no source text to ask about')
     }
@@ -77,6 +96,7 @@ export class SourceQaService {
     const { system, prompt } = buildAnswerPrompt({
       source,
       question: dto.questionText,
+      structured: Boolean(structuredSource),
     })
     let text: string
     try {
@@ -117,7 +137,7 @@ export class SourceQaService {
         answerText: parsed.answer,
         answeredBy: QuestionActor.AI,
         answerKind: AnswerKind.REFERENCE_SCAFFOLD,
-        citations: parsed.citations,
+        citations: parsed.citations as unknown as Prisma.InputJsonValue,
       },
     })
     return this.toDto(row)
@@ -172,7 +192,7 @@ export class SourceQaService {
   private async requireInboxConcept(userId: string, conceptId: string) {
     const concept = await this.prisma.concept.findFirst({
       where: { id: conceptId, userId, status: ConceptStatus.INBOX },
-      select: { id: true, sourceText: true },
+      select: { id: true, sourceText: true, sourceDocument: true },
     })
     if (!concept) throw new NotFoundException('Inbox item not found')
     return concept
@@ -207,9 +227,7 @@ export class SourceQaService {
       answerText: row.answerText,
       answeredBy: row.answeredBy,
       answerKind: row.answerKind,
-      citations: Array.isArray(row.citations)
-        ? (row.citations.filter((c) => typeof c === 'string') as string[])
-        : [],
+      citations: coerceCitations(row.citations),
       createdAt: row.createdAt,
     }
   }

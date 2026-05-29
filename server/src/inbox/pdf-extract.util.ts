@@ -15,7 +15,16 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
     const pdf = await getDocumentProxy(new Uint8Array(buffer))
     // mergePages:true returns the whole document as a single string.
     const { text } = await extractText(pdf, { mergePages: true })
-    return text.replace(/\s+/g, ' ').trim().slice(0, MAX_RAW_TEXT_CHARS)
+    // Preserve line/paragraph breaks (collapse only spaces/tabs) so the
+    // structured extractor (DET-210) can segment paragraphs; the prior
+    // whitespace-collapse destroyed all structure.
+    return text
+      .replace(/\r\n/g, '\n')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/ *\n */g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+      .slice(0, MAX_RAW_TEXT_CHARS)
   } catch {
     throw new BadRequestException('Could not read PDF')
   }

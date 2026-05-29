@@ -170,6 +170,7 @@ export default function ConceptViewPage() {
             </div>
             {concept.sourceText && (
               <ArticleReader
+                document={concept.sourceDocument}
                 content={concept.sourceText}
                 variant='compact'
                 showHeader={false}

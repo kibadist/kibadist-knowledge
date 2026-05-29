@@ -1,7 +1,14 @@
-import { CaptureSource, ConceptStatus } from '@kibadist/prisma'
+import { CaptureSource, ConceptStatus, type Prisma } from '@kibadist/prisma'
 import { Injectable, NotFoundException } from '@nestjs/common'
 
 import { PrismaService } from '../prisma/prisma.service'
+import {
+  asSourceDocument,
+  extractHtmlDocument,
+  extractPdfDocument,
+  extractTextDocument,
+  type SourceDocument,
+} from '../source-document/source-document'
 import type { CaptureTextDto } from './dto/capture-text.dto'
 import type { CaptureUrlDto } from './dto/capture-url.dto'
 import { extractPdfText } from './pdf-extract.util'
@@ -22,6 +29,9 @@ export interface InboxItem {
 /** A single inbox item with its full raw material (processing view). */
 export interface InboxItemDetail extends InboxItem {
   sourceText: string | null
+  /** Structured article representation for the Reader (DET-210); null for items
+   *  captured before structured extraction existed. */
+  sourceDocument: SourceDocument | null
 }
 
 /**
@@ -39,6 +49,7 @@ export class InboxService {
     return this.store(userId, {
       title,
       sourceText: dto.text,
+      sourceDocument: extractTextDocument(dto.text),
       captureSource: CaptureSource.PASTE,
     })
   }
@@ -46,11 +57,14 @@ export class InboxService {
   async captureUrl(userId: string, dto: CaptureUrlDto): Promise<InboxItem> {
     const page = await fetchReadable(dto.url)
     const title = page.title?.trim() || hostPathLabel(dto.url)
+    // Structured extraction (DET-210) preserves document hierarchy; the
+    // block-derived flat text is cleaner (chrome-stripped), so prefer it for
+    // sourceText, falling back to the legacy whole-page flatten.
+    const { document, text } = extractHtmlDocument(page.html, dto.url)
     return this.store(userId, {
       title,
-      // Raw extracted text only; provenance lives in `sourceUrl` (no need to
-      // duplicate the URL into the body when extraction comes back empty).
-      sourceText: page.text,
+      sourceText: text || page.text,
+      sourceDocument: document,
       sourceUrl: dto.url,
       captureSource: CaptureSource.URL,
     })
@@ -70,6 +84,7 @@ export class InboxService {
     return this.store(userId, {
       title,
       sourceText: text,
+      sourceDocument: extractPdfDocument(text),
       captureSource: CaptureSource.PDF,
     })
   }
@@ -106,6 +121,7 @@ export class InboxService {
         id: true,
         title: true,
         sourceText: true,
+        sourceDocument: true,
         captureSource: true,
         sourceUrl: true,
         createdAt: true,
@@ -118,6 +134,7 @@ export class InboxService {
       captureSource: row.captureSource,
       sourceUrl: row.sourceUrl,
       sourceText: row.sourceText,
+      sourceDocument: asSourceDocument(row.sourceDocument),
       excerpt: excerpt(row.sourceText),
       createdAt: row.createdAt,
     }
@@ -136,6 +153,7 @@ export class InboxService {
     data: {
       title: string
       sourceText: string
+      sourceDocument?: SourceDocument
       captureSource: CaptureSource
       sourceUrl?: string
     },
@@ -145,6 +163,9 @@ export class InboxService {
         userId,
         title: data.title,
         sourceText: data.sourceText,
+        sourceDocument: data.sourceDocument
+          ? (data.sourceDocument as unknown as Prisma.InputJsonValue)
+          : undefined,
         captureSource: data.captureSource,
         sourceUrl: data.sourceUrl ?? null,
         status: ConceptStatus.INBOX,

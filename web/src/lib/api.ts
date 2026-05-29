@@ -103,6 +103,38 @@ export interface Note {
 
 export type CaptureSource = 'PASTE' | 'URL' | 'PDF'
 
+// --- Structured source document (DET-210) ---
+// Mirrors server/src/source-document/source-document.types.ts. Keep in sync.
+export type InlineMark = 'bold' | 'italic' | 'code' | 'strikethrough'
+
+export interface InlineRun {
+  text: string
+  marks?: InlineMark[]
+  href?: string
+}
+
+export type SourceBlock =
+  | { id: string; type: 'heading'; level: number; text: string }
+  | { id: string; type: 'paragraph'; runs: InlineRun[] }
+  | { id: string; type: 'quote'; runs: InlineRun[] }
+  | { id: string; type: 'list'; ordered: boolean; items: InlineRun[][] }
+  | { id: string; type: 'code'; text: string; language?: string }
+  | { id: string; type: 'image'; src: string; alt?: string; caption?: string }
+  | { id: string; type: 'table'; header: boolean; rows: string[][] }
+
+export type SourceBlockType = SourceBlock['type']
+
+export interface SourceDocument {
+  version: 1
+  title?: string
+  dek?: string
+  byline?: string
+  canonicalUrl?: string
+  blocks: SourceBlock[]
+  extractor: 'html-heuristic@1' | 'pdf-paragraph@1' | 'text-markdown@1'
+  degraded: boolean
+}
+
 export interface InboxItem {
   id: string
   title: string
@@ -114,6 +146,7 @@ export interface InboxItem {
 
 export interface InboxItemDetail extends InboxItem {
   sourceText: string | null
+  sourceDocument: SourceDocument | null
 }
 
 export interface IntakeQuestion {
@@ -156,6 +189,13 @@ export type AnswerKind =
   | 'USER_ATTEMPT'
   | 'VALIDATED_ARTICULATION'
 
+// A grounding citation: a verbatim quote, optionally attributed to the
+// structured source block it came from (DET-210).
+export interface ReferenceCitation {
+  quote: string
+  blockId?: string
+}
+
 // A question asked while reading a source, optionally AI-answered as a
 // source-grounded scaffold. NEVER knowledge — provenance is explicit so the UI
 // can label scaffold distinctly from earned articulations.
@@ -167,7 +207,7 @@ export interface SourceQuestion {
   answerText: string | null
   answeredBy: QuestionActor | null
   answerKind: AnswerKind | null
-  citations: string[]
+  citations: ReferenceCitation[]
   createdAt: string
 }
 
@@ -182,6 +222,7 @@ export interface PromotionState {
   conceptId: string
   title: string
   sourceText: string | null
+  sourceDocument: SourceDocument | null
   draft: PromotionDraft
   checklist: GateChecklist
   suggestedMode: GateMode
@@ -217,6 +258,7 @@ export interface Concept {
   title: string
   summary: string | null
   sourceText: string | null
+  sourceDocument: SourceDocument | null
   captureSource: CaptureSource | null
   sourceUrl: string | null
   status: ConceptStatus

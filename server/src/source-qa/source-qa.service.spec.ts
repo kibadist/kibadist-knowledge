@@ -21,17 +21,38 @@ function makeService() {
   return { service, prisma, ai }
 }
 
-const INBOX = {
+/** A minimal valid SourceDocument for test fixtures. */
+const SOURCE_DOC = {
+  version: 1,
+  blocks: [
+    {
+      id: 'b_abc123',
+      type: 'paragraph',
+      runs: [{ text: 'Spaced repetition is an evidence-based technique.' }],
+    },
+  ],
+  extractor: 'text-markdown@1',
+  degraded: false,
+}
+
+const INBOX_TEXT_ONLY = {
   id: 'c1',
   sourceText: 'The source explains spaced repetition and its evidence base.',
+  sourceDocument: null,
+}
+
+const INBOX_WITH_DOC = {
+  id: 'c1',
+  sourceText: 'The source explains spaced repetition.',
+  sourceDocument: SOURCE_DOC,
 }
 
 describe('SourceQaService.ask', () => {
-  it('persists an AI answer as un-promotable REFERENCE_SCAFFOLD', async () => {
+  it('persists an AI answer as un-promotable REFERENCE_SCAFFOLD (sourceText fallback)', async () => {
     const { service, prisma, ai } = makeService()
-    prisma.concept.findFirst.mockResolvedValue(INBOX)
+    prisma.concept.findFirst.mockResolvedValue(INBOX_TEXT_ONLY)
     ai.complete.mockResolvedValue({
-      text: '{"answer": "The source says X.", "citations": ["X is true"]}',
+      text: '{"answer": "The source says X.", "citations": [{"quote":"X is true"}]}',
       model: 'test',
     })
     prisma.sourceQuestion.create.mockImplementation(
@@ -46,23 +67,82 @@ describe('SourceQaService.ask', () => {
 
     const out = await service.ask('u1', 'c1', { questionText: 'What is X?' })
 
-    // The stored provenance is the structural guarantee: user asked, AI answered,
-    // and the answer is scaffold — never a candidate for canonical knowledge.
+    // The stored provenance is the structural guarantee.
     const created = prisma.sourceQuestion.create.mock.calls[0][0].data
     expect(created.askedBy).toBe(QuestionActor.USER)
     expect(created.answeredBy).toBe(QuestionActor.AI)
     expect(created.answerKind).toBe(AnswerKind.REFERENCE_SCAFFOLD)
     expect(created.questionText).toBe('What is X?')
     expect(created.answerText).toBe('The source says X.')
-    expect(created.citations).toEqual(['X is true'])
+    // Citations are now ReferenceCitation objects
+    expect(created.citations).toEqual([{ quote: 'X is true' }])
 
     expect(out.answerKind).toBe(AnswerKind.REFERENCE_SCAFFOLD)
-    expect(out.citations).toEqual(['X is true'])
+    expect(out.citations).toEqual([{ quote: 'X is true' }])
+  })
+
+  it('uses structured document when sourceDocument is valid and passes block-id context to AI', async () => {
+    const { service, prisma, ai } = makeService()
+    prisma.concept.findFirst.mockResolvedValue(INBOX_WITH_DOC)
+    ai.complete.mockResolvedValue({
+      text: '{"answer":"Structured answer.","citations":[{"quote":"evidence-based","blockId":"b_abc123"}]}',
+      model: 'test',
+    })
+    prisma.sourceQuestion.create.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve({
+          id: 'q2',
+          createdAt: new Date(),
+          citations: data.citations,
+          ...data,
+        }),
+    )
+
+    const out = await service.ask('u1', 'c1', {
+      questionText: 'What technique?',
+    })
+
+    // The AI prompt must have received block-id annotated context (b_ token)
+    const aiCallArgs = ai.complete.mock.calls[0][0]
+    expect(aiCallArgs.prompt).toMatch(/b_/)
+
+    // Citations carry blockId
+    expect(out.citations).toEqual([
+      { quote: 'evidence-based', blockId: 'b_abc123' },
+    ])
+  })
+
+  it('falls back to sourceText when sourceDocument is null', async () => {
+    const { service, prisma, ai } = makeService()
+    prisma.concept.findFirst.mockResolvedValue(INBOX_TEXT_ONLY)
+    ai.complete.mockResolvedValue({
+      text: '{"answer":"Fallback answer.","citations":[]}',
+      model: 'test',
+    })
+    prisma.sourceQuestion.create.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve({
+          id: 'q3',
+          createdAt: new Date(),
+          citations: data.citations,
+          ...data,
+        }),
+    )
+
+    await service.ask('u1', 'c1', { questionText: 'q' })
+
+    // When falling back to plain text, prompt should contain the raw source text
+    const aiCallArgs = ai.complete.mock.calls[0][0]
+    expect(aiCallArgs.prompt).toContain('spaced repetition')
   })
 
   it('rejects asking about an item with no source text', async () => {
     const { service, prisma, ai } = makeService()
-    prisma.concept.findFirst.mockResolvedValue({ id: 'c1', sourceText: '   ' })
+    prisma.concept.findFirst.mockResolvedValue({
+      id: 'c1',
+      sourceText: '   ',
+      sourceDocument: null,
+    })
     await expect(
       service.ask('u1', 'c1', { questionText: 'q' }),
     ).rejects.toBeInstanceOf(BadRequestException)
@@ -81,7 +161,7 @@ describe('SourceQaService.ask', () => {
 
   it('does not persist anything when the AI call fails', async () => {
     const { service, prisma, ai } = makeService()
-    prisma.concept.findFirst.mockResolvedValue(INBOX)
+    prisma.concept.findFirst.mockResolvedValue(INBOX_TEXT_ONLY)
     ai.complete.mockRejectedValue(new Error('provider down'))
     await expect(
       service.ask('u1', 'c1', { questionText: 'q' }),
