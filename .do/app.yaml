@@ -1,0 +1,95 @@
+# DigitalOcean App Platform spec for Kibadist Knowledge.
+# Deploys the NestJS API, the Next.js web app, and a managed PostgreSQL
+# database (which must have the `vector`/pgvector extension available).
+#
+# Apply with:  doctl apps create --spec .do/app.yaml
+# Update with: doctl apps update <app-id> --spec .do/app.yaml
+#
+# Bindable vars used below:
+#   ${db.DATABASE_URL}  – managed-DB connection string (injected by the platform)
+#   ${api.PUBLIC_URL}   – the API service's public https URL
+#   ${web.PUBLIC_URL}   – the web service's public https URL
+name: kibadist-knowledge
+region: nyc
+
+databases:
+  - name: db
+    engine: PG
+    version: "16"
+    # A dedicated managed cluster (production: true). Required because the app
+    # depends on the pgvector extension — DigitalOcean's shared dev databases
+    # don't reliably allow `CREATE EXTENSION vector`. This is a paid resource
+    # (~$15/mo at the smallest size); see DEPLOY.md for the cost note.
+    production: true
+    cluster_name: kibadist-db
+    size: db-s-1vcpu-1gb
+    num_nodes: 1
+
+services:
+  - name: api
+    dockerfile_path: Dockerfile
+    source_dir: /
+    github:
+      repo: kibadist/kibadist-knowledge
+      branch: main
+      deploy_on_push: true
+    http_port: 4000
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /healthz
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: DATABASE_URL
+        value: ${db.DATABASE_URL}
+      - key: JWT_SECRET
+        type: SECRET
+        value: CHANGE_ME_generate_with_openssl_rand_hex_64
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: AI_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
+        type: SECRET
+        value: CHANGE_ME_openai_api_key
+      # Lock CORS to the deployed web origin.
+      - key: CORS_ORIGINS
+        value: ${web.PUBLIC_URL}
+
+  - name: web
+    dockerfile_path: web/Dockerfile
+    source_dir: /
+    github:
+      repo: kibadist/kibadist-knowledge
+      branch: main
+      deploy_on_push: true
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /
+    envs:
+      # NEXT_PUBLIC_* is inlined at build time, so this must be BUILD-scoped and
+      # point at the deployed API (its global prefix is /api).
+      - key: NEXT_PUBLIC_API_URL
+        scope: BUILD_TIME
+        value: ${api.PUBLIC_URL}/api
+
+# Runs database migrations once before each new deploy goes live, reusing the
+# API image (which carries the Prisma CLI, schema, and migrations).
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY
+    dockerfile_path: Dockerfile
+    source_dir: /
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    github:
+      repo: kibadist/kibadist-knowledge
+      branch: main
+    run_command: pnpm -F @kibadist/prisma migrate:prod
+    envs:
+      - key: DATABASE_URL
+        value: ${db.DATABASE_URL}

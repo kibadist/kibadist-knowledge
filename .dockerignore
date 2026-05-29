@@ -1,0 +1,32 @@
+# Dependencies & build output (reinstalled / rebuilt inside the image)
+node_modules
+**/node_modules
+dist
+**/dist
+.next
+**/.next
+**/*.tsbuildinfo
+
+# Prisma client is generated during the image build
+packages/prisma/src/generated
+
+# Tooling / local state
+.git
+.gitignore
+.turbo
+.omc
+.vscode
+.idea
+
+# Secrets & local env (never bake into an image)
+.env
+.env.*
+!.env.example
+
+# Docs / CI not needed at runtime
+README.md
+DEPLOY.md
+.do
+Dockerfile
+**/Dockerfile
+.dockerignore
