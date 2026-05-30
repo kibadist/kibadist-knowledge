@@ -17,6 +17,7 @@ import { LinksModule } from './links/links.module'
 import { NotesModule } from './notes/notes.module'
 import { PrismaModule } from './prisma/prisma.module'
 import { PromotionModule } from './promotion/promotion.module'
+import { ReflectionModule } from './reflection/reflection.module'
 import { RetrievalModule } from './retrieval/retrieval.module'
 import { SearchModule } from './search/search.module'
 import { SessionsModule } from './sessions/sessions.module'
@@ -76,6 +77,7 @@ import { UsersModule } from './users/users.module'
     ArticulationsModule,
     LinksModule,
     RetrievalModule,
+    ReflectionModule,
     TutorModule,
     AiModule,
     SearchModule,

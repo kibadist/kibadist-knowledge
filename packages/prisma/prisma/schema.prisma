@@ -32,6 +32,7 @@ model User {
   sourceQuestions SourceQuestion[]
   stateTransitions ConceptStateTransition[]
   sessions         Session[]
+  reflections      Reflection[]
 
   @@map("user")
 }
@@ -97,6 +98,9 @@ model Concept {
   reviewEase         Float    @default(2.5)
   reviewIntervalDays Int      @default(0)
   reviewReps         Int      @default(0)
+  // Set by a "challenge me on this next time" reflection (DET-196); makes the
+  // concept Tutor-eligible (DET-193) until a Tutor response clears it.
+  tutorRequested     Boolean  @default(false)
   userId       String
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -111,6 +115,7 @@ model Concept {
   sourceQuestions SourceQuestion[]
   stateTransitions ConceptStateTransition[]
   sessionItems    SessionItem[]
+  reflections     Reflection[]
 
   @@index([userId])
   @@index([userId, status])
@@ -352,10 +357,43 @@ model Session {
 
   user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   items SessionItem[]
+  reflections Reflection[]
 
   @@index([userId, startedAt])
   @@index([userId, status])
   @@map("session")
+}
+
+// A closing-reflection answer for a session (DET-196): the user notices what
+// MOVED in their understanding, and each answer feeds a concrete downstream
+// effect — CLEARER promotes the concept's state, LESS_CLEAR pulls its next
+// review sooner, CONNECTED triggers Connector candidates, CHALLENGE_NEXT flags
+// it for the Tutor. Reflections are reviewable on a concept's history view.
+model Reflection {
+  id        String         @id @default(cuid())
+  sessionId String
+  userId    String
+  conceptId String
+  kind      ReflectionKind
+  note      String?
+  createdAt DateTime       @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@index([conceptId, createdAt])
+  @@index([sessionId])
+  @@map("reflection")
+}
+
+// What MOVED in the user's understanding this session (DET-196). Each kind maps
+// to a downstream effect (see Reflection).
+enum ReflectionKind {
+  CLEARER
+  LESS_CLEAR
+  CONNECTED
+  CHALLENGE_NEXT
 }
 
 // One concept in a session's queue (DET-198), in presentation order, with why it

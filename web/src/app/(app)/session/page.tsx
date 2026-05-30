@@ -2,16 +2,22 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 
-import { api, type Session, type SessionItem } from '@/lib/api'
+import {
+  api,
+  type ReflectionKind,
+  type Session,
+  type SessionItem,
+} from '@/lib/api'
 
 /**
  * Understanding Session (DET-198) — the daily 5–15 minute loop. The system
  * resurfaces earned concepts as questions: for each, you retrieve the answer
  * from memory, then reveal your own compression and self-rate the recall. This
- * is recall practice that builds understanding, not a flashcard grind. (No
- * reflection — that's DET-196.)
+ * is recall practice that builds understanding, not a flashcard grind. It closes
+ * with a brief, skippable Reflection step (DET-196) where the user notes what
+ * MOVED in their understanding.
  */
 export default function SessionPage() {
   const queryClient = useQueryClient()
@@ -120,6 +126,9 @@ function RunningSession({ session }: { session: Session }) {
   const [revealed, setRevealed] = useState(false)
 
   const done = index >= session.items.length || session.items.length === 0
+  // After the last item is reviewed the user lands on the Reflection step
+  // (DET-196). Finishing reflection ends the session and shows the summary.
+  const [reflected, setReflected] = useState(false)
 
   // End the session on the server, but keep the local `session` prop so the
   // completion summary stays on screen. The active-session cache is only
@@ -128,15 +137,6 @@ function RunningSession({ session }: { session: Session }) {
   const endSession = useMutation({
     mutationFn: () => api.endSession(session.id),
   })
-
-  // When the loop finishes, end the session once (idempotent on the server).
-  const autoEnded = useRef(false)
-  useEffect(() => {
-    if (done && session.items.length > 0 && !autoEnded.current) {
-      autoEnded.current = true
-      endSession.mutate()
-    }
-  }, [done, session.items.length, endSession])
 
   const leaveSession = () => {
     queryClient.setQueryData(['session', 'active'], null)
@@ -180,6 +180,22 @@ function RunningSession({ session }: { session: Session }) {
   }
 
   if (done) {
+    // The loop is finished. Reflect first (skippable), then show the summary.
+    // The session is ended on the server when the user finishes reflecting.
+    if (!reflected) {
+      return (
+        <ReflectionStep
+          session={session}
+          onFinish={async (items) => {
+            if (items.length > 0) {
+              await api.submitReflections(session.id, items)
+            }
+            await endSession.mutateAsync()
+            setReflected(true)
+          }}
+        />
+      )
+    }
     return <SessionComplete session={session} onLeave={leaveSession} />
   }
 
@@ -342,6 +358,131 @@ function SessionCard({
         </div>
       )}
     </section>
+  )
+}
+
+// The four reflection prompts (DET-196), in order. Each maps to a ReflectionKind
+// whose downstream effect the server applies. Order matters: clearer/less-clear
+// first (the most common moves), then the richer connect/challenge prompts.
+const REFLECTION_PROMPTS: { kind: ReflectionKind; question: string }[] = [
+  { kind: 'CLEARER', question: 'Which concept feels clearer?' },
+  { kind: 'LESS_CLEAR', question: 'Which feels less clear?' },
+  { kind: 'CONNECTED', question: 'Did anything connect?' },
+  { kind: 'CHALLENGE_NEXT', question: 'Anything to challenge next time?' },
+]
+
+/**
+ * The closing Reflection step (DET-196). Up to four skippable prompts, each
+ * letting the user optionally pick one concept from THIS session + a short note.
+ * Reflection never blocks closing: skipping every prompt and finishing still
+ * ends the session. Kept light (30–90s) — not a journaling form.
+ */
+function ReflectionStep({
+  session,
+  onFinish,
+}: {
+  session: Session
+  onFinish: (
+    items: { conceptId: string; kind: ReflectionKind; note?: string }[],
+  ) => Promise<void>
+}) {
+  // Per-prompt selection: the chosen concept id (or '' for skipped) + note.
+  const [answers, setAnswers] = useState<
+    Record<ReflectionKind, { conceptId: string; note: string }>
+  >({
+    CLEARER: { conceptId: '', note: '' },
+    LESS_CLEAR: { conceptId: '', note: '' },
+    CONNECTED: { conceptId: '', note: '' },
+    CHALLENGE_NEXT: { conceptId: '', note: '' },
+  })
+  const [finishing, setFinishing] = useState(false)
+  const [error, setError] = useState(false)
+
+  const setAnswer = (
+    kind: ReflectionKind,
+    patch: Partial<{ conceptId: string; note: string }>,
+  ) => setAnswers((prev) => ({ ...prev, [kind]: { ...prev[kind], ...patch } }))
+
+  const finish = async () => {
+    const items = REFLECTION_PROMPTS.filter(
+      (p) => answers[p.kind].conceptId !== '',
+    ).map((p) => ({
+      conceptId: answers[p.kind].conceptId,
+      kind: p.kind,
+      note: answers[p.kind].note.trim() || undefined,
+    }))
+    setFinishing(true)
+    setError(false)
+    try {
+      await onFinish(items)
+    } catch {
+      setError(true)
+      setFinishing(false)
+    }
+  }
+
+  return (
+    <div className='flex flex-col gap-6'>
+      <div>
+        <h1 className='text-2xl font-semibold'>What moved?</h1>
+        <p className='text-sm text-neutral-400'>
+          A quick reflection so this session changes something. Answer what
+          fits, skip the rest.
+        </p>
+      </div>
+
+      <section className='flex flex-col gap-5 rounded-lg border border-neutral-800 p-6'>
+        {REFLECTION_PROMPTS.map((p) => (
+          <div key={p.kind} className='flex flex-col gap-2'>
+            <label
+              htmlFor={`reflect-${p.kind}`}
+              className='text-sm font-medium text-neutral-100'
+            >
+              {p.question}
+            </label>
+            <select
+              id={`reflect-${p.kind}`}
+              value={answers[p.kind].conceptId}
+              onChange={(e) => setAnswer(p.kind, { conceptId: e.target.value })}
+              className='rounded-md border border-neutral-800 bg-neutral-950 p-2 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none'
+            >
+              <option value=''>— skip —</option>
+              {session.items.map((item) => (
+                <option key={item.conceptId} value={item.conceptId}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+            {answers[p.kind].conceptId !== '' && (
+              <input
+                type='text'
+                value={answers[p.kind].note}
+                onChange={(e) => setAnswer(p.kind, { note: e.target.value })}
+                placeholder='Optional note…'
+                maxLength={2000}
+                className='rounded-md border border-neutral-800 bg-neutral-950 p-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none'
+              />
+            )}
+          </div>
+        ))}
+
+        <div className='flex flex-col gap-2'>
+          <button
+            type='button'
+            onClick={finish}
+            disabled={finishing}
+            className='self-start rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50'
+          >
+            {finishing ? 'Finishing…' : 'Finish'}
+          </button>
+          {error && (
+            <p className='text-sm text-red-400'>
+              Could not save that. Try finishing again.
+            </p>
+          )}
+        </div>
+      </section>
+    </div>
   )
 }
 

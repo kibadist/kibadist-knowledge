@@ -348,12 +348,31 @@ export interface StateTransition {
   createdAt: string
 }
 
+// --- Reflection (DET-196) ---
+// What MOVED in the user's understanding, each mapping to a downstream effect.
+// Mirrors the server's ReflectionKind enum; keep in sync.
+export type ReflectionKind =
+  | 'CLEARER'
+  | 'LESS_CLEAR'
+  | 'CONNECTED'
+  | 'CHALLENGE_NEXT'
+
+// One recorded reflection, for the concept's "what changed" view.
+export interface Reflection {
+  id: string
+  kind: ReflectionKind
+  note: string | null
+  createdAt: string
+  sessionId?: string
+}
+
 export interface ConceptDetail extends Concept {
   articulations: ConceptArticulation[]
   outgoingLinks: ConceptLinkEnd[]
   incomingLinks: ConceptLinkEnd[]
   retrievalEvents: ConceptRetrievalEvent[]
   stateHistory: StateTransition[]
+  reflections: Reflection[]
 }
 
 // --- Retrieval Engine (DET-192) ---
@@ -610,4 +629,16 @@ export const api = {
   endSession: (sessionId: string) =>
     request<Session>(`/sessions/${sessionId}/end`, { method: 'POST' }),
   getSessionHistory: () => request<SessionSummary[]>('/sessions/history'),
+
+  // --- Reflection (DET-196) ---
+  submitReflections: (
+    sessionId: string,
+    items: { conceptId: string; kind: ReflectionKind; note?: string }[],
+  ) =>
+    request<Reflection[]>('/reflections', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, items }),
+    }),
+  getConceptReflections: (conceptId: string) =>
+    request<Reflection[]>(`/reflections?conceptId=${conceptId}`),
 }

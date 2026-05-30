@@ -41,6 +41,13 @@ export class ConceptsService {
           include: { sourceConcept: { select: { id: true, title: true } } },
         },
         retrievalEvents: { orderBy: { createdAt: 'desc' }, take: 20 },
+        // What MOVED in the user's understanding over time (DET-196), newest
+        // first, for the "what changed" view.
+        reflections: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: { id: true, kind: true, note: true, createdAt: true },
+        },
       },
     })
     if (!concept) throw new NotFoundException('Concept not found')

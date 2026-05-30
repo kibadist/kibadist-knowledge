@@ -155,4 +155,65 @@ describe('TutorService.respond', () => {
     expect(out.articulation).toEqual({ id: 'art1', body: 'my response' })
     expect(search.indexArticulation).toHaveBeenCalledWith('art1', 'my response')
   })
+
+  it('clears a CHALLENGE_NEXT request (tutorRequested) once the challenge is answered', async () => {
+    const { service, prisma } = makeService()
+
+    await service.respond('u1', 'c1', {
+      question: 'Why?',
+      response: 'my response',
+      defended: true,
+    })
+
+    expect(prisma.concept.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'c1', userId: 'u1' },
+        data: { tutorRequested: false },
+      }),
+    )
+  })
+})
+
+describe('TutorService.eligible', () => {
+  it('includes a tutorRequested concept regardless of link count', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findMany.mockResolvedValue([
+      {
+        id: 'c1',
+        title: 'Flagged concept',
+        cognitiveState: 'INTERNALIZED',
+        tutorRequested: true,
+      },
+    ])
+    // Plenty of links — a RETRIEVED concept would be excluded, but a flagged one
+    // is eligible regardless.
+    prisma.link.count.mockResolvedValue(5)
+
+    const out = await service.eligible('u1')
+
+    expect(out).toEqual([
+      { id: 'c1', title: 'Flagged concept', cognitiveState: 'INTERNALIZED' },
+    ])
+    // tutorRequested concepts skip the link-count check entirely.
+    expect(prisma.link.count).not.toHaveBeenCalled()
+  })
+
+  it('includes a RETRIEVED concept only when thinly connected', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findMany.mockResolvedValue([
+      {
+        id: 'c2',
+        title: 'Thin concept',
+        cognitiveState: 'RETRIEVED',
+        tutorRequested: false,
+      },
+    ])
+    prisma.link.count.mockResolvedValue(0)
+
+    const out = await service.eligible('u1')
+
+    expect(out).toEqual([
+      { id: 'c2', title: 'Thin concept', cognitiveState: 'RETRIEVED' },
+    ])
+  })
 })

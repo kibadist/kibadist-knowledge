@@ -184,6 +184,14 @@ export class TutorService {
         },
       })
 
+      // The user answered the challenge → clear any CHALLENGE_NEXT request
+      // (DET-196): the requested challenge has been served. Always clear,
+      // regardless of whether they defended or found a gap.
+      await tx.concept.updateMany({
+        where: { id: conceptId, userId },
+        data: { tutorRequested: false },
+      })
+
       if (dto.defended) {
         // Survived the challenge → promote. Best-effort: an illegal move (the
         // concept hasn't reached RETRIEVED yet) is caught so the recorded
@@ -233,24 +241,45 @@ export class TutorService {
   }
 
   /**
-   * Concepts the Tutor should auto-challenge (DET-193): owned, earned (non-INBOX)
-   * concepts that are RETRIEVED but thinly connected — fewer than
-   * {@link MIN_CONFIRMED_LINKS} CONFIRMED links. These are recalled often yet
-   * never stress-tested or defended, the fluency illusion the Tutor breaks.
+   * Concepts the Tutor should auto-challenge (DET-193): owned, earned (non-INBOX,
+   * non-ARCHIVED) concepts that are either
+   *  - RETRIEVED but thinly connected — fewer than {@link MIN_CONFIRMED_LINKS}
+   *    CONFIRMED links (recalled often yet never stress-tested, the fluency
+   *    illusion the Tutor breaks), or
+   *  - explicitly flagged for a challenge by a CHALLENGE_NEXT reflection
+   *    (DET-196) — `tutorRequested`, eligible regardless of link count.
+   * The two sets are unioned and deduped.
    */
   async eligible(userId: string): Promise<EligibleConcept[]> {
     const candidates = await this.prisma.concept.findMany({
       where: {
         userId,
         status: { not: ConceptStatus.INBOX },
-        cognitiveState: 'RETRIEVED',
+        cognitiveState: { not: 'ARCHIVED' },
+        OR: [{ cognitiveState: 'RETRIEVED' }, { tutorRequested: true }],
       },
       orderBy: { updatedAt: 'desc' },
-      select: { id: true, title: true, cognitiveState: true },
+      select: {
+        id: true,
+        title: true,
+        cognitiveState: true,
+        tutorRequested: true,
+      },
     })
 
     const eligible: EligibleConcept[] = []
     for (const concept of candidates) {
+      // A user-requested challenge is eligible regardless of link count.
+      if (concept.tutorRequested) {
+        eligible.push({
+          id: concept.id,
+          title: concept.title,
+          cognitiveState: concept.cognitiveState,
+        })
+        if (eligible.length >= ELIGIBLE_LIMIT) break
+        continue
+      }
+      // Otherwise it's a RETRIEVED concept — include it only if thinly connected.
       const confirmedLinks = await this.prisma.link.count({
         where: {
           userId,
@@ -261,7 +290,13 @@ export class TutorService {
           ],
         },
       })
-      if (confirmedLinks < MIN_CONFIRMED_LINKS) eligible.push(concept)
+      if (confirmedLinks < MIN_CONFIRMED_LINKS) {
+        eligible.push({
+          id: concept.id,
+          title: concept.title,
+          cognitiveState: concept.cognitiveState,
+        })
+      }
       if (eligible.length >= ELIGIBLE_LIMIT) break
     }
 

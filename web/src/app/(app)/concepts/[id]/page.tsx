@@ -11,6 +11,8 @@ import {
   type ConceptLinkEnd,
   type ConceptRetrievalEvent,
   type LinkRelation,
+  type Reflection,
+  type ReflectionKind,
   type StateTransition,
 } from '@/lib/api'
 
@@ -23,6 +25,14 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
   DEPENDS_ON: 'depends on',
   REFINES: 'refines',
   REDUNDANT: 'redundant',
+}
+
+// DET-196: human labels for the reflection kinds shown in "What changed".
+const REFLECTION_LABELS: Record<ReflectionKind, string> = {
+  CLEARER: 'got clearer',
+  LESS_CLEAR: 'less clear',
+  CONNECTED: 'connected',
+  CHALLENGE_NEXT: 'to challenge',
 }
 
 function relationChipClass(kind: LinkRelation): string {
@@ -188,6 +198,26 @@ export default function ConceptViewPage() {
 
           <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
             <div>
+              <h2 className='font-medium'>What changed</h2>
+              <p className='mt-1 text-sm text-neutral-500'>
+                How your understanding moved over time.
+              </p>
+            </div>
+            {concept.reflections.length === 0 ? (
+              <p className='text-sm text-neutral-500'>
+                No reflections recorded yet.
+              </p>
+            ) : (
+              <ol className='flex flex-col gap-2'>
+                {concept.reflections.map((reflection) => (
+                  <ReflectionItem key={reflection.id} reflection={reflection} />
+                ))}
+              </ol>
+            )}
+          </section>
+
+          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+            <div>
               <h2 className='font-medium'>Provenance</h2>
               <p className='mt-1 text-sm text-neutral-500'>
                 Where this came from.
@@ -223,6 +253,26 @@ export default function ConceptViewPage() {
         </>
       )}
     </div>
+  )
+}
+
+function ReflectionItem({ reflection }: { reflection: Reflection }) {
+  return (
+    <li className='flex flex-col gap-1 rounded-md border border-neutral-800 bg-neutral-950/50 p-3 text-sm'>
+      <div className='flex flex-wrap items-center gap-2'>
+        <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
+          {REFLECTION_LABELS[reflection.kind]}
+        </span>
+        <time className='ml-auto text-xs text-neutral-600'>
+          {new Date(reflection.createdAt).toLocaleString()}
+        </time>
+      </div>
+      {reflection.note && (
+        <p className='whitespace-pre-wrap text-neutral-300'>
+          {reflection.note}
+        </p>
+      )}
+    </li>
   )
 }
 
