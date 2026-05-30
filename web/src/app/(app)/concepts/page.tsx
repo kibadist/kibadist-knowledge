@@ -55,12 +55,27 @@ export default function ConceptsPage() {
 }
 
 function ConceptRow({ concept }: { concept: Concept }) {
+  // Memory decay (DET-195): a faded concept (current activation below 0.5) is
+  // dimmed; a DORMANT one has decayed past the floor and is hidden from active
+  // retrieval — call it out so the user can choose to revive it.
+  const dormant = concept.cognitiveState === 'DORMANT'
+  const faded = dormant || concept.currentActivation < 0.5
+
   return (
-    <li className='rounded-lg border border-neutral-800 bg-neutral-900 p-4'>
+    <li
+      className={`rounded-lg border border-neutral-800 bg-neutral-900 p-4 ${
+        faded ? 'opacity-50' : ''
+      }`}
+    >
       <div className='flex items-center gap-2'>
         {concept.cognitiveState && (
           <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
             {concept.cognitiveState}
+          </span>
+        )}
+        {dormant && (
+          <span className='rounded border border-amber-700/60 bg-amber-950/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300'>
+            Dormant
           </span>
         )}
         {concept.gateMode && (

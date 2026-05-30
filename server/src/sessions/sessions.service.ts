@@ -4,9 +4,10 @@ import {
   SessionItemReason,
   SessionStatus,
 } from '@kibadist/prisma'
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, Logger, NotFoundException } from '@nestjs/common'
 
 import { ConceptsService } from '../concepts/concepts.service'
+import { DecayService } from '../decay/decay.service'
 import { PrismaService } from '../prisma/prisma.service'
 import type { GradeResult } from '../retrieval/retrieval.service'
 import { RetrievalService } from '../retrieval/retrieval.service'
@@ -27,10 +28,13 @@ const NON_DUE_STATES = ['ARCHIVED', 'CONTESTED', 'DORMANT'] as const
  */
 @Injectable()
 export class SessionsService {
+  private readonly logger = new Logger(SessionsService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly retrieval: RetrievalService,
     private readonly concepts: ConceptsService,
+    private readonly decay: DecayService,
   ) {}
 
   /**
@@ -46,6 +50,20 @@ export class SessionsService {
       where: { userId, status: SessionStatus.ACTIVE },
     })
     if (existing) return this.getActive(userId)
+
+    // Apply decay lazily when the user engages (DET-195): sweep faded concepts
+    // into DORMANT before categorizing, so this session reflects current
+    // activation (dormant ones drop out of "due" and surface as rediscoveries).
+    // Best-effort — a failed sweep must never block starting a session.
+    try {
+      await this.decay.sweep(userId)
+    } catch (error) {
+      this.logger.warn(
+        `Decay sweep at session start skipped for ${userId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
 
     const now = new Date()
     const concepts = await this.prisma.concept.findMany({

@@ -45,6 +45,7 @@ function makeService() {
     transition: jest.fn().mockResolvedValue('DEFENDED'),
   }
   const search = { indexArticulation: jest.fn().mockResolvedValue(undefined) }
+  const decay = { refresh: jest.fn().mockResolvedValue(undefined) }
 
   const service = new TutorService(
     prisma as never,
@@ -52,8 +53,9 @@ function makeService() {
     concepts as never,
     conceptState as never,
     search as never,
+    decay as never,
   )
-  return { service, prisma, ai, concepts, conceptState, search }
+  return { service, prisma, ai, concepts, conceptState, search, decay }
 }
 
 describe('TutorService.challenge', () => {

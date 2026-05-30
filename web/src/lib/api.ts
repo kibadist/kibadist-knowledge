@@ -316,6 +316,10 @@ export interface Concept {
   // there, so this is never null.
   cognitiveState: CognitiveState
   gateMode: GateMode | null
+  // Memory decay (DET-195): the concept's CURRENT activation — its stored
+  // prominence decayed by the time since it was last engaged, clamped to [0, 1].
+  // Below 0.5 the UI fades it; a DORMANT concept has decayed past the floor.
+  currentActivation: number
   createdAt: string
   updatedAt: string
 }
@@ -586,6 +590,10 @@ export const api = {
   // --- Concepts (the earned, permanent layer) ---
   listConcepts: () => request<Concept[]>('/concepts'),
   getConcept: (id: string) => request<ConceptDetail>(`/concepts/${id}`),
+  // Memory decay (DET-195): revive a faded concept — restores full activation
+  // and brings a DORMANT one back into a knowledge state. Returns its new state.
+  reviveConcept: (id: string) =>
+    request<CognitiveState>(`/concepts/${id}/revive`, { method: 'POST' }),
 
   // --- Retrieval Engine (DET-192) ---
   getDueRetrievals: () => request<DueConcept[]>('/retrieval-events/due'),

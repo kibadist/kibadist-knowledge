@@ -16,6 +16,7 @@ import {
 
 import { ConceptStateService } from '../concept-state/concept-state.service'
 import { ConceptsService } from '../concepts/concepts.service'
+import { DecayService } from '../decay/decay.service'
 import { PrismaService } from '../prisma/prisma.service'
 import type { CreateLinkDto } from './dto/create-link.dto'
 import type { UpdateLinkDto } from './dto/update-link.dto'
@@ -33,6 +34,7 @@ export class LinksService {
     private readonly prisma: PrismaService,
     private readonly concepts: ConceptsService,
     private readonly conceptState: ConceptStateService,
+    private readonly decay: DecayService,
   ) {}
 
   /**
@@ -100,6 +102,7 @@ export class LinksService {
     // A confirmed contradiction puts the TARGET into CONTESTED (DET-191/194).
     if (link.status === LinkStatus.CONFIRMED) {
       await this.maybeContest(userId, link)
+      await this.refreshEndpoints(userId, link)
     }
     return link
   }
@@ -118,6 +121,7 @@ export class LinksService {
     // contradiction contests the target (DET-191/194).
     if (dto.status === LinkStatus.CONFIRMED) {
       await this.maybeContest(userId, link)
+      await this.refreshEndpoints(userId, link)
     }
     return link
   }
@@ -183,6 +187,30 @@ export class LinksService {
     } catch (error) {
       this.logger.warn(
         `Could not contest target ${link.targetConceptId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
+  }
+
+  /**
+   * A CONFIRMED edge is engagement for BOTH concepts (DET-195): connecting them
+   * re-activates the source, and a new incoming link re-activates the target. So
+   * refresh both endpoints' activation, restarting decay. Best-effort: a failed
+   * refresh is logged, never thrown — confirming the edge must succeed regardless.
+   */
+  private async refreshEndpoints(
+    userId: string,
+    link: { sourceConceptId: string; targetConceptId: string },
+  ): Promise<void> {
+    try {
+      await Promise.all([
+        this.decay.refresh(userId, link.sourceConceptId),
+        this.decay.refresh(userId, link.targetConceptId),
+      ])
+    } catch (error) {
+      this.logger.warn(
+        `Decay refresh on confirmed link skipped (${link.sourceConceptId} → ${link.targetConceptId}): ${
           error instanceof Error ? error.message : String(error)
         }`,
       )

@@ -40,4 +40,11 @@ export class ConceptsController {
   archive(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.conceptsService.archive(user.userId, id)
   }
+
+  // Revive a faded concept (DET-195). Restores full activation and brings a
+  // DORMANT concept back into a knowledge state. Returns its resulting state.
+  @Post(':id/revive')
+  revive(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.conceptsService.revive(user.userId, id)
+  }
 }

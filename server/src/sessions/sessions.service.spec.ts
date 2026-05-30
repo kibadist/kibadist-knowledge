@@ -26,12 +26,14 @@ function makeService() {
     grade: jest.fn().mockResolvedValue({ cognitiveState: 'RETRIEVED' }),
   }
   const concepts = {}
+  const decay = { sweep: jest.fn().mockResolvedValue(0) }
   const service = new SessionsService(
     prisma as never,
     retrieval as never,
     concepts as never,
+    decay as never,
   )
-  return { service, prisma, retrieval }
+  return { service, prisma, retrieval, decay }
 }
 
 describe('SessionsService.start', () => {

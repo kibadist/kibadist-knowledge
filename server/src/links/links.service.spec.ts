@@ -15,12 +15,14 @@ function makeService() {
     assertOwnedNonInbox: jest.fn().mockResolvedValue(undefined),
   }
   const conceptState = { transition: jest.fn().mockResolvedValue('CONTESTED') }
+  const decay = { refresh: jest.fn().mockResolvedValue(undefined) }
   const service = new LinksService(
     prisma as never,
     concepts as never,
     conceptState as never,
+    decay as never,
   )
-  return { service, prisma, concepts, conceptState }
+  return { service, prisma, concepts, conceptState, decay }
 }
 
 describe('LinksService contradiction → CONTESTED', () => {

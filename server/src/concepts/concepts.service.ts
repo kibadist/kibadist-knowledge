@@ -7,6 +7,8 @@ import {
 import { Injectable, NotFoundException } from '@nestjs/common'
 
 import { ConceptStateService } from '../concept-state/concept-state.service'
+import { currentActivation } from '../decay/decay'
+import { DecayService } from '../decay/decay.service'
 import { PrismaService } from '../prisma/prisma.service'
 import type { CreateConceptDto } from './dto/create-concept.dto'
 import type { UpdateConceptDto } from './dto/update-concept.dto'
@@ -16,16 +18,31 @@ export class ConceptsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly conceptState: ConceptStateService,
+    private readonly decay: DecayService,
   ) {}
 
   // Inbox items are Concepts in INBOX status. They are *not* knowledge yet, so
   // they must never surface in the concept list or a concept view (DET-187).
   // Enforced here as the single read path the rest of the app uses.
-  findAllForUser(userId: string): Promise<Concept[]> {
-    return this.prisma.concept.findMany({
+  // Each concept also carries its CURRENT activation (DET-195): the stored
+  // `activation` decayed by the time since `activationAt`, computed lazily on read
+  // so the list can fade idle concepts without a write.
+  async findAllForUser(
+    userId: string,
+  ): Promise<(Concept & { currentActivation: number })[]> {
+    const now = new Date()
+    const concepts = await this.prisma.concept.findMany({
       where: { userId, status: { not: ConceptStatus.INBOX } },
       orderBy: { createdAt: 'desc' },
     })
+    return concepts.map((concept) => ({
+      ...concept,
+      currentActivation: currentActivation(
+        concept.activation,
+        concept.activationAt,
+        now,
+      ),
+    }))
   }
 
   /** Returns the concept with its articulations, edges, and recent retrievals. */
@@ -54,7 +71,14 @@ export class ConceptsService {
     // The cognitive-state history (DET-194), oldest-first. Ownership is already
     // established by the concept load above, so this is safe to attach.
     const stateHistory = await this.conceptState.history(id, userId)
-    return { ...concept, stateHistory }
+    // The CURRENT activation (DET-195): stored `activation` decayed by elapsed
+    // time, computed lazily on read so the view can show fade/dormant status.
+    const current = currentActivation(
+      concept.activation,
+      concept.activationAt,
+      new Date(),
+    )
+    return { ...concept, stateHistory, currentActivation: current }
   }
 
   // Always lands in the inbox (status defaults to INBOX). Promotion to a
@@ -114,6 +138,16 @@ export class ConceptsService {
       to: CognitiveState.ARCHIVED,
       trigger: StateTrigger.ARCHIVED,
     })
+  }
+
+  /**
+   * Revive a faded concept (DET-195): restore full activation and, if it had
+   * decayed into DORMANT, return it to a knowledge state. Delegates to
+   * {@link DecayService.revive}, which does its own ownership/non-INBOX check.
+   * Returns the concept's resulting cognitive state.
+   */
+  revive(userId: string, id: string): Promise<string> {
+    return this.decay.revive(userId, id)
   }
 
   /**

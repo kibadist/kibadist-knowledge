@@ -1,4 +1,4 @@
-import { StateTrigger } from '@kibadist/prisma'
+import { ConceptStatus, StateTrigger } from '@kibadist/prisma'
 
 import { RetrievalService } from './retrieval.service'
 
@@ -6,6 +6,7 @@ function makeService() {
   const prisma = {
     concept: {
       findFirst: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       // Conditional, concurrency-safe schedule write keyed on {id, userId}.
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
@@ -24,12 +25,17 @@ function makeService() {
   const conceptState = {
     transition: jest.fn().mockResolvedValue('RETRIEVED'),
   }
+  // A grade refreshes the concept's activation (DET-195), best-effort after the tx.
+  const decay = {
+    refresh: jest.fn().mockResolvedValue(undefined),
+  }
   const service = new RetrievalService(
     prisma as never,
     concepts as never,
     conceptState as never,
+    decay as never,
   )
-  return { service, prisma, concepts, conceptState }
+  return { service, prisma, concepts, conceptState, decay }
 }
 
 describe('RetrievalService.grade', () => {
@@ -74,6 +80,20 @@ describe('RetrievalService.grade', () => {
     )
     expect(result.cognitiveState).toBe('RETRIEVED')
     expect(result.reviewReps).toBe(1)
+  })
+
+  it('refreshes the concept activation after grading (a review keeps it alive)', async () => {
+    const { service, prisma, decay } = makeService()
+    prisma.concept.findFirst.mockResolvedValue({
+      reviewEase: 2.5,
+      reviewIntervalDays: 0,
+      reviewReps: 0,
+      cognitiveState: 'EXPLAINED',
+    })
+
+    await service.grade('u1', 'c1', { score: 4 })
+
+    expect(decay.refresh).toHaveBeenCalledWith('u1', 'c1')
   })
 
   it('transitions to INTERNALIZED once recall is sustained (reps reaches 3)', async () => {
@@ -158,6 +178,21 @@ describe('RetrievalService.grade', () => {
     // reps 2 → 3 means both INTERNALIZED and RETRIEVED were attempted.
     expect(conceptState.transition).toHaveBeenCalledTimes(2)
     expect(result.cognitiveState).toBe('EXPLAINED')
+  })
+})
+
+describe('RetrievalService.due — excludes DORMANT (DET-195)', () => {
+  it('queries only non-INBOX concepts that are neither ARCHIVED nor DORMANT', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findMany.mockResolvedValue([])
+
+    await service.due('u1')
+
+    const where = prisma.concept.findMany.mock.calls[0][0].where
+    // DORMANT is excluded from active scheduling — sessions surface it via the
+    // separate dormant-rediscovery bucket instead.
+    expect(where.cognitiveState).toEqual({ notIn: ['ARCHIVED', 'DORMANT'] })
+    expect(where.status).toEqual({ not: ConceptStatus.INBOX })
   })
 })
 

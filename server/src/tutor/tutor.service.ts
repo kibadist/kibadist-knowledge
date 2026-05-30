@@ -15,6 +15,7 @@ import {
 import { AiService } from '../ai/ai.service'
 import { ConceptStateService } from '../concept-state/concept-state.service'
 import { ConceptsService } from '../concepts/concepts.service'
+import { DecayService } from '../decay/decay.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { addDays } from '../retrieval/sm2'
 import { SearchService } from '../search/search.service'
@@ -78,6 +79,7 @@ export class TutorService {
     private readonly concepts: ConceptsService,
     private readonly conceptState: ConceptStateService,
     private readonly search: SearchService,
+    private readonly decay: DecayService,
   ) {}
 
   /**
@@ -228,6 +230,19 @@ export class TutorService {
     // Embed-on-write so the new articulation is searchable. Best-effort and
     // OUTSIDE the tx (like ArticulationsService): AI downtime never loses the write.
     await this.search.indexArticulation(articulation.id, dto.response)
+
+    // A defense is engagement: refresh activation so decay restarts (DET-195).
+    // Best-effort and outside the tx — keeping a concept prominent must never
+    // roll back the recorded articulation + event.
+    try {
+      await this.decay.refresh(userId, conceptId)
+    } catch (error) {
+      this.logger.warn(
+        `Decay refresh after tutor respond skipped for ${conceptId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
 
     const after = await this.prisma.concept.findFirst({
       where: { id: conceptId, userId },

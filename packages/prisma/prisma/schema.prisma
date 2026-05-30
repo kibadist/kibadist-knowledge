@@ -101,6 +101,13 @@ model Concept {
   // Set by a "challenge me on this next time" reflection (DET-196); makes the
   // concept Tutor-eligible (DET-193) until a Tutor response clears it.
   tutorRequested     Boolean  @default(false)
+  // Memory decay (DET-195): `activation` is the concept's prominence at the
+  // moment `activationAt` was stamped; its CURRENT value decays exponentially
+  // with elapsed time (computed lazily, no cron — see server/src/decay/decay.ts).
+  // Retrieval, a new incoming link, a session review, or a Tutor defense refresh
+  // it to 1.0. Below a threshold the concept fades; lower still it goes DORMANT.
+  activation         Float    @default(1)
+  activationAt       DateTime @default(now())
   userId       String
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt

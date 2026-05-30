@@ -9,6 +9,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common'
 
 import { ConceptStateService } from '../concept-state/concept-state.service'
 import { ConceptsService } from '../concepts/concepts.service'
+import { DecayService } from '../decay/decay.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { generateCards, type RetrievalCard } from './cards'
 import type { CreateRetrievalEventDto } from './dto/create-retrieval-event.dto'
@@ -74,6 +75,7 @@ export class RetrievalService {
     private readonly prisma: PrismaService,
     private readonly concepts: ConceptsService,
     private readonly conceptState: ConceptStateService,
+    private readonly decay: DecayService,
   ) {}
 
   findAllForUser(
@@ -104,11 +106,13 @@ export class RetrievalService {
   }
 
   /**
-   * Concepts due for resurfacing (DET-192): owned, earned (non-INBOX), not
-   * ARCHIVED, whose next review has come (or that were never scheduled). DORMANT
-   * is deliberately included — a faded concept is exactly what should resurface.
-   * Ordered by `nextReviewAt` ascending with NULLs first, so never-scheduled
-   * concepts (just promoted) lead the queue.
+   * Concepts due for resurfacing (DET-192): owned, earned (non-INBOX), neither
+   * ARCHIVED nor DORMANT, whose next review has come (or that were never
+   * scheduled). DORMANT is EXCLUDED from active scheduling (DET-195) — a faded
+   * concept has decayed out of the active pool and is surfaced instead through
+   * the session's separate dormant-rediscovery bucket (DET-198), which queries
+   * DORMANT directly. Ordered by `nextReviewAt` ascending with NULLs first, so
+   * never-scheduled concepts (just promoted) lead the queue.
    */
   async due(userId: string, limit = 20): Promise<DueConcept[]> {
     const now = new Date()
@@ -116,7 +120,7 @@ export class RetrievalService {
       where: {
         userId,
         status: { not: ConceptStatus.INBOX },
-        cognitiveState: { not: 'ARCHIVED' },
+        cognitiveState: { notIn: ['ARCHIVED', 'DORMANT'] },
         OR: [{ nextReviewAt: { lte: now } }, { nextReviewAt: null }],
       },
       orderBy: { nextReviewAt: { sort: 'asc', nulls: 'first' } },
@@ -214,7 +218,7 @@ export class RetrievalService {
     // The recorded event, the SM-2 schedule update, and the cognitive-state move
     // all commit together (the transition joins via `tx`); the returned state is
     // read inside the tx, so no post-commit re-read is needed.
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.retrievalEvent.create({
         data: {
           conceptId,
@@ -309,5 +313,20 @@ export class RetrievalService {
         cognitiveState,
       }
     })
+
+    // A review is engagement: refresh the concept's activation so decay restarts
+    // (DET-195). Best-effort and OUTSIDE the tx — keeping a concept prominent must
+    // never roll back the recorded event + schedule.
+    try {
+      await this.decay.refresh(userId, conceptId)
+    } catch (error) {
+      this.logger.warn(
+        `Decay refresh after grade skipped for ${conceptId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
+
+    return result
   }
 }

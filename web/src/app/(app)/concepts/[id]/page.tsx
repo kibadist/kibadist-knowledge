@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
@@ -52,12 +52,24 @@ export default function ConceptViewPage() {
   const params = useParams<{ id: string }>()
   const id = params.id
 
+  const queryClient = useQueryClient()
   const conceptQuery = useQuery({
     queryKey: ['concept', id],
     queryFn: () => api.getConcept(id),
   })
 
+  // Memory decay (DET-195): bring a faded/dormant concept back to full
+  // prominence. Refresh this view + the list so the new state shows immediately.
+  const reviveMutation = useMutation({
+    mutationFn: () => api.reviveConcept(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['concept', id] })
+      void queryClient.invalidateQueries({ queryKey: ['concepts'] })
+    },
+  })
+
   const concept = conceptQuery.data
+  const dormant = concept?.cognitiveState === 'DORMANT'
 
   return (
     <div className='flex flex-col gap-6'>
@@ -86,7 +98,32 @@ export default function ConceptViewPage() {
                 {concept.gateMode}
               </span>
             )}
+            {/* Memory decay (DET-195): current activation, with a DORMANT
+                call-out + a Revive control when it has faded past the floor. */}
+            <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
+              Activation {Math.round(concept.currentActivation * 100)}%
+            </span>
+            {dormant && (
+              <span className='rounded border border-amber-700/60 bg-amber-950/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300'>
+                Dormant
+              </span>
+            )}
+            {dormant && (
+              <button
+                type='button'
+                onClick={() => reviveMutation.mutate()}
+                disabled={reviveMutation.isPending}
+                className='rounded border border-amber-700/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-300 hover:bg-amber-950/30 disabled:opacity-50'
+              >
+                {reviveMutation.isPending ? 'Reviving…' : 'Revive'}
+              </button>
+            )}
           </div>
+        )}
+        {reviveMutation.isError && (
+          <p className='mt-2 text-xs text-red-400'>
+            Could not revive this concept. Try again.
+          </p>
         )}
         {concept && concept.stateHistory.length > 0 && (
           <ol className='mt-3 flex flex-col gap-1 text-xs text-neutral-500'>
