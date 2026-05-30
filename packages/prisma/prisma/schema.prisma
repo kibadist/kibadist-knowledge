@@ -86,8 +86,16 @@ model Concept {
   // Which proof-of-learning gate mode earned this concept (provenance). Null
   // until promoted.
   gateMode     GateMode?
-  // When this concept is next due for spaced resurfacing (null = not scheduled).
+  // Spaced-retrieval schedule (DET-192), SM-2 style. nextReviewAt = when the
+  // concept is next due (null = not yet scheduled). reviewEase is the SM-2
+  // easiness factor (≥1.3), reviewIntervalDays the current gap, reviewReps the
+  // count of consecutive successful recalls. A failed recall resets reps and
+  // pulls the next review sooner; success drifts it further out. The schedule is
+  // driven by recall success, never by frequency or streaks (anti-gamification).
   nextReviewAt DateTime?
+  reviewEase         Float    @default(2.5)
+  reviewIntervalDays Int      @default(0)
+  reviewReps         Int      @default(0)
   userId       String
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt

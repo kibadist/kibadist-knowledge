@@ -484,6 +484,10 @@ export class PromotionService {
         data: {
           status: ConceptStatus.PERMANENT,
           gateMode: dto.mode,
+          // Seed the spaced-retrieval schedule (DET-192): a freshly-earned
+          // concept is immediately due for its first resurfacing. The SM-2
+          // ease/interval/reps keep their column defaults until the first grade.
+          nextReviewAt: new Date(),
         },
       })
       // Route the EXPLAINED/LINKED move through the state machine (DET-194) so

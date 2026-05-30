@@ -356,6 +356,37 @@ export interface ConceptDetail extends Concept {
   stateHistory: StateTransition[]
 }
 
+// --- Retrieval Engine (DET-192) ---
+// Card types mirror the server's RetrievalCardType; keep in sync. Cards are
+// always generated from the user's compression (their articulation) + approved
+// edges, NEVER from the source — `fromCompression` is the surfaced guarantee.
+export type RetrievalCardType = 'CLOZE' | 'EXPLAIN' | 'CONNECT' | 'BOUNDARY'
+
+export interface RetrievalCard {
+  type: RetrievalCardType
+  prompt: string
+  // The expected answer where one is well-defined (CLOZE); null for open cards.
+  answer: string | null
+  fromCompression: true
+}
+
+// A concept the scheduler has surfaced for resurfacing.
+export interface DueConcept {
+  id: string
+  title: string
+  cognitiveState: CognitiveState
+  nextReviewAt: string | null
+}
+
+// The result of grading a retrieval: the new SM-2 schedule and resulting state.
+export interface GradeResult {
+  reviewEase: number
+  reviewIntervalDays: number
+  reviewReps: number
+  nextReviewAt: string
+  cognitiveState: CognitiveState
+}
+
 export const api = {
   register: (input: { email: string; password: string; name?: string }) =>
     request<AuthResponse>('/auth/register', {
@@ -462,4 +493,21 @@ export const api = {
   // --- Concepts (the earned, permanent layer) ---
   listConcepts: () => request<Concept[]>('/concepts'),
   getConcept: (id: string) => request<ConceptDetail>(`/concepts/${id}`),
+
+  // --- Retrieval Engine (DET-192) ---
+  getDueRetrievals: () => request<DueConcept[]>('/retrieval-events/due'),
+  getRetrievalCards: (conceptId: string) =>
+    request<RetrievalCard[]>(`/retrieval-events/cards/${conceptId}`),
+  gradeRetrieval: (
+    conceptId: string,
+    input: {
+      score: number
+      question?: string
+      response?: string
+    },
+  ) =>
+    request<GradeResult>('/retrieval-events/grade', {
+      method: 'POST',
+      body: JSON.stringify({ conceptId, ...input }),
+    }),
 }
