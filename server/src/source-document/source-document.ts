@@ -5,6 +5,7 @@
  * turn structured blocks into prompt context.
  */
 
+export { type ConceptChunk, chunkDocument } from './chunk-document.util'
 export { extractUrlDocument } from './extract-url-document.util'
 export {
   blocksToPlainText,

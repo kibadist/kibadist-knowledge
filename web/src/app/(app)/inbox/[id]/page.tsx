@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
+import { ArticleBlocks } from '@/components/reader/article-blocks'
 import {
   ArticleReader,
   ReaderError,
@@ -122,6 +123,8 @@ export default function ProcessInboxItemPage() {
           capturedAt={itemQuery.data.createdAt}
         />
       )}
+
+      {itemQuery.data?.sourceDocument && <ConceptLibraryPanel inboxId={id} />}
 
       {itemQuery.data?.sourceText && <ReferenceQaPanel conceptId={id} />}
 
@@ -336,6 +339,68 @@ function ReferenceQaPanel({ conceptId }: { conceptId: string }) {
           {ask.isPending ? 'Asking…' : 'Ask the source'}
         </button>
       </form>
+    </section>
+  )
+}
+
+/**
+ * The Concept Library (DET-211). A captured structured article bundles many
+ * cognitive objects into one wall of text. Here we surface it broken into
+ * section-sized learnable pieces so the article becomes something you study and
+ * recall one chunk at a time, not re-read whole. Only shown for an article with
+ * ≥ 2 chunks — a single-chunk article gains nothing from being "split".
+ *
+ * MVP scope: this SURFACES the library. Promoting an individual chunk into its
+ * own concept is the natural next step (it needs schema/flow changes) and is not
+ * wired yet — the note below keeps the UI honest about that.
+ */
+function ConceptLibraryPanel({ inboxId }: { inboxId: string }) {
+  const chunksQuery = useQuery({
+    queryKey: ['inbox-chunks', inboxId],
+    queryFn: () => api.getInboxChunks(inboxId),
+  })
+
+  const chunks = chunksQuery.data
+  // A single-chunk (or empty) article gains nothing from being split — hide it.
+  if (!chunks || chunks.length < 2) return null
+
+  return (
+    <section className='flex flex-col gap-4 rounded-lg border border-neutral-800 bg-neutral-950/30 p-4'>
+      <div>
+        <h2 className='text-sm font-semibold text-neutral-200'>
+          Concept Library
+        </h2>
+        <p className='text-xs text-neutral-500'>
+          This article, broken into learnable pieces — study and recall one at a
+          time instead of re-reading the whole thing.
+        </p>
+      </div>
+
+      <ol className='flex flex-col gap-3'>
+        {chunks.map((chunk, i) => (
+          <li
+            key={chunk.id}
+            className='rounded-md border border-neutral-800 bg-neutral-900/40 p-4'
+          >
+            <div className='flex items-baseline justify-between gap-3'>
+              <h3 className='font-medium text-neutral-100'>
+                <span className='mr-2 text-neutral-600'>{i + 1}.</span>
+                {chunk.title}
+              </h3>
+              <span className='shrink-0 rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
+                {chunk.wordCount} words
+              </span>
+            </div>
+            <div className='mt-3 max-h-72 overflow-y-auto border-l-2 border-neutral-800 pl-3'>
+              <ArticleBlocks blocks={chunk.blocks} />
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <p className='text-xs text-neutral-600'>
+        Promoting an individual piece into its own concept is coming next.
+      </p>
     </section>
   )
 }

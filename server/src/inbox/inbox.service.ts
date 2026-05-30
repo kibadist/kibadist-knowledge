@@ -5,6 +5,8 @@ import { ConceptStateService } from '../concept-state/concept-state.service'
 import { PrismaService } from '../prisma/prisma.service'
 import {
   asSourceDocument,
+  type ConceptChunk,
+  chunkDocument,
   extractPdfDocument,
   extractTextDocument,
   extractUrlDocument,
@@ -145,6 +147,30 @@ export class InboxService {
       excerpt: excerpt(row.sourceText),
       createdAt: row.createdAt,
     }
+  }
+
+  /**
+   * The Concept Library (DET-211): an inbox item's structured article split into
+   * section-sized learnable chunks. Chunking lives on the inbox item because it
+   * acts on a CAPTURED source before it's earned — surfacing the article as
+   * distinct cognitive objects so the user can study and recall one at a time
+   * instead of re-reading one wall. Reuses findOne's ownership/status guard.
+   *
+   * Returns [] when the item has no structured document (older capture). The
+   * library SURFACES the chunks; per-chunk promotion is the natural next step
+   * (it needs schema/flow changes and is out of this slice's scope).
+   *
+   * NOTE: specifics inferred pending the full DET-211 spec (Linear unfetchable).
+   */
+  async chunks(userId: string, id: string): Promise<ConceptChunk[]> {
+    const row = await this.prisma.concept.findFirst({
+      where: { id, userId, status: ConceptStatus.INBOX },
+      select: { sourceDocument: true },
+    })
+    if (!row) throw new NotFoundException('Inbox item not found')
+    const doc = asSourceDocument(row.sourceDocument)
+    if (!doc) return []
+    return chunkDocument(doc)
   }
 
   /** Discards an inbox item. Only INBOX items can be discarded this way. */

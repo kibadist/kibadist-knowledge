@@ -33,6 +33,14 @@ export class InboxController {
     return this.inbox.findOne(user.userId, id)
   }
 
+  // The Concept Library (DET-211): the item's structured article split into
+  // section-sized learnable chunks. Kept on the inbox item — chunking acts on a
+  // captured source before it's earned.
+  @Get(':id/chunks')
+  chunks(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.inbox.chunks(user.userId, id)
+  }
+
   @Post('text')
   captureText(@CurrentUser() user: AuthUser, @Body() dto: CaptureTextDto) {
     return this.inbox.captureText(user.userId, dto)

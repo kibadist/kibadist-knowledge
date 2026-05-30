@@ -154,6 +154,17 @@ export interface InboxItemDetail extends InboxItem {
   sourceDocument: SourceDocument | null
 }
 
+// --- Semantic Chunking + Concept Library (DET-211) ---
+// A section-sized learnable unit carved from a structured article. Mirrors the
+// server's ConceptChunk (chunk-document.util.ts); keep in sync.
+export interface ConceptChunk {
+  id: string
+  title: string
+  blocks: SourceBlock[]
+  blockIds: string[]
+  wordCount: number
+}
+
 export interface IntakeQuestion {
   id: string
   conceptId: string
@@ -554,6 +565,10 @@ export const api = {
   discardInboxItem: (id: string) =>
     request<void>(`/inbox/${id}`, { method: 'DELETE' }),
   getInboxItem: (id: string) => request<InboxItemDetail>(`/inbox/${id}`),
+
+  // --- Semantic Chunking + Concept Library (DET-211) ---
+  getInboxChunks: (id: string) =>
+    request<ConceptChunk[]>(`/inbox/${id}/chunks`),
 
   // --- Intake interrogation (DET-188) ---
   generateInterrogation: (conceptId: string) =>
