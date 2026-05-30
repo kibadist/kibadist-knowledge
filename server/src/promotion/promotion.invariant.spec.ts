@@ -1,4 +1,4 @@
-import { ConceptStatus, GateMode, LinkRelation } from '@kibadist/prisma'
+import { ConceptStatus, FrictionLevel, LinkRelation } from '@kibadist/prisma'
 
 import { PromotionService } from './promotion.service'
 
@@ -20,6 +20,8 @@ function makePromotionService() {
     concept: {
       findFirst: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
+      // RIGOROUS friction (DET-197) flags a post-promotion Tutor pass here.
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     promotionDraft: {
       findUnique: jest.fn(),
@@ -72,11 +74,14 @@ const INBOX_CONCEPT = {
 const USER_ARTICULATION =
   'Spaced repetition schedules reviews at widening intervals to fight forgetting.'
 
-// A fully-passing draft (QUICK root) whose articulation is the user's own words.
+// A fully-passing draft whose articulation is the user's own words. MINIMAL
+// friction (DET-197) requires only the Articulate gate, so a compression-only
+// root commit (no link/recall/review) is allowed.
 const PASSING_DRAFT = {
   conceptId: 'c1',
   userId: 'u1',
-  mode: GateMode.QUICK,
+  frictionLevel: FrictionLevel.MINIMAL,
+  mode: 'QUICK',
   articulation: USER_ARTICULATION,
   connectionsReviewed: true,
   retrievalQuestion: 'Explain it.',
@@ -92,7 +97,6 @@ describe('DET-208 invariant — scaffold never becomes an Articulation', () => {
     prisma.promotionDraft.findUnique.mockResolvedValue(PASSING_DRAFT)
 
     await service.commit('u1', 'c1', {
-      mode: GateMode.QUICK,
       isRoot: true,
       connections: [],
     })
@@ -134,7 +138,6 @@ describe('DET-191 — a contradiction approved at the gate contests its target',
     prisma.promotionDraft.findUnique.mockResolvedValue(PASSING_DRAFT)
 
     await service.commit('u1', 'c1', {
-      mode: GateMode.QUICK,
       isRoot: false,
       connections: [
         { targetConceptId: 'other', relationKind: LinkRelation.CONTRADICTION },
@@ -158,7 +161,6 @@ describe('DET-191 — a contradiction approved at the gate contests its target',
     prisma.promotionDraft.findUnique.mockResolvedValue(PASSING_DRAFT)
 
     await service.commit('u1', 'c1', {
-      mode: GateMode.QUICK,
       isRoot: false,
       connections: [
         { targetConceptId: 'other', relationKind: LinkRelation.SUPPORTS },
@@ -203,5 +205,94 @@ describe('DET-208 seam — reference Q&A is display-only context', () => {
     // Status guard untouched — getState still returns a valid state.
     expect(state.conceptId).toBe('c1')
     expect(ConceptStatus.INBOX).toBe('INBOX')
+  })
+})
+
+describe('DET-197 — Adaptive Friction', () => {
+  it('getState exposes the current level and a friction proposal with reasons', async () => {
+    const { service, prisma } = makePromotionService()
+    prisma.concept.findFirst.mockResolvedValue(INBOX_CONCEPT)
+    prisma.promotionDraft.findUnique.mockResolvedValue({
+      ...PASSING_DRAFT,
+      frictionLevel: FrictionLevel.DEEP,
+      articulation: null,
+    })
+
+    const state = await service.getState('u1', 'c1')
+
+    // The chosen level mirrors the draft; the proposal is the system's suggestion.
+    expect(state.frictionLevel).toBe(FrictionLevel.DEEP)
+    expect(state.draft.frictionLevel).toBe(FrictionLevel.DEEP)
+    expect(Object.values(FrictionLevel)).toContain(state.frictionProposal.level)
+    expect(state.frictionProposal.reasons.length).toBeGreaterThan(0)
+  })
+
+  it('setFriction updates the stored level (and keeps mode consistent)', async () => {
+    const { service, prisma } = makePromotionService()
+    prisma.concept.findFirst.mockResolvedValue(INBOX_CONCEPT)
+    prisma.promotionDraft.findUnique.mockResolvedValue({
+      ...PASSING_DRAFT,
+      frictionLevel: FrictionLevel.RIGOROUS,
+    })
+
+    await service.setFriction('u1', 'c1', FrictionLevel.RIGOROUS)
+
+    const update = prisma.promotionDraft.update.mock.calls[0][0]
+    expect(update.where).toEqual({ conceptId: 'c1' })
+    // RIGOROUS demands the higher retrieval bar → mode DEEP, kept in lockstep.
+    expect(update.data).toEqual({
+      frictionLevel: FrictionLevel.RIGOROUS,
+      mode: 'DEEP',
+    })
+  })
+
+  it('commits a MINIMAL draft with only an articulation (compression-only root)', async () => {
+    const { service, prisma, tx } = makePromotionService()
+    prisma.concept.findFirst.mockResolvedValue(INBOX_CONCEPT)
+    prisma.promotionDraft.findUnique.mockResolvedValue({
+      ...PASSING_DRAFT,
+      frictionLevel: FrictionLevel.MINIMAL,
+      connectionsReviewed: false,
+      retrievalScore: null,
+    })
+
+    await service.commit('u1', 'c1', { isRoot: true, connections: [] })
+
+    // The compression alone earns the concept — it is promoted to PERMANENT.
+    expect(tx.articulation.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks a DEEP draft with no connection (connect gate is required)', async () => {
+    const { service, prisma } = makePromotionService()
+    prisma.concept.findFirst.mockResolvedValue(INBOX_CONCEPT)
+    prisma.promotionDraft.findUnique.mockResolvedValue({
+      ...PASSING_DRAFT,
+      frictionLevel: FrictionLevel.DEEP,
+    })
+
+    await expect(
+      service.commit('u1', 'c1', { isRoot: true, connections: [] }),
+    ).rejects.toThrow(/proof-of-learning gates/)
+  })
+
+  it('a RIGOROUS commit flags the Tutor pass and runs the contradiction pass', async () => {
+    const { service, prisma, connector } = makePromotionService()
+    prisma.concept.findFirst.mockResolvedValue(INBOX_CONCEPT)
+    prisma.promotionDraft.findUnique.mockResolvedValue({
+      ...PASSING_DRAFT,
+      frictionLevel: FrictionLevel.RIGOROUS,
+    })
+
+    await service.commit('u1', 'c1', {
+      isRoot: false,
+      connections: [{ targetConceptId: 'other' }],
+    })
+
+    // Tutor pass deferred via the flag; Connector contradiction pass invoked.
+    expect(prisma.concept.updateMany).toHaveBeenCalledWith({
+      where: { id: 'c1', userId: 'u1' },
+      data: { tutorRequested: true },
+    })
+    expect(connector.proposeAndPersist).toHaveBeenCalledWith('u1', 'c1')
   })
 })

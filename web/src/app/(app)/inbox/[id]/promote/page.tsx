@@ -8,11 +8,37 @@ import { useEffect, useState } from 'react'
 import { ArticleReader } from '@/components/reader/article-reader'
 import {
   api,
-  type GateMode,
+  type FrictionLevel,
   type LinkRelation,
   type PromotionState,
   type SuggestedConnection,
 } from '@/lib/api'
+
+// Adaptive Friction (DET-197): which gates each level requires. Mirrors the
+// server's requiredGates() so the UI shows a not-required gate as satisfied.
+const FRICTION_GATES: Record<
+  FrictionLevel,
+  { connect: boolean; retrieve: boolean; validate: boolean }
+> = {
+  MINIMAL: { connect: false, retrieve: false, validate: false },
+  LIGHT: { connect: true, retrieve: false, validate: false },
+  DEEP: { connect: true, retrieve: true, validate: true },
+  RIGOROUS: { connect: true, retrieve: true, validate: true },
+}
+
+const FRICTION_LEVELS: FrictionLevel[] = [
+  'MINIMAL',
+  'LIGHT',
+  'DEEP',
+  'RIGOROUS',
+]
+
+const FRICTION_BLURB: Record<FrictionLevel, string> = {
+  MINIMAL: 'A compression is enough — for a short, familiar clip.',
+  LIGHT: 'Articulate and connect it to what you already know.',
+  DEEP: 'The full gate: articulate, connect, recall, and validate.',
+  RIGOROUS: 'Full gate plus a post-promotion Tutor + contradiction pass.',
+}
 
 // DET-191: relation chip styling. CONTRADICTION and REDUNDANT are flagged
 // distinctly (amber / red) so a conflicting or duplicative neighbor stands out
@@ -49,7 +75,7 @@ export default function PromoteConceptPage() {
 
   // Local gate state. AI suggestions are never auto-applied — only what the
   // user explicitly approves below is ever sent to the server.
-  const [mode, setMode] = useState<GateMode | null>(null)
+  const [level, setLevel] = useState<FrictionLevel | null>(null)
   const [approved, setApproved] = useState<Set<string>>(new Set())
   const [isRoot, setIsRoot] = useState(false)
   const [articulation, setArticulation] = useState('')
@@ -67,7 +93,11 @@ export default function PromoteConceptPage() {
   })
 
   const promotion = promotionQuery.data
-  const effectiveMode: GateMode = mode ?? promotion?.suggestedMode ?? 'QUICK'
+  // The chosen level comes from the server draft; local state mirrors it for
+  // optimistic UI between a click and the refetch.
+  const effectiveLevel: FrictionLevel =
+    level ?? promotion?.frictionLevel ?? 'DEEP'
+  const requiredGates = FRICTION_GATES[effectiveLevel]
 
   // Seed local state from a previously-saved draft so the flow is resumable
   // (the server keeps a PromotionDraft for the full 30s–3min). Each `prev`
@@ -111,8 +141,8 @@ export default function PromoteConceptPage() {
     onSuccess: applyState,
   })
 
-  const setMutationMode = useMutation({
-    mutationFn: (next: GateMode) => api.setPromotionMode(id, next),
+  const setMutationFriction = useMutation({
+    mutationFn: (next: FrictionLevel) => api.setFriction(id, next),
     onSuccess: applyState,
   })
 
@@ -147,7 +177,6 @@ export default function PromoteConceptPage() {
         ]),
       )
       return api.commitPromotion(id, {
-        mode: effectiveMode,
         isRoot,
         connections: [...approved].map((targetConceptId) => ({
           targetConceptId,
@@ -158,11 +187,12 @@ export default function PromoteConceptPage() {
     onSuccess: (concept) => router.push(`/concepts/${concept.id}`),
   })
 
-  function chooseMode(next: GateMode) {
-    setMode(next)
-    // DEEP mode forbids a bare root — clear it so the gate stays honest.
-    if (next === 'DEEP') setIsRoot(false)
-    setMutationMode.mutate(next)
+  function chooseLevel(next: FrictionLevel) {
+    setLevel(next)
+    // Any level that requires a connection forbids a bare root — clear it so the
+    // gate stays honest.
+    if (FRICTION_GATES[next].connect) setIsRoot(false)
+    setMutationFriction.mutate(next)
   }
 
   function toggleApproved(targetConceptId: string) {
@@ -187,11 +217,14 @@ export default function PromoteConceptPage() {
   const canSave =
     articulation.trim().length >= 10 &&
     articulation.trim() !== savedArticulation
-  const connectOk =
-    effectiveMode === 'DEEP' ? approved.size >= 1 : approved.size >= 1 || isRoot
-  const retrieveOk = grade?.passed === true
+  // Each gate is "satisfied, OR not required at this friction level" — mirroring
+  // the server's evaluateGates so the UI matches enforcement exactly.
+  const hasLink = approved.size >= 1
+  const connectOk = !requiredGates.connect || hasLink
+  const retrieveOk = !requiredGates.retrieve || grade?.passed === true
   // Gate 4 is server-recorded — read it back from the draft, don't self-assert.
-  const validateOk = promotion?.draft.connectionsReviewed === true
+  const validateOk =
+    !requiredGates.validate || promotion?.draft.connectionsReviewed === true
   const ready = articulateOk && connectOk && retrieveOk && validateOk
 
   return (
@@ -241,28 +274,42 @@ export default function PromoteConceptPage() {
             />
           )}
 
-          {/* Mode picker */}
+          {/* Friction picker (DET-197) */}
           <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
             <div>
-              <h2 className='font-medium'>Depth</h2>
+              <h2 className='font-medium'>How rigorously to earn this</h2>
               <p className='mt-1 text-sm text-neutral-500'>
-                How rigorously do you want to earn this?
+                We suggest a level from how new and substantial this looks. You
+                choose — escalate or de-escalate in one click.
               </p>
             </div>
-            <div className='flex gap-2'>
-              {(['QUICK', 'DEEP'] as GateMode[]).map((m) => (
+            <div className='rounded-md border border-neutral-800 bg-neutral-950/40 p-3'>
+              <p className='text-sm'>
+                <span className='font-medium text-neutral-200'>
+                  Suggested: {promotion.frictionProposal.level}
+                </span>
+                {promotion.frictionProposal.reasons.length > 0 && (
+                  <span className='text-neutral-500'>
+                    {' '}
+                    — {promotion.frictionProposal.reasons.join(' ')}
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className='flex flex-wrap gap-2'>
+              {FRICTION_LEVELS.map((lvl) => (
                 <button
-                  key={m}
+                  key={lvl}
                   type='button'
-                  onClick={() => chooseMode(m)}
+                  onClick={() => chooseLevel(lvl)}
                   className={`rounded-md px-3 py-1.5 text-sm transition ${
-                    effectiveMode === m
+                    effectiveLevel === lvl
                       ? 'bg-neutral-100 text-black'
                       : 'border border-neutral-700 text-neutral-300 hover:bg-neutral-900'
                   }`}
                 >
-                  {m}
-                  {promotion.suggestedMode === m && (
+                  {lvl}
+                  {promotion.frictionProposal.level === lvl && (
                     <span className='ml-1.5 text-[10px] uppercase tracking-wide opacity-60'>
                       suggested
                     </span>
@@ -270,12 +317,11 @@ export default function PromoteConceptPage() {
                 </button>
               ))}
             </div>
-            {effectiveMode === 'DEEP' && (
-              <p className='text-xs text-neutral-500'>
-                Deep mode requires at least one real connection — a bare root
-                isn’t allowed.
-              </p>
-            )}
+            <p className='text-xs text-neutral-500'>
+              {FRICTION_BLURB[effectiveLevel]}
+              {requiredGates.connect &&
+                ' This level requires at least one real connection — a bare root isn’t allowed.'}
+            </p>
           </section>
 
           {/* 1. Articulate */}
@@ -387,9 +433,9 @@ export default function PromoteConceptPage() {
             {suggestionsQuery.data && suggestionsQuery.data.length === 0 && (
               <p className='text-sm text-neutral-500'>
                 No neighbors suggested.{' '}
-                {effectiveMode === 'QUICK'
-                  ? 'You can mark this as a new conceptual root below.'
-                  : 'Deep mode needs a connection — try quick mode if this stands alone.'}
+                {requiredGates.connect
+                  ? 'This level needs a connection — drop to Minimal if this stands alone.'
+                  : 'You can mark this as a new conceptual root below.'}
               </p>
             )}
 
@@ -408,7 +454,7 @@ export default function PromoteConceptPage() {
 
             <label
               className={`flex items-center gap-2 text-sm ${
-                effectiveMode === 'DEEP'
+                requiredGates.connect
                   ? 'cursor-not-allowed text-neutral-600'
                   : 'cursor-pointer text-neutral-300'
               }`}
@@ -416,13 +462,13 @@ export default function PromoteConceptPage() {
               <input
                 type='checkbox'
                 checked={isRoot}
-                disabled={effectiveMode === 'DEEP'}
+                disabled={requiredGates.connect}
                 onChange={(e) => setIsRoot(e.target.checked)}
               />
               This is a new conceptual root.
-              {effectiveMode === 'DEEP' && (
+              {requiredGates.connect && (
                 <span className='text-xs text-neutral-600'>
-                  (not allowed in deep mode)
+                  (not allowed at this level)
                 </span>
               )}
             </label>

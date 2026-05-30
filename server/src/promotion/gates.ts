@@ -3,7 +3,9 @@
 // guarantee can be exhaustively unit-tested and reused by both the per-step
 // checklist and the final commit re-check.
 
-import { CognitiveState, GateMode } from '@kibadist/prisma'
+import { CognitiveState, FrictionLevel } from '@kibadist/prisma'
+
+import { requiredGates } from './friction'
 
 /** Minimum articulation length to count as a real own-words explanation. */
 export const MIN_ARTICULATION_CHARS = 10
@@ -30,55 +32,62 @@ export interface ConnectionDecision {
   isRoot: boolean
   /** The user actually reviewed the AI-proposed connections and decided. */
   connectionsReviewed: boolean
-  mode: GateMode
+  /** Adaptive Friction level (DET-197) — decides which gates are required. */
+  level: FrictionLevel
 }
 
 export interface GateChecklist {
-  /** Gate 1 — articulated in their own words. */
+  /** Gate 1 — articulated in their own words (always required). */
   articulate: boolean
-  /** Gate 2 — connected to the graph, or a deliberate root. */
+  /** Gate 2 — connected to the graph. Auto-satisfied when the friction level
+   *  doesn't require a connection (MINIMAL). */
   connect: boolean
-  /** Gate 3 — passed a retrieval prompt drawn from their articulation. */
+  /** Gate 3 — passed a retrieval prompt drawn from their articulation.
+   *  Auto-satisfied below DEEP friction. */
   retrieve: boolean
-  /** Gate 4 — reviewed and decided on AI-proposed connections (never auto-applied). */
+  /** Gate 4 — reviewed AI-proposed connections. Auto-satisfied below DEEP. */
   validate: boolean
-  /** All four gates satisfied — promotion is allowed. */
+  /** All REQUIRED gates satisfied — promotion is allowed. */
   ready: boolean
   /** Initial cognitive state the promoted concept would carry. */
   cognitiveState: CognitiveState
 }
 
 /**
- * Evaluate the four gates. Pure and total — no exceptions, no I/O.
+ * Evaluate the proof-of-learning gates. Pure and total — no exceptions, no I/O.
+ *
+ * Which gates are REQUIRED is set by the Adaptive Friction level (DET-197): a
+ * MINIMAL clip needs only a compression, LIGHT adds a connection, DEEP/RIGOROUS
+ * demand the full gate. Each gate boolean reports "satisfied OR not required",
+ * so the UI shows it green when it isn't blocking, and `ready` is simply all
+ * gates true.
  *
  * Gate semantics:
  * - articulate: a non-trivial articulation exists AND it is the user's own words,
- *               not a verbatim copy of the source (DET-190). Copying the source
- *               past the gate is an explicit anti-behavior.
- * - connect:   at least one link, OR an explicit root. DEEP mode disallows a
- *              bare root — a new core-domain concept must be placed in the graph.
- * - retrieve:  a server-graded recall passed the mode's threshold.
- * - validate:  the user consciously reviewed the AI's proposed connections and
- *              decided (the anti-auto-apply guarantee is *also* enforced
- *              structurally — the server only ever creates user-listed links).
+ *               not a verbatim copy of the source (DET-190). Always required.
+ * - connect:   at least one real link (a deliberate standalone root therefore
+ *              only promotes at MINIMAL, where connect isn't required).
+ * - retrieve:  a server-graded recall passed the level's threshold.
+ * - validate:  the user consciously reviewed the AI's proposed connections.
  */
 export function evaluateGates(
   state: GateState,
   decision: ConnectionDecision,
 ): GateChecklist {
-  const articulate =
+  const req = requiredGates(decision.level)
+
+  const articulateSatisfied =
     !!state.articulation &&
     state.articulation.trim().length >= MIN_ARTICULATION_CHARS &&
     state.articulationIsOriginal
 
   const hasLink = decision.connectionCount >= 1
-  const connect =
-    decision.mode === GateMode.DEEP
-      ? hasLink // DEEP must be placed in the graph; a bare root is not enough.
-      : hasLink || decision.isRoot
 
-  const retrieve = state.retrievalPassed
-  const validate = decision.connectionsReviewed
+  // Each gate is "satisfied, or not required at this friction level".
+  const articulate = !req.articulate || articulateSatisfied
+  const connect = !req.connect || hasLink
+  const retrieve = !req.retrieve || state.retrievalPassed
+  const validate = !req.validate || decision.connectionsReviewed
 
   const cognitiveState = hasLink
     ? CognitiveState.LINKED

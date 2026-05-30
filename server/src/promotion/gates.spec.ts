@@ -1,4 +1,4 @@
-import { CognitiveState, GateMode } from '@kibadist/prisma'
+import { CognitiveState, FrictionLevel } from '@kibadist/prisma'
 
 import { evaluateGates, type GateState, MIN_ARTICULATION_CHARS } from './gates'
 
@@ -19,13 +19,13 @@ function decision(over: Partial<Parameters<typeof evaluateGates>[1]> = {}) {
     connectionCount: 0,
     isRoot: false,
     connectionsReviewed: false,
-    mode: GateMode.QUICK,
+    level: FrictionLevel.DEEP,
     ...over,
   }
 }
 
-describe('evaluateGates', () => {
-  it('passes all four gates for a linked QUICK promotion', () => {
+describe('evaluateGates — friction-scaled requirements (DET-197)', () => {
+  it('DEEP requires the full gate; a linked, reviewed, recalled concept passes', () => {
     const out = evaluateGates(
       state(),
       decision({ connectionCount: 1, connectionsReviewed: true }),
@@ -40,68 +40,63 @@ describe('evaluateGates', () => {
     })
   })
 
-  it('allows a deliberate root in QUICK mode (EXPLAINED state)', () => {
+  it('MINIMAL promotes on compression alone — no link, recall, or review needed', () => {
+    const out = evaluateGates(
+      // No link, no recall pass, no review.
+      state({ retrievalPassed: false }),
+      decision({ level: FrictionLevel.MINIMAL }),
+    )
+    expect(out.connect).toBe(true) // not required → satisfied
+    expect(out.retrieve).toBe(true)
+    expect(out.validate).toBe(true)
+    expect(out.ready).toBe(true)
+    expect(out.cognitiveState).toBe(CognitiveState.EXPLAINED)
+  })
+
+  it('MINIMAL still fails when the compression is missing or a verbatim copy', () => {
+    expect(
+      evaluateGates(
+        state({ articulation: null }),
+        decision({ level: FrictionLevel.MINIMAL }),
+      ).ready,
+    ).toBe(false)
+    expect(
+      evaluateGates(
+        state({ articulationIsOriginal: false }),
+        decision({ level: FrictionLevel.MINIMAL }),
+      ).ready,
+    ).toBe(false)
+  })
+
+  it('LIGHT requires a connection but not recall/review', () => {
+    const noLink = evaluateGates(
+      state({ retrievalPassed: false }),
+      decision({ level: FrictionLevel.LIGHT }),
+    )
+    expect(noLink.connect).toBe(false)
+    expect(noLink.ready).toBe(false)
+
+    const linked = evaluateGates(
+      state({ retrievalPassed: false }),
+      decision({ level: FrictionLevel.LIGHT, connectionCount: 1 }),
+    )
+    expect(linked.connect).toBe(true)
+    expect(linked.retrieve).toBe(true) // not required at LIGHT
+    expect(linked.validate).toBe(true)
+    expect(linked.ready).toBe(true)
+    expect(linked.cognitiveState).toBe(CognitiveState.LINKED)
+  })
+
+  it('DEEP needs a real link (a bare root does not satisfy connect)', () => {
     const out = evaluateGates(
       state(),
       decision({ isRoot: true, connectionsReviewed: true }),
-    )
-    expect(out.connect).toBe(true)
-    expect(out.cognitiveState).toBe(CognitiveState.EXPLAINED)
-    expect(out.ready).toBe(true)
-  })
-
-  it('rejects a bare root in DEEP mode — must be placed in the graph', () => {
-    const out = evaluateGates(
-      state(),
-      decision({
-        isRoot: true,
-        connectionsReviewed: true,
-        mode: GateMode.DEEP,
-      }),
     )
     expect(out.connect).toBe(false)
     expect(out.ready).toBe(false)
   })
 
-  it('accepts a linked DEEP promotion', () => {
-    const out = evaluateGates(
-      state(),
-      decision({
-        connectionCount: 2,
-        connectionsReviewed: true,
-        mode: GateMode.DEEP,
-      }),
-    )
-    expect(out.ready).toBe(true)
-    expect(out.cognitiveState).toBe(CognitiveState.LINKED)
-  })
-
-  it('fails articulate on missing or too-short text', () => {
-    expect(
-      evaluateGates(
-        state({ articulation: null }),
-        decision({ connectionCount: 1, connectionsReviewed: true }),
-      ).articulate,
-    ).toBe(false)
-    expect(
-      evaluateGates(
-        state({ articulation: '   short   ' }),
-        decision({ connectionCount: 1, connectionsReviewed: true }),
-      ).articulate,
-    ).toBe(false)
-  })
-
-  it('fails articulate when the text is a verbatim copy of the source (DET-190)', () => {
-    const out = evaluateGates(
-      // Long enough text, but flagged as not the user's own words.
-      state({ articulationIsOriginal: false }),
-      decision({ connectionCount: 1, connectionsReviewed: true }),
-    )
-    expect(out.articulate).toBe(false)
-    expect(out.ready).toBe(false)
-  })
-
-  it('fails retrieve until the graded recall passes', () => {
+  it('DEEP fails retrieve until the graded recall passes', () => {
     const out = evaluateGates(
       state({ retrievalPassed: false }),
       decision({ connectionCount: 1, connectionsReviewed: true }),
@@ -110,7 +105,7 @@ describe('evaluateGates', () => {
     expect(out.ready).toBe(false)
   })
 
-  it('fails validate if AI connections were never reviewed', () => {
+  it('DEEP fails validate until AI connections were reviewed', () => {
     const out = evaluateGates(
       state(),
       decision({ connectionCount: 1, connectionsReviewed: false }),
@@ -119,9 +114,15 @@ describe('evaluateGates', () => {
     expect(out.ready).toBe(false)
   })
 
-  it('fails connect with no link and no root', () => {
-    const out = evaluateGates(state(), decision({ connectionsReviewed: true }))
-    expect(out.connect).toBe(false)
-    expect(out.ready).toBe(false)
+  it('RIGOROUS requires the same gates as DEEP', () => {
+    const out = evaluateGates(
+      state(),
+      decision({
+        level: FrictionLevel.RIGOROUS,
+        connectionCount: 1,
+        connectionsReviewed: true,
+      }),
+    )
+    expect(out.ready).toBe(true)
   })
 })

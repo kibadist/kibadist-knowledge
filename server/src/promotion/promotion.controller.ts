@@ -14,7 +14,7 @@ import { CurrentUser } from '../auth/current-user.decorator'
 import { AnswerRetrievalDto } from './dto/answer-retrieval.dto'
 import { CommitPromotionDto } from './dto/commit-promotion.dto'
 import { SaveArticulationDto } from './dto/save-articulation.dto'
-import { SetModeDto } from './dto/set-mode.dto'
+import { SetFrictionDto } from './dto/set-friction.dto'
 import { PromotionService } from './promotion.service'
 
 /**
@@ -45,13 +45,14 @@ export class PromotionController {
     return this.promotion.saveArticulation(user.userId, conceptId, dto.body)
   }
 
-  @Put(':conceptId/mode')
-  setMode(
+  /** Adaptive Friction (DET-197) — the user's explicit escalate/de-escalate. */
+  @Put(':conceptId/friction')
+  setFriction(
     @CurrentUser() user: AuthUser,
     @Param('conceptId') conceptId: string,
-    @Body() dto: SetModeDto,
+    @Body() dto: SetFrictionDto,
   ) {
-    return this.promotion.setMode(user.userId, conceptId, dto.mode)
+    return this.promotion.setFriction(user.userId, conceptId, dto.level)
   }
 
   /** Gate 2/4 — AI-proposed connections to approve or reject. */

@@ -250,7 +250,17 @@ model PromotionDraft {
   id                String   @id @default(cuid())
   conceptId         String   @unique
   userId            String
+  // DERIVED / WRITE-ONLY (DET-197): the retrieval-pass tier is now derived from
+  // `frictionLevel` via modeForLevel() everywhere it's needed; this column is
+  // kept only so writes stay consistent and is NEVER read for gate decisions.
+  // Do not branch on it — read `frictionLevel` instead.
   mode              GateMode @default(QUICK)
+  // Adaptive Friction (DET-197): how much proof this item must earn, scaled to
+  // its cognitive weight. The system proposes a level (novelty + importance);
+  // the user may escalate/de-escalate. The level decides WHICH gates are
+  // required — see server/src/promotion/friction.ts. `mode` is derived from it
+  // for the retrieval pass threshold (DEEP/RIGOROUS demand the higher bar).
+  frictionLevel     FrictionLevel @default(DEEP)
   // Gate 1 (Articulate): the user's own-words core claim, canonical-to-be.
   articulation      String?
   // Gate 4 (Validate): set true once the user has been shown the AI-proposed
@@ -468,6 +478,23 @@ enum LinkRelation {
 enum GateMode {
   QUICK
   DEEP
+}
+
+// Adaptive Friction level (DET-197): how much proof an item must earn before it
+// becomes knowledge, scaled to its cognitive weight rather than applied
+// uniformly. Drives which Proof-of-Learning gates are required:
+//   MINIMAL  — compression only
+//   LIGHT    — compression + one connection
+//   DEEP     — the full gate (articulate + connect + retrieve + validate)
+//   RIGOROUS — DEEP, plus a mandatory post-promotion Tutor pass + contradiction
+//              review (a publication-grade claim)
+// The system proposes a level; the user can escalate or de-escalate, but the
+// system never silently downgrades a Deep concept.
+enum FrictionLevel {
+  MINIMAL
+  LIGHT
+  DEEP
+  RIGOROUS
 }
 
 // The cognitive state machine (DET-194). Every concept lives in exactly one

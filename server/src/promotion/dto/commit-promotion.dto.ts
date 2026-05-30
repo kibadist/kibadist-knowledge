@@ -1,4 +1,4 @@
-import { GateMode, LinkRelation } from '@kibadist/prisma'
+import { LinkRelation } from '@kibadist/prisma'
 import { Type } from 'class-transformer'
 import {
   ArrayMaxSize,
@@ -35,8 +35,10 @@ export class ConnectionInputDto {
 }
 
 export class CommitPromotionDto {
-  @IsEnum(GateMode)
-  mode!: GateMode
+  // NOTE: the gate depth is NOT taken from the client — it is derived from the
+  // server-recorded PromotionDraft.frictionLevel (set via the friction
+  // endpoint). The friction level decides which gates are required and the
+  // retrieval-pass threshold, so a client can't smuggle a lighter gate at commit.
 
   // The user explicitly declared this a new conceptual root (no links).
   @IsBoolean()

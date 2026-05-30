@@ -164,7 +164,11 @@ export interface IntakeQuestion {
 }
 
 // --- Proof-of-Learning Gate (DET-189) ---
+// Retained for Concept.gateMode (the retrieval-pass tier persisted at promotion).
 export type GateMode = 'QUICK' | 'DEEP'
+// Adaptive Friction (DET-197). The cognitive weight a captured item must earn.
+// Mirrors the server's FrictionLevel enum; keep in sync.
+export type FrictionLevel = 'MINIMAL' | 'LIGHT' | 'DEEP' | 'RIGOROUS'
 // The Connector's typed relationship vocabulary (DET-191). Mirrors the server's
 // LinkRelation enum; keep in sync.
 export type LinkRelation =
@@ -200,7 +204,8 @@ export interface GateChecklist {
 
 export interface PromotionDraft {
   conceptId: string
-  mode: GateMode
+  // Adaptive Friction (DET-197): the user's CURRENT chosen depth.
+  frictionLevel: FrictionLevel
   articulation: string | null
   connectionsReviewed: boolean
   retrievalQuestion: string | null
@@ -261,7 +266,10 @@ export interface PromotionState {
   draft: PromotionDraft
   checklist: GateChecklist
   compression: CompressionSignal
-  suggestedMode: GateMode
+  // Adaptive Friction (DET-197): the CURRENT chosen level + the system's
+  // suggestion with human-readable reasoning. The user may escalate/de-escalate.
+  frictionLevel: FrictionLevel
+  frictionProposal: { level: FrictionLevel; reasons: string[] }
   referenceQa: ReferenceQa[]
 }
 
@@ -289,7 +297,8 @@ export interface ConnectionInput {
 }
 
 export interface CommitPromotionInput {
-  mode: GateMode
+  // The gate depth is derived server-side from the draft's frictionLevel (DET-197)
+  // — it is not sent here, so a client can't smuggle a lighter gate at commit.
   isRoot: boolean
   connections: ConnectionInput[]
 }
@@ -535,10 +544,10 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ body }),
     }),
-  setPromotionMode: (conceptId: string, mode: GateMode) =>
-    request<PromotionState>(`/promotion/${conceptId}/mode`, {
+  setFriction: (conceptId: string, level: FrictionLevel) =>
+    request<PromotionState>(`/promotion/${conceptId}/friction`, {
       method: 'PUT',
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ level }),
     }),
   getConnectionSuggestions: (conceptId: string) =>
     request<SuggestedConnection[]>(`/promotion/${conceptId}/connections`),

@@ -1,7 +1,7 @@
 import {
   type CognitiveState,
   ConceptStatus,
-  GateMode,
+  FrictionLevel,
   LinkRelation,
   LinkStatus,
   Prisma,
@@ -34,6 +34,11 @@ import {
 import { assessCompression, type CompressionSignal } from './compression'
 import type { CommitPromotionDto } from './dto/commit-promotion.dto'
 import {
+  type FrictionProposal,
+  modeForLevel,
+  proposeFriction,
+} from './friction'
+import {
   buildGradePrompt,
   buildQuestionPrompt,
   isPassingScore,
@@ -46,14 +51,12 @@ import {
   type GateChecklist,
 } from './gates'
 
-/** Below this max similarity to existing concepts, the topic looks novel and we
- *  suggest the DEEP gate. Mirrors the intake interrogator's familiarity seam. */
-const NOVELTY_THRESHOLD = 0.5
 const SUGGESTION_LIMIT = 5
 
 export interface PromotionDraftDto {
   conceptId: string
-  mode: GateMode
+  /** Adaptive Friction level (DET-197) — the user's CURRENT chosen depth. */
+  frictionLevel: FrictionLevel
   articulation: string | null
   connectionsReviewed: boolean
   retrievalQuestion: string | null
@@ -83,7 +86,11 @@ export interface PromotionStateDto {
   /** Compression quality signal (DET-190): flags a verbatim copy of the source so
    *  the UI can ask the user to rephrase. The Articulate gate fails when verbatim. */
   compression: CompressionSignal
-  suggestedMode: GateMode
+  /** Adaptive Friction (DET-197): the CURRENT chosen level (mirrors draft). */
+  frictionLevel: FrictionLevel
+  /** The system's friction SUGGESTION + human-readable reasoning. The user may
+   *  escalate/de-escalate from it; we never silently apply it. */
+  frictionProposal: FrictionProposal
   /** Read-only reference Q&A (DET-208) the user explored while reading. Surfaced
    *  so Compression can DISPLAY it as scaffold — it never prefills or writes the
    *  canonical articulation, which stays user-authored via {@link saveArticulation}. */
@@ -114,14 +121,25 @@ export class PromotionService {
   ) {}
 
   /** Current promotion state for an inbox item: draft + gate checklist + the
-   *  novelty-based mode suggestion. Creates an empty draft on first open. */
+   *  Adaptive Friction proposal (DET-197). Creates an empty draft on first open. */
   async getState(
     userId: string,
     conceptId: string,
   ): Promise<PromotionStateDto> {
     const concept = await this.requireInboxConcept(userId, conceptId)
     const draft = await this.ensureDraft(userId, conceptId)
-    const suggestedMode = await this.suggestMode(userId, draft.articulation)
+    // Adaptive Friction proposal (DET-197): the system SUGGESTS a level from
+    // cheap signals — novelty (distance from what's already earned), and the
+    // source's conceptual weight (length). Importance is the user escalating, so
+    // there is no separate importance signal here. The user may override; the
+    // stored draft.frictionLevel only changes via setFriction.
+    const maxSimilarity = await this.maxSimilarity(userId, draft.articulation)
+    const frictionProposal = proposeFriction({
+      // No articulation yet → unknown novelty; treat as high so we lean DEEP.
+      novelty: maxSimilarity == null ? 1 : 1 - maxSimilarity,
+      importance: false,
+      sourceLength: concept.sourceText?.length ?? 0,
+    })
     // Read-only feed-forward (DET-208): show prior reference Q&A as scaffold the
     // user may consult while articulating. This NEVER seeds draft.articulation —
     // the canonical text comes only from saveArticulation's user-supplied body.
@@ -147,9 +165,14 @@ export class PromotionService {
       sourceText: concept.sourceText,
       sourceDocument: asSourceDocument(concept.sourceDocument),
       draft: this.toDraftDto(draft),
-      checklist: this.checklistFor(draft, draft.mode, concept.sourceText),
+      checklist: this.checklistFor(
+        draft,
+        draft.frictionLevel,
+        concept.sourceText,
+      ),
       compression,
-      suggestedMode,
+      frictionLevel: draft.frictionLevel,
+      frictionProposal,
       referenceQa,
     }
   }
@@ -169,17 +192,23 @@ export class PromotionService {
     return this.getState(userId, conceptId)
   }
 
-  /** Set the gate depth (affects the retrieval pass bar and the connect rule). */
-  async setMode(
+  /**
+   * Adaptive Friction (DET-197) — the user's explicit escalate/de-escalate. This
+   * is the ONLY path that changes the stored level, so the system never silently
+   * downgrades a Deep concept: any change to a lighter level is a deliberate user
+   * act. `mode` is kept consistent (derived from the level) so the retrieval-pass
+   * threshold and any reader of the legacy column stay in lockstep.
+   */
+  async setFriction(
     userId: string,
     conceptId: string,
-    mode: GateMode,
+    level: FrictionLevel,
   ): Promise<PromotionStateDto> {
     await this.requireInboxConcept(userId, conceptId)
     await this.ensureDraft(userId, conceptId)
     await this.prisma.promotionDraft.update({
       where: { conceptId },
-      data: { mode },
+      data: { frictionLevel: level, mode: modeForLevel(level) },
     })
     return this.getState(userId, conceptId)
   }
@@ -332,7 +361,10 @@ export class PromotionService {
       )
     }
 
-    const passed = isPassingScore(grade.score, draft.mode)
+    const passed = isPassingScore(
+      grade.score,
+      modeForLevel(draft.frictionLevel),
+    )
     await this.prisma.promotionDraft.update({
       where: { conceptId },
       data: {
@@ -391,19 +423,23 @@ export class PromotionService {
       }
     }
 
+    // Adaptive Friction (DET-197): which gates are required and the retrieval
+    // pass bar are both driven by the server-held draft.frictionLevel — never
+    // the request body — so a client can't smuggle a lighter gate at commit.
+    const mode = modeForLevel(draft.frictionLevel)
     const decision: ConnectionDecision = {
       connectionCount: targets.size,
       isRoot: dto.isRoot,
       // Gate 4 is server-authoritative: it comes from the persisted draft flag
       // (set when the user reviewed suggestions), never from the request body.
       connectionsReviewed: draft.connectionsReviewed,
-      mode: dto.mode,
+      level: draft.frictionLevel,
     }
-    // Re-derive the retrieval pass against the COMMITTED mode (DEEP demands a
-    // higher score than QUICK), so a QUICK pass can't be smuggled into a DEEP save.
+    // Re-derive the retrieval pass against the level's mode (DEEP/RIGOROUS demand
+    // a higher score than the lighter levels), so a QUICK pass can't be smuggled
+    // into a deeper save.
     const retrievalPassed =
-      draft.retrievalScore != null &&
-      isPassingScore(draft.retrievalScore, dto.mode)
+      draft.retrievalScore != null && isPassingScore(draft.retrievalScore, mode)
     // DET-190 authoritative re-check: a verbatim copy of the source can never be
     // promoted, even if a client bypasses the UI. Compression must be original.
     const articulationIsOriginal = !assessCompression(
@@ -483,7 +519,7 @@ export class PromotionService {
         where: { id: conceptId },
         data: {
           status: ConceptStatus.PERMANENT,
-          gateMode: dto.mode,
+          gateMode: mode,
           // Seed the spaced-retrieval schedule (DET-192): a freshly-earned
           // concept is immediately due for its first resurfacing. The SM-2
           // ease/interval/reps keep their column defaults until the first grade.
@@ -532,16 +568,47 @@ export class PromotionService {
       }
     }
 
-    // DET-191 background pass: now that the concept is PERMANENT, surface and
-    // PERSIST typed SUGGESTED proposals for later user approval. Fire-and-forget
-    // and self-contained best-effort — a failure here never affects the commit.
-    void this.connector.proposeAndPersist(userId, conceptId).catch((error) => {
-      this.logger.warn(
-        `Connector background pass failed for ${conceptId}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      )
-    })
+    // RIGOROUS (DET-197): a publication-grade claim earns two extra obligations,
+    // deferred to post-promotion because both operate only on EARNED concepts:
+    //  - a Tutor pass — flagged via Concept.tutorRequested for the Socratic Tutor;
+    //  - a Connector contradiction pass — surfacing conflicting neighbors.
+    // Both are best-effort and post-tx: a failure here never undoes the commit.
+    if (draft.frictionLevel === FrictionLevel.RIGOROUS) {
+      try {
+        await this.prisma.concept.updateMany({
+          where: { id: conceptId, userId },
+          data: { tutorRequested: true },
+        })
+      } catch (error) {
+        this.logger.warn(
+          `Could not flag Tutor pass for RIGOROUS concept ${conceptId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      }
+      try {
+        await this.connector.proposeAndPersist(userId, conceptId)
+      } catch (error) {
+        this.logger.warn(
+          `RIGOROUS connector contradiction pass failed for ${conceptId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      }
+    } else {
+      // DET-191 background pass: now that the concept is PERMANENT, surface and
+      // PERSIST typed SUGGESTED proposals for later user approval. Fire-and-forget
+      // and self-contained best-effort — a failure here never affects the commit.
+      void this.connector
+        .proposeAndPersist(userId, conceptId)
+        .catch((error) => {
+          this.logger.warn(
+            `Connector background pass failed for ${conceptId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          )
+        })
+    }
 
     return this.concepts.findOne(userId, conceptId)
   }
@@ -576,19 +643,23 @@ export class PromotionService {
     })
   }
 
-  private async suggestMode(
+  /**
+   * Top semantic similarity of the staged articulation to the user's earned
+   * concepts. Drives the Adaptive Friction novelty signal (novelty = 1 − this).
+   * Returns null when there's no articulation yet (novelty is then unknown).
+   * Best-effort: a search failure also yields null (treated as high novelty).
+   */
+  private async maxSimilarity(
     userId: string,
     articulation: string | null,
-  ): Promise<GateMode> {
+  ): Promise<number | null> {
     const text = articulation?.trim()
-    if (!text) return GateMode.QUICK
+    if (!text) return null
     try {
       const matches = await this.search.searchArticulations(userId, text, 1)
-      const top = matches[0]?.similarity ?? 0
-      // Novel material (far from the existing graph) → suggest the deeper gate.
-      return top < NOVELTY_THRESHOLD ? GateMode.DEEP : GateMode.QUICK
+      return matches[0]?.similarity ?? 0
     } catch {
-      return GateMode.QUICK
+      return null
     }
   }
 
@@ -598,7 +669,7 @@ export class PromotionService {
       connectionsReviewed: boolean
       retrievalScore: number | null
     },
-    mode: GateMode,
+    level: FrictionLevel,
     sourceText: string | null,
   ): GateChecklist {
     // Pre-commit checklist is advisory for `connect` (which approved links are
@@ -606,7 +677,8 @@ export class PromotionService {
     // it reflects the server-recorded review flag. The authoritative check for
     // all gates happens in commit().
     const retrievalPassed =
-      draft.retrievalScore != null && isPassingScore(draft.retrievalScore, mode)
+      draft.retrievalScore != null &&
+      isPassingScore(draft.retrievalScore, modeForLevel(level))
     // DET-190: a verbatim copy of the source fails the Articulate gate.
     const articulationIsOriginal = !assessCompression(
       draft.articulation,
@@ -622,14 +694,14 @@ export class PromotionService {
         connectionCount: 0,
         isRoot: false,
         connectionsReviewed: draft.connectionsReviewed,
-        mode,
+        level,
       },
     )
   }
 
   private toDraftDto(draft: {
     conceptId: string
-    mode: GateMode
+    frictionLevel: FrictionLevel
     articulation: string | null
     connectionsReviewed: boolean
     retrievalQuestion: string | null
@@ -638,7 +710,7 @@ export class PromotionService {
   }): PromotionDraftDto {
     return {
       conceptId: draft.conceptId,
-      mode: draft.mode,
+      frictionLevel: draft.frictionLevel,
       articulation: draft.articulation,
       connectionsReviewed: draft.connectionsReviewed,
       retrievalQuestion: draft.retrievalQuestion,
