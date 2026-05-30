@@ -4,9 +4,9 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import {
   asSourceDocument,
-  extractHtmlDocument,
   extractPdfDocument,
   extractTextDocument,
+  extractUrlDocument,
   type SourceDocument,
 } from '../source-document/source-document'
 import type { CaptureTextDto } from './dto/capture-text.dto'
@@ -56,11 +56,14 @@ export class InboxService {
 
   async captureUrl(userId: string, dto: CaptureUrlDto): Promise<InboxItem> {
     const page = await fetchReadable(dto.url)
-    const title = page.title?.trim() || hostPathLabel(dto.url)
     // Structured extraction (DET-210) preserves document hierarchy; the
     // block-derived flat text is cleaner (chrome-stripped), so prefer it for
-    // sourceText, falling back to the legacy whole-page flatten.
-    const { document, text } = extractHtmlDocument(page.html, dto.url)
+    // sourceText, falling back to the legacy whole-page flatten. The router
+    // picks the best extractor per source (Wikipedia API → Readability →
+    // hand-rolled heuristic) and may carry a better title than the <title> tag.
+    const { document, text } = await extractUrlDocument(dto.url, page.html)
+    const title =
+      document.title?.trim() || page.title?.trim() || hostPathLabel(dto.url)
     return this.store(userId, {
       title,
       sourceText: text || page.text,

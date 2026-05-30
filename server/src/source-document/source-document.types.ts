@@ -103,13 +103,19 @@ export type SourceExtractor =
   | 'html-heuristic@1'
   | 'pdf-paragraph@1'
   | 'text-markdown@1'
+  | 'readability@1'
+  | 'mediawiki@1'
 
 export interface SourceDocument {
   /** Schema version, so stored documents can be migrated if the shape evolves. */
   version: 1
   /** Document title, if the source carried one distinct from the block flow. */
   title?: string
-  /** Standfirst / subtitle, when detectable. */
+  /**
+   * Standfirst / subtitle and author. Best-effort and extractor-dependent:
+   * currently only the `readability@1` path populates these; other extractors
+   * (`html-heuristic@1`, `mediawiki@1`, the text/pdf paths) leave them unset.
+   */
   dek?: string
   byline?: string
   canonicalUrl?: string

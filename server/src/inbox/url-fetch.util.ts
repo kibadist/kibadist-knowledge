@@ -100,7 +100,14 @@ function isBlockedIp(ip: string): boolean {
   return true // not a recognizable IP → refuse
 }
 
-async function assertPublicHost(hostname: string): Promise<void> {
+/**
+ * Resolve `hostname` and reject it if it (or any address it resolves to) is a
+ * private/loopback/link-local/reserved IP. Exported so other server-side fetch
+ * paths — e.g. the Wikipedia MediaWiki API call (DET-210) — enforce the same
+ * SSRF posture instead of trusting that a hostname string implies a safe target.
+ * Throws BadRequestException; callers that prefer to degrade should catch it.
+ */
+export async function assertPublicHost(hostname: string): Promise<void> {
   // Strip IPv6 brackets if present.
   const host = hostname.replace(/^\[|\]$/g, '')
   if (isIP(host)) {
@@ -193,6 +200,28 @@ function htmlToText(html: string): string {
     .slice(0, MAX_RAW_TEXT_CHARS)
 }
 
+/**
+ * Turn a failed (non-OK, non-redirect) response into a user-facing message.
+ *
+ * Many pages can't be captured by URL at all because they sit behind a bot or
+ * login challenge — most commonly Cloudflare's interactive JS challenge ("Just
+ * a moment…"), which no server-side fetch can clear regardless of headers. We
+ * detect that (the `cf-mitigated` response header, or a 401/403/429 status) and
+ * steer the user to the Paste capture path instead of surfacing a bare status
+ * code. Other failures keep the plain status message.
+ */
+export function fetchFailureMessage(
+  status: number,
+  cfMitigated: string | null,
+): string {
+  const challenged =
+    cfMitigated !== null || status === 401 || status === 403 || status === 429
+  if (challenged) {
+    return "This page is behind a bot or login challenge (e.g. Cloudflare) and can't be captured by its URL. Open it in your browser and paste the text in instead."
+  }
+  return `URL responded with ${status}`
+}
+
 export async function fetchReadable(rawUrl: string): Promise<FetchedPage> {
   let current: URL
   try {
@@ -232,7 +261,9 @@ export async function fetchReadable(rawUrl: string): Promise<FetchedPage> {
     }
 
     if (!res.ok) {
-      throw new BadRequestException(`URL responded with ${res.status}`)
+      throw new BadRequestException(
+        fetchFailureMessage(res.status, res.headers.get('cf-mitigated')),
+      )
     }
 
     // Only extract from textual responses; capture is deliberately dumb, but we

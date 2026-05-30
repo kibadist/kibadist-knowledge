@@ -5,13 +5,19 @@
  * turn structured blocks into prompt context.
  */
 
+export { extractUrlDocument } from './extract-url-document.util'
 export {
   blocksToPlainText,
   extractHtmlDocument,
   type HtmlExtractionResult,
 } from './html-to-blocks.util'
+export { extractReadableDocument } from './readability-extract.util'
 export * from './source-document.types'
 export { extractPdfDocument, extractTextDocument } from './text-to-blocks.util'
+export {
+  extractWikipediaDocument,
+  isWikipediaUrl,
+} from './wikipedia-extract.util'
 
 import type {
   InlineRun,

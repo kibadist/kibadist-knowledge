@@ -131,7 +131,12 @@ export interface SourceDocument {
   byline?: string
   canonicalUrl?: string
   blocks: SourceBlock[]
-  extractor: 'html-heuristic@1' | 'pdf-paragraph@1' | 'text-markdown@1'
+  extractor:
+    | 'html-heuristic@1'
+    | 'pdf-paragraph@1'
+    | 'text-markdown@1'
+    | 'readability@1'
+    | 'mediawiki@1'
   degraded: boolean
 }
 
