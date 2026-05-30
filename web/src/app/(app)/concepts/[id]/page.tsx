@@ -10,6 +10,7 @@ import {
   type ConceptArticulation,
   type ConceptLinkEnd,
   type ConceptRetrievalEvent,
+  type StateTransition,
 } from '@/lib/api'
 
 /**
@@ -56,6 +57,13 @@ export default function ConceptViewPage() {
               </span>
             )}
           </div>
+        )}
+        {concept && concept.stateHistory.length > 0 && (
+          <ol className='mt-3 flex flex-col gap-1 text-xs text-neutral-500'>
+            {concept.stateHistory.map((t) => (
+              <StateHistoryItem key={t.id} transition={t} />
+            ))}
+          </ol>
         )}
       </div>
 
@@ -181,6 +189,22 @@ export default function ConceptViewPage() {
         </>
       )}
     </div>
+  )
+}
+
+function StateHistoryItem({ transition }: { transition: StateTransition }) {
+  return (
+    <li className='flex flex-wrap items-center gap-1.5'>
+      <span className='uppercase tracking-wide text-neutral-400'>
+        {transition.from
+          ? `${transition.from} → ${transition.to}`
+          : transition.to}
+      </span>
+      <span className='text-neutral-600'>· {transition.trigger}</span>
+      <time className='text-neutral-600'>
+        · {new Date(transition.createdAt).toLocaleString()}
+      </time>
+    </li>
   )
 }
 

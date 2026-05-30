@@ -30,6 +30,7 @@ model User {
   intakeQuestions IntakeQuestion[]
   promotionDrafts PromotionDraft[]
   sourceQuestions SourceQuestion[]
+  stateTransitions ConceptStateTransition[]
 
   @@map("user")
 }
@@ -74,9 +75,14 @@ model Concept {
   // (feeds the attribution work in DET-199).
   sourceUrl    String?
   status       ConceptStatus @default(INBOX)
-  // Cognitive state once earned (DET-189): EXPLAINED (articulated, no links) or
-  // LINKED (articulated + connected). Null while still an inbox capture.
-  cognitiveState CognitiveState?
+  // The cognitive state machine (DET-194). ALWAYS set — every concept has a
+  // state, never empty. A fresh capture is SEEN; the interrogator advances it to
+  // PARSED; promotion lands it at EXPLAINED or LINKED; sessions/decay/contradiction
+  // drive the rest. Every change is recorded in `stateTransitions`. This is the
+  // substrate the retrieval scheduler, decay, journal eligibility, and adaptive
+  // friction read from. Allowed-transition rules live in
+  // server/src/concept-state/transitions.ts.
+  cognitiveState CognitiveState @default(SEEN)
   // Which proof-of-learning gate mode earned this concept (provenance). Null
   // until promoted.
   gateMode     GateMode?
@@ -94,10 +100,12 @@ model Concept {
   intakeQuestions IntakeQuestion[]
   promotionDraft  PromotionDraft?
   sourceQuestions SourceQuestion[]
+  stateTransitions ConceptStateTransition[]
 
   @@index([userId])
   @@index([userId, status])
   @@index([userId, nextReviewAt])
+  @@index([userId, cognitiveState])
   @@map("concept")
 }
 
@@ -281,6 +289,31 @@ model SourceQuestion {
   @@map("source_question")
 }
 
+// An append-only log of cognitive-state changes for a concept (DET-194). Every
+// transition is recorded with its trigger and timestamp, so the concept view can
+// show how understanding evolved and downstream systems can reason over history
+// (e.g. "sustained retrieval success" needs the sequence, not just the latest
+// state). `from` is null only for the very first transition (capture → SEEN).
+model ConceptStateTransition {
+  id        String         @id @default(cuid())
+  conceptId String
+  userId    String
+  from      CognitiveState?
+  to        CognitiveState
+  trigger   StateTrigger
+  // Optional human-readable detail (e.g. the retrieval score, the contradicting
+  // concept). Never AI-authored knowledge — purely operational metadata.
+  note      String?
+  createdAt DateTime       @default(now())
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conceptId, createdAt])
+  @@index([userId])
+  @@map("concept_state_transition")
+}
+
 enum ConceptStatus {
   INBOX
   ARTICULATED
@@ -308,11 +341,51 @@ enum GateMode {
   DEEP
 }
 
-// A promoted concept's initial cognitive state (DET-189). EXPLAINED = articulated
-// as a standalone root; LINKED = articulated and connected to the graph.
+// The cognitive state machine (DET-194). Every concept lives in exactly one
+// state; the value is always set by a rule, never left empty. Forward moves are
+// driven by user actions (gates, sessions, Tutor); backward moves by time +
+// retrieval history. Some states are entered only by systems built in later
+// tickets — the trigger wiring lands with those tickets, but the state and its
+// allowed transitions are defined here so the substrate is complete.
+//   SEEN          captured, not yet processed
+//   PARSED        interrogator surfaced structure, not yet articulated (DET-188)
+//   EXPLAINED     user wrote a compression (DET-189/190)
+//   LINKED        connected to at least one other concept (DET-189/191)
+//   RETRIEVED     at least one successful retrieval (DET-192)
+//   DEFENDED      survived a Tutor challenge with a strong articulation (DET-193)
+//   INTERNALIZED  sustained retrieval success + connections + defended (DET-192/193)
+//   DORMANT       not retrieved/connected for a long time; activation decayed (DET-195)
+//   CONTESTED     an approved contradiction edge points at it; unresolved (DET-191)
+//   ARCHIVED      the user explicitly retired it
 enum CognitiveState {
+  SEEN
+  PARSED
   EXPLAINED
   LINKED
+  RETRIEVED
+  DEFENDED
+  INTERNALIZED
+  DORMANT
+  CONTESTED
+  ARCHIVED
+}
+
+// What caused a cognitive-state transition (DET-194). Recorded on every
+// transition so the concept's history reads as a causal log, not just a
+// sequence of states.
+enum StateTrigger {
+  CAPTURE           // concept captured → SEEN
+  INTAKE_PARSED     // interrogator surfaced structure → PARSED
+  PROMOTION         // proof-of-learning gate committed → EXPLAINED/LINKED
+  LINK_CONFIRMED    // a connection was confirmed → LINKED
+  RETRIEVAL_SUCCESS // a spaced retrieval passed → RETRIEVED
+  TUTOR_DEFENDED    // survived a Socratic challenge → DEFENDED
+  INTERNALIZED      // sustained mastery threshold reached → INTERNALIZED
+  DECAYED           // inactivity decayed activation → DORMANT
+  REACTIVATED       // a dormant concept was retrieved again
+  CONTRADICTION     // an approved contradiction edge → CONTESTED
+  RESOLVED          // a contradiction was resolved
+  ARCHIVED          // the user explicitly retired the concept
 }
 
 // Who produced a question or answer in Reference Q&A (DET-208). Provenance that

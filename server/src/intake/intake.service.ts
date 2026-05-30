@@ -1,4 +1,4 @@
-import { ConceptStatus } from '@kibadist/prisma'
+import { CognitiveState, ConceptStatus, StateTrigger } from '@kibadist/prisma'
 import {
   BadRequestException,
   Injectable,
@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common'
 
 import { AiService } from '../ai/ai.service'
+import { ConceptStateService } from '../concept-state/concept-state.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { SearchService } from '../search/search.service'
 import { SourceQaService } from '../source-qa/source-qa.service'
@@ -47,6 +48,7 @@ export class IntakeService {
     private readonly ai: AiService,
     private readonly search: SearchService,
     private readonly sourceQa: SourceQaService,
+    private readonly conceptState: ConceptStateService,
   ) {}
 
   /**
@@ -119,14 +121,29 @@ export class IntakeService {
       )
     }
 
-    await this.prisma.intakeQuestion.createMany({
-      data: parsed.map((q, i) => ({
-        conceptId,
-        userId,
-        prompt: q.question,
-        kind: q.kind,
-        order: i,
-      })),
+    // Persisting the questions IS the parse step (DET-194): the interrogator
+    // surfaced the item's structure, so the concept moves SEEN → PARSED. Write
+    // the questions and the state transition in one commit so the log can never
+    // disagree with whether questions exist.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.intakeQuestion.createMany({
+        data: parsed.map((q, i) => ({
+          conceptId,
+          userId,
+          prompt: q.question,
+          kind: q.kind,
+          order: i,
+        })),
+      })
+      await this.conceptState.transition(
+        {
+          conceptId,
+          userId,
+          to: CognitiveState.PARSED,
+          trigger: StateTrigger.INTAKE_PARSED,
+        },
+        tx,
+      )
     })
 
     return this.list(userId, conceptId)

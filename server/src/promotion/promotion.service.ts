@@ -4,6 +4,7 @@ import {
   GateMode,
   LinkStatus,
   Prisma,
+  StateTrigger,
 } from '@kibadist/prisma'
 import {
   BadRequestException,
@@ -15,6 +16,7 @@ import {
 } from '@nestjs/common'
 
 import { AiService } from '../ai/ai.service'
+import { ConceptStateService } from '../concept-state/concept-state.service'
 import { ConceptsService } from '../concepts/concepts.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { SearchService } from '../search/search.service'
@@ -96,6 +98,7 @@ export class PromotionService {
     private readonly ai: AiService,
     private readonly search: SearchService,
     private readonly sourceQa: SourceQaService,
+    private readonly conceptState: ConceptStateService,
   ) {}
 
   /** Current promotion state for an inbox item: draft + gate checklist + the
@@ -472,10 +475,21 @@ export class PromotionService {
         where: { id: conceptId },
         data: {
           status: ConceptStatus.PERMANENT,
-          cognitiveState,
           gateMode: dto.mode,
         },
       })
+      // Route the EXPLAINED/LINKED move through the state machine (DET-194) so
+      // it is the single writer of `cognitiveState` and the promotion is logged
+      // as a transition. Joins this commit via the tx client.
+      await this.conceptState.transition(
+        {
+          conceptId,
+          userId,
+          to: cognitiveState,
+          trigger: StateTrigger.PROMOTION,
+        },
+        tx,
+      )
       return articulation.id
     })
 

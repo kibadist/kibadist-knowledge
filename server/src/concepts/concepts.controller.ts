@@ -33,4 +33,11 @@ export class ConceptsController {
   ) {
     return this.conceptsService.update(user.userId, id, dto)
   }
+
+  // Retire a concept (DET-194). Terminal `* → ARCHIVED` transition via the
+  // state machine.
+  @Post(':id/archive')
+  archive(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.conceptsService.archive(user.userId, id)
+  }
 }

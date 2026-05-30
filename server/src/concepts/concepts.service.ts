@@ -1,13 +1,22 @@
-import { type Concept, ConceptStatus } from '@kibadist/prisma'
+import {
+  CognitiveState,
+  type Concept,
+  ConceptStatus,
+  StateTrigger,
+} from '@kibadist/prisma'
 import { Injectable, NotFoundException } from '@nestjs/common'
 
+import { ConceptStateService } from '../concept-state/concept-state.service'
 import { PrismaService } from '../prisma/prisma.service'
 import type { CreateConceptDto } from './dto/create-concept.dto'
 import type { UpdateConceptDto } from './dto/update-concept.dto'
 
 @Injectable()
 export class ConceptsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly conceptState: ConceptStateService,
+  ) {}
 
   // Inbox items are Concepts in INBOX status. They are *not* knowledge yet, so
   // they must never surface in the concept list or a concept view (DET-187).
@@ -35,19 +44,28 @@ export class ConceptsService {
       },
     })
     if (!concept) throw new NotFoundException('Concept not found')
-    return concept
+    // The cognitive-state history (DET-194), oldest-first. Ownership is already
+    // established by the concept load above, so this is safe to attach.
+    const stateHistory = await this.conceptState.history(id, userId)
+    return { ...concept, stateHistory }
   }
 
   // Always lands in the inbox (status defaults to INBOX). Promotion to a
   // permanent concept is gated and lives in PromotionService (DET-189).
-  create(userId: string, dto: CreateConceptDto): Promise<Concept> {
-    return this.prisma.concept.create({
-      data: {
-        title: dto.title,
-        summary: dto.summary,
-        sourceText: dto.sourceText,
-        userId,
-      },
+  // The concept row defaults to SEEN; we write its opening `null → SEEN`
+  // transition in the same commit so its cognitive history starts at capture.
+  async create(userId: string, dto: CreateConceptDto): Promise<Concept> {
+    return this.prisma.$transaction(async (tx) => {
+      const concept = await tx.concept.create({
+        data: {
+          title: dto.title,
+          summary: dto.summary,
+          sourceText: dto.sourceText,
+          userId,
+        },
+      })
+      await this.conceptState.recordCapture(concept.id, userId, tx)
+      return concept
     })
   }
 
@@ -66,6 +84,28 @@ export class ConceptsService {
         summary: dto.summary,
         sourceText: dto.sourceText,
       },
+    })
+  }
+
+  /**
+   * Retire an earned concept (DET-194). Drives the user-initiated `* → ARCHIVED`
+   * transition through the state machine, which logs it and is the single
+   * writer of `cognitiveState`. ARCHIVED is terminal; the row is kept for its
+   * history rather than deleted.
+   *
+   * Inbox items are NOT archived here — they are raw material, retired via the
+   * inbox discard path (a hard delete). Using {@link assertOwnedNonInbox} keeps
+   * the two retirement semantics distinct and prevents an INBOX concept from
+   * becoming an invisible, unrecoverable ARCHIVED row (concept reads exclude
+   * INBOX).
+   */
+  async archive(userId: string, id: string): Promise<CognitiveState> {
+    await this.assertOwnedNonInbox(userId, id)
+    return this.conceptState.transition({
+      conceptId: id,
+      userId,
+      to: CognitiveState.ARCHIVED,
+      trigger: StateTrigger.ARCHIVED,
     })
   }
 

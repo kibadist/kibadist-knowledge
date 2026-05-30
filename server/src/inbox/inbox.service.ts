@@ -1,6 +1,7 @@
 import { CaptureSource, ConceptStatus, type Prisma } from '@kibadist/prisma'
 import { Injectable, NotFoundException } from '@nestjs/common'
 
+import { ConceptStateService } from '../concept-state/concept-state.service'
 import { PrismaService } from '../prisma/prisma.service'
 import {
   asSourceDocument,
@@ -42,7 +43,10 @@ export interface InboxItemDetail extends InboxItem {
  */
 @Injectable()
 export class InboxService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly conceptState: ConceptStateService,
+  ) {}
 
   async captureText(userId: string, dto: CaptureTextDto): Promise<InboxItem> {
     const title = dto.title?.trim() || deriveTitle(dto.text)
@@ -161,26 +165,33 @@ export class InboxService {
       sourceUrl?: string
     },
   ): Promise<InboxItem> {
-    const concept = await this.prisma.concept.create({
-      data: {
-        userId,
-        title: data.title,
-        sourceText: data.sourceText,
-        sourceDocument: data.sourceDocument
-          ? (data.sourceDocument as unknown as Prisma.InputJsonValue)
-          : undefined,
-        captureSource: data.captureSource,
-        sourceUrl: data.sourceUrl ?? null,
-        status: ConceptStatus.INBOX,
-      },
-      select: {
-        id: true,
-        title: true,
-        sourceText: true,
-        captureSource: true,
-        sourceUrl: true,
-        createdAt: true,
-      },
+    // Create the inbox concept (defaults to SEEN) and write its opening
+    // `null → SEEN` transition in one commit, so a captured item's cognitive
+    // history starts at the moment of capture and never drifts from its row.
+    const concept = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.concept.create({
+        data: {
+          userId,
+          title: data.title,
+          sourceText: data.sourceText,
+          sourceDocument: data.sourceDocument
+            ? (data.sourceDocument as unknown as Prisma.InputJsonValue)
+            : undefined,
+          captureSource: data.captureSource,
+          sourceUrl: data.sourceUrl ?? null,
+          status: ConceptStatus.INBOX,
+        },
+        select: {
+          id: true,
+          title: true,
+          sourceText: true,
+          captureSource: true,
+          sourceUrl: true,
+          createdAt: true,
+        },
+      })
+      await this.conceptState.recordCapture(created.id, userId, tx)
+      return created
     })
     return {
       id: concept.id,

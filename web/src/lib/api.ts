@@ -165,7 +165,19 @@ export interface IntakeQuestion {
 
 // --- Proof-of-Learning Gate (DET-189) ---
 export type GateMode = 'QUICK' | 'DEEP'
-export type CognitiveState = 'EXPLAINED' | 'LINKED'
+// The full cognitive-state lifecycle (DET-194). Mirrors the server's
+// CognitiveState enum; keep in sync.
+export type CognitiveState =
+  | 'SEEN'
+  | 'PARSED'
+  | 'EXPLAINED'
+  | 'LINKED'
+  | 'RETRIEVED'
+  | 'DEFENDED'
+  | 'INTERNALIZED'
+  | 'DORMANT'
+  | 'CONTESTED'
+  | 'ARCHIVED'
 export type ConceptStatus = 'INBOX' | 'ARTICULATED' | 'PERMANENT'
 
 export interface GateChecklist {
@@ -267,7 +279,9 @@ export interface Concept {
   captureSource: CaptureSource | null
   sourceUrl: string | null
   status: ConceptStatus
-  cognitiveState: CognitiveState | null
+  // Always set since DET-194: a concept is SEEN at capture and advances from
+  // there, so this is never null.
+  cognitiveState: CognitiveState
   gateMode: GateMode | null
   createdAt: string
   updatedAt: string
@@ -295,11 +309,23 @@ export interface ConceptRetrievalEvent {
   createdAt: string
 }
 
+// One recorded cognitive-state move (DET-194). `from` is null only for the
+// opening capture transition.
+export interface StateTransition {
+  id: string
+  from: CognitiveState | null
+  to: CognitiveState
+  trigger: string
+  note: string | null
+  createdAt: string
+}
+
 export interface ConceptDetail extends Concept {
   articulations: ConceptArticulation[]
   outgoingLinks: ConceptLinkEnd[]
   incomingLinks: ConceptLinkEnd[]
   retrievalEvents: ConceptRetrievalEvent[]
+  stateHistory: StateTransition[]
 }
 
 export const api = {

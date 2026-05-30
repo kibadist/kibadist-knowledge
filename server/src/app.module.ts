@@ -8,6 +8,7 @@ import { AiModule } from './ai/ai.module'
 import { ArticulationsModule } from './articulations/articulations.module'
 import { AuthModule } from './auth/auth.module'
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard'
+import { ConceptStateModule } from './concept-state/concept-state.module'
 import { ConceptsModule } from './concepts/concepts.module'
 import { InboxModule } from './inbox/inbox.module'
 import { IntakeModule } from './intake/intake.module'
@@ -62,6 +63,7 @@ import { UsersModule } from './users/users.module'
     AuthModule,
     UsersModule,
     NotesModule,
+    ConceptStateModule,
     ConceptsModule,
     InboxModule,
     IntakeModule,

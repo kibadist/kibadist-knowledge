@@ -46,14 +46,16 @@ function makePromotionService() {
     indexArticulation: jest.fn().mockResolvedValue(undefined),
   }
   const sourceQa = { recentForContext: jest.fn().mockResolvedValue([]) }
+  const conceptState = { transition: jest.fn().mockResolvedValue(undefined) }
   const service = new PromotionService(
     prisma as never,
     concepts as never,
     ai as never,
     search as never,
     sourceQa as never,
+    conceptState as never,
   )
-  return { service, prisma, tx, concepts, sourceQa }
+  return { service, prisma, tx, concepts, sourceQa, conceptState }
 }
 
 const INBOX_CONCEPT = {
