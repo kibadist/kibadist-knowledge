@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { APP_GUARD } from '@nestjs/core'
+import { ThrottlerModule } from '@nestjs/throttler'
 import { LoggerModule } from 'nestjs-pino'
 import { stdSerializers } from 'pino'
 
@@ -23,12 +24,23 @@ import { RetrievalModule } from './retrieval/retrieval.module'
 import { SearchModule } from './search/search.module'
 import { SessionsModule } from './sessions/sessions.module'
 import { SourceQaModule } from './source-qa/source-qa.module'
+import { UserThrottlerGuard } from './throttler/user-throttler.guard'
 import { TutorModule } from './tutor/tutor.module'
 import { UsersModule } from './users/users.module'
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Per-user rate limiting (DET-207). Trackers are keyed on the authenticated
+    // user id (see UserThrottlerGuard), not IP. Two named throttlers:
+    //   - default: lenient ceiling for ordinary CRUD/reads (120 req/user/min).
+    //   - ai:      strict ceiling for paid OpenAI-backed endpoints. 20/user/min
+    //              is generous for a human in the loop but ruinous for an abuse
+    //              script — a runaway loop is capped at 20 paid calls/minute.
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: 60_000, limit: 120 },
+      { name: 'ai', ttl: 60_000, limit: 20 },
+    ]),
     LoggerModule.forRoot({
       pinoHttp: {
         ...(process.env.NODE_ENV !== 'production'
@@ -87,9 +99,19 @@ import { UsersModule } from './users/users.module'
   ],
   providers: [
     // Global authentication: every route requires a valid JWT unless marked @Public().
+    // MUST be registered before the throttler guard: APP_GUARD providers run in
+    // registration order, and the throttler reads req.user (set here) to key the
+    // rate limit per user.
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    // Global rate limiting (DET-207). Runs after JwtAuthGuard so req.user exists.
+    // Routes get the lenient `default` limit unless they opt into a stricter
+    // named throttler via @Throttle (paid AI endpoints use { ai: ... }).
+    {
+      provide: APP_GUARD,
+      useClass: UserThrottlerGuard,
     },
   ],
 })

@@ -8,9 +8,11 @@ import {
   Post,
   Put,
 } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 
 import type { AuthUser } from '../auth/auth.types'
 import { CurrentUser } from '../auth/current-user.decorator'
+import { AI_THROTTLE } from '../throttler/ai-throttle.constant'
 import { AnswerRetrievalDto } from './dto/answer-retrieval.dto'
 import { CommitPromotionDto } from './dto/commit-promotion.dto'
 import { SaveArticulationDto } from './dto/save-articulation.dto'
@@ -74,6 +76,7 @@ export class PromotionController {
   }
 
   /** Gate 3 — generate a retrieval prompt from the articulation. */
+  @Throttle(AI_THROTTLE)
   @Post(':conceptId/retrieval')
   generateRetrieval(
     @CurrentUser() user: AuthUser,
@@ -83,6 +86,7 @@ export class PromotionController {
   }
 
   /** Gate 3 — submit a from-memory recall for grading. */
+  @Throttle(AI_THROTTLE)
   @Post(':conceptId/retrieval/answer')
   answerRetrieval(
     @CurrentUser() user: AuthUser,

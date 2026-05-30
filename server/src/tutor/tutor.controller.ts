@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 
 import type { AuthUser } from '../auth/auth.types'
 import { CurrentUser } from '../auth/current-user.decorator'
+import { AI_THROTTLE } from '../throttler/ai-throttle.constant'
 import { ChallengeTutorDto } from './dto/challenge-tutor.dto'
 import { RespondTutorDto } from './dto/respond-tutor.dto'
 import { TutorService } from './tutor.service'
@@ -18,6 +20,7 @@ export class TutorController {
   }
 
   /** Pose a single Socratic question for a concept. Persists nothing. */
+  @Throttle(AI_THROTTLE)
   @Post(':conceptId/challenge')
   challenge(
     @CurrentUser() user: AuthUser,

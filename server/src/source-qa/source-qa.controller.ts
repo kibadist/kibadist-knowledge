@@ -7,9 +7,11 @@ import {
   Param,
   Post,
 } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 
 import type { AuthUser } from '../auth/auth.types'
 import { CurrentUser } from '../auth/current-user.decorator'
+import { AI_THROTTLE } from '../throttler/ai-throttle.constant'
 import { AskQuestionDto } from './dto/ask-question.dto'
 import { SourceQaService } from './source-qa.service'
 
@@ -23,6 +25,7 @@ export class SourceQaController {
   constructor(private readonly sourceQa: SourceQaService) {}
 
   /** Ask a question about the source; returns a grounded reference answer. */
+  @Throttle(AI_THROTTLE)
   @Post(':conceptId/ask')
   ask(
     @CurrentUser() user: AuthUser,
