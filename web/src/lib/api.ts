@@ -387,6 +387,31 @@ export interface GradeResult {
   cognitiveState: CognitiveState
 }
 
+// --- Socratic Tutor (DET-193) ---
+// The challenge angles the Tutor can take. Mirrors the server's TUTOR_ANGLES;
+// keep in sync.
+export type TutorAngle =
+  | 'why'
+  | 'counterexample'
+  | 'feynman'
+  | 'novice'
+  | 'premise'
+  | 'objection'
+
+// One Tutor challenge: the single question + the angle it took. Ephemeral until
+// the user responds — the Tutor never answers, never grades.
+export interface TutorChallenge {
+  question: string
+  angle: TutorAngle
+}
+
+// A concept the Tutor should auto-challenge: RETRIEVED but thinly connected.
+export interface EligibleConcept {
+  id: string
+  title: string
+  cognitiveState: CognitiveState
+}
+
 export const api = {
   register: (input: { email: string; password: string; name?: string }) =>
     request<AuthResponse>('/auth/register', {
@@ -510,4 +535,23 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ conceptId, ...input }),
     }),
+
+  // --- Socratic Tutor (DET-193) ---
+  challengeTutor: (conceptId: string, angle?: TutorAngle) =>
+    request<TutorChallenge>(`/tutor/${conceptId}/challenge`, {
+      method: 'POST',
+      body: JSON.stringify(angle ? { angle } : {}),
+    }),
+  respondToTutor: (
+    conceptId: string,
+    input: { question: string; response: string; defended: boolean },
+  ) =>
+    request<{
+      articulation: ConceptArticulation
+      cognitiveState: CognitiveState
+    }>(`/tutor/${conceptId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  getTutorEligible: () => request<EligibleConcept[]>('/tutor/eligible'),
 }
