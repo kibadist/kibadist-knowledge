@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: '/inbox', label: 'Inbox' },
   { href: '/concepts', label: 'Concepts' },
   { href: '/session', label: 'Session' },
+  { href: '/metrics', label: 'Understanding' },
 ] as const
 
 /** Top navigation for the authenticated app shell. */

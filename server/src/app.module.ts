@@ -16,6 +16,7 @@ import { DecayModule } from './decay/decay.module'
 import { InboxModule } from './inbox/inbox.module'
 import { IntakeModule } from './intake/intake.module'
 import { LinksModule } from './links/links.module'
+import { MetricsModule } from './metrics/metrics.module'
 import { NotesModule } from './notes/notes.module'
 import { PrismaModule } from './prisma/prisma.module'
 import { PromotionModule } from './promotion/promotion.module'
@@ -96,6 +97,7 @@ import { UsersModule } from './users/users.module'
     AiModule,
     SearchModule,
     SessionsModule,
+    MetricsModule,
   ],
   providers: [
     // Global authentication: every route requires a valid JWT unless marked @Public().

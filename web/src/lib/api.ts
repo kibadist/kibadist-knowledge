@@ -484,6 +484,28 @@ export interface SessionSummary {
   itemCount: number
 }
 
+// --- Anti-Vanity Metrics (DET-200) ---
+// A read-only understanding surface. Every field goes up only when the user
+// actually understands MORE (retention + synthesis), never by raw activity.
+// It DELIBERATELY has no streak / note-count / "AI summaries generated" field —
+// the product's thesis is that hoarding is the problem, so volume isn't a score.
+// Mirrors the server's UnderstandingMetrics; keep in sync.
+export interface UnderstandingMetrics {
+  // Retention: share of graded retrievals passed (0..1), or null if none yet.
+  retrievalSuccessRate: number | null
+  retrievalsPassed: number
+  retrievalsTotal: number
+  // Concepts held at a retained depth (RETRIEVED/DEFENDED/INTERNALIZED).
+  conceptsRetained: number
+  // Synthesis / depth.
+  conceptsInternalized: number
+  conceptsDefended: number
+  connectionsValidated: number
+  reflectionsLogged: number
+  // Transitions that moved a concept UP the mastery ladder in the last 30 days.
+  forwardTransitions30d: number
+}
+
 export const api = {
   register: (input: { email: string; password: string; name?: string }) =>
     request<AuthResponse>('/auth/register', {
@@ -658,4 +680,7 @@ export const api = {
     }),
   getConceptReflections: (conceptId: string) =>
     request<Reflection[]>(`/reflections?conceptId=${conceptId}`),
+
+  // --- Anti-Vanity Metrics (DET-200) ---
+  getMetrics: () => request<UnderstandingMetrics>('/metrics'),
 }
