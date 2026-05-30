@@ -192,6 +192,9 @@ export type CognitiveState =
   | 'CONTESTED'
   | 'ARCHIVED'
 export type ConceptStatus = 'INBOX' | 'ARTICULATED' | 'PERMANENT'
+// How sure the user is of a concept (DET-199). Uncertainty is expressible rather
+// than flattened to implied certainty. Mirrors the server's Certainty enum.
+export type Certainty = 'ASSERTED' | 'TENTATIVE' | 'UNCERTAIN'
 
 export interface GateChecklist {
   articulate: boolean
@@ -312,6 +315,8 @@ export interface Concept {
   captureSource: CaptureSource | null
   sourceUrl: string | null
   status: ConceptStatus
+  // The user's epistemic stance (DET-199). Always set (defaults to ASSERTED).
+  certainty: Certainty
   // Always set since DET-194: a concept is SEEN at capture and advances from
   // there, so this is never null.
   cognitiveState: CognitiveState
@@ -332,6 +337,10 @@ export interface ConceptLinkEnd {
   // pre-DET-191 links or bare user-drawn edges with no kind.
   relationKind: LinkRelation | null
   rationale: string | null
+  // Who drew this edge (DET-199): the Connector (AI) proposed it, or the user
+  // drew it. Lets the UI tag AI-assisted connections distinctly from user-drawn
+  // ones so AI-authored content is never blurred into user-authored knowledge.
+  proposedBy: QuestionActor
   targetConcept?: { id: string; title: string }
   sourceConcept?: { id: string; title: string }
 }
@@ -616,6 +625,13 @@ export const api = {
   // and brings a DORMANT one back into a knowledge state. Returns its new state.
   reviveConcept: (id: string) =>
     request<CognitiveState>(`/concepts/${id}/revive`, { method: 'POST' }),
+  // Provenance & Uncertainty (DET-199): set the user's certainty on a concept.
+  // Uncertainty is expressible, never flattened to implied certainty.
+  setCertainty: (id: string, certainty: Certainty) =>
+    request<Concept>(`/concepts/${id}/certainty`, {
+      method: 'POST',
+      body: JSON.stringify({ certainty }),
+    }),
 
   // --- Retrieval Engine (DET-192) ---
   getDueRetrievals: () => request<DueConcept[]>('/retrieval-events/due'),

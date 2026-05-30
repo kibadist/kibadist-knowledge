@@ -3,6 +3,7 @@ import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common'
 import type { AuthUser } from '../auth/auth.types'
 import { CurrentUser } from '../auth/current-user.decorator'
 import { ConceptsService } from './concepts.service'
+import { CertaintyDto } from './dto/certainty.dto'
 import { CreateConceptDto } from './dto/create-concept.dto'
 import { UpdateConceptDto } from './dto/update-concept.dto'
 
@@ -46,5 +47,16 @@ export class ConceptsController {
   @Post(':id/revive')
   revive(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.conceptsService.revive(user.userId, id)
+  }
+
+  // Set the user's certainty on a concept (DET-199). Uncertainty is expressible
+  // (ASSERTED/TENTATIVE/UNCERTAIN), never flattened to implied certainty.
+  @Post(':id/certainty')
+  setCertainty(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: CertaintyDto,
+  ) {
+    return this.conceptsService.setCertainty(user.userId, id, dto.certainty)
   }
 }

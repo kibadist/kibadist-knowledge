@@ -7,6 +7,7 @@ import { useParams } from 'next/navigation'
 import { ArticleReader } from '@/components/reader/article-reader'
 import {
   api,
+  type Certainty,
   type ConceptArticulation,
   type ConceptLinkEnd,
   type ConceptRetrievalEvent,
@@ -33,6 +34,22 @@ const REFLECTION_LABELS: Record<ReflectionKind, string> = {
   LESS_CLEAR: 'less clear',
   CONNECTED: 'connected',
   CHALLENGE_NEXT: 'to challenge',
+}
+
+// DET-199: the user's epistemic stance, in their own framing. Order is the
+// control's left-to-right options.
+const CERTAINTY_OPTIONS: { value: Certainty; label: string }[] = [
+  { value: 'ASSERTED', label: 'Asserted' },
+  { value: 'TENTATIVE', label: 'Tentative' },
+  { value: 'UNCERTAIN', label: 'Unsure' },
+]
+
+function certaintyChipClass(certainty: Certainty): string {
+  if (certainty === 'UNCERTAIN')
+    return 'border-amber-700/60 bg-amber-950/30 text-amber-300'
+  if (certainty === 'TENTATIVE')
+    return 'border-sky-700/60 bg-sky-950/30 text-sky-300'
+  return 'border-emerald-700/60 bg-emerald-950/30 text-emerald-300'
 }
 
 function relationChipClass(kind: LinkRelation): string {
@@ -62,6 +79,16 @@ export default function ConceptViewPage() {
   // prominence. Refresh this view + the list so the new state shows immediately.
   const reviveMutation = useMutation({
     mutationFn: () => api.reviveConcept(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['concept', id] })
+      void queryClient.invalidateQueries({ queryKey: ['concepts'] })
+    },
+  })
+
+  // Provenance & Uncertainty (DET-199): let the user set how sure they are.
+  // Refresh this view so the new stance shows immediately.
+  const certaintyMutation = useMutation({
+    mutationFn: (certainty: Certainty) => api.setCertainty(id, certainty),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['concept', id] })
       void queryClient.invalidateQueries({ queryKey: ['concepts'] })
@@ -98,6 +125,15 @@ export default function ConceptViewPage() {
                 {concept.gateMode}
               </span>
             )}
+            {/* Uncertainty (DET-199): the user's own stance, shown plainly so
+                what they're unsure of is never flattened into implied certainty. */}
+            <span
+              className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${certaintyChipClass(
+                concept.certainty,
+              )}`}
+            >
+              {concept.certainty}
+            </span>
             {/* Memory decay (DET-195): current activation, with a DORMANT
                 call-out + a Revive control when it has faded past the floor. */}
             <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
@@ -253,11 +289,53 @@ export default function ConceptViewPage() {
             )}
           </section>
 
+          {/* Certainty control (DET-199): the user owns their epistemic stance.
+              Framed so marking something unsure is legitimate, not a failure. */}
+          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+            <div>
+              <h2 className='font-medium'>How sure are you?</h2>
+              <p className='mt-1 text-sm text-neutral-500'>
+                Your understanding has an honest edge. It&apos;s fine to mark
+                what you&apos;re still unsure of — uncertainty is information,
+                not a gap to hide.
+              </p>
+            </div>
+            <div className='flex flex-wrap gap-2'>
+              {CERTAINTY_OPTIONS.map((option) => {
+                const active = concept.certainty === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type='button'
+                    onClick={() => certaintyMutation.mutate(option.value)}
+                    disabled={certaintyMutation.isPending}
+                    className={`rounded border px-2.5 py-1 text-xs transition disabled:opacity-50 ${
+                      active
+                        ? certaintyChipClass(option.value)
+                        : 'border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-200'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+            {certaintyMutation.isError && (
+              <p className='text-xs text-red-400'>
+                Could not update certainty. Try again.
+              </p>
+            )}
+          </section>
+
+          {/* Provenance (DET-199): the source is where this came FROM, not the
+              concept itself — the canonical text is the user's own compression. */}
           <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
             <div>
               <h2 className='font-medium'>Provenance</h2>
               <p className='mt-1 text-sm text-neutral-500'>
-                Where this came from.
+                The source below is where this came from — provenance, not the
+                concept. The concept itself is your own articulation, compressed
+                from this material in your words.
               </p>
             </div>
             <div className='flex flex-wrap items-center gap-2 text-sm text-neutral-400'>
@@ -266,7 +344,7 @@ export default function ConceptViewPage() {
                   {concept.captureSource}
                 </span>
               )}
-              {concept.sourceUrl && (
+              {concept.sourceUrl ? (
                 <a
                   href={concept.sourceUrl}
                   target='_blank'
@@ -275,6 +353,14 @@ export default function ConceptViewPage() {
                 >
                   {concept.sourceUrl}
                 </a>
+              ) : (
+                <span className='text-neutral-500'>
+                  {concept.captureSource === 'PDF'
+                    ? 'From a PDF you captured'
+                    : concept.captureSource === 'PASTE'
+                      ? 'Pasted text you captured'
+                      : 'No external source recorded'}
+                </span>
               )}
             </div>
             {concept.sourceText && (
@@ -390,6 +476,17 @@ function LinkItem({
         {link.relation && (
           <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
             {link.relation}
+          </span>
+        )}
+        {/* Provenance (DET-199): keep AI-assisted connections visibly distinct
+            from edges the user drew themselves — never blur the two. */}
+        {link.proposedBy === 'AI' ? (
+          <span className='rounded border border-violet-700/60 bg-violet-950/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-violet-300'>
+            AI-suggested
+          </span>
+        ) : (
+          <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
+            You drew this
           </span>
         )}
         <span className='ml-auto rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>

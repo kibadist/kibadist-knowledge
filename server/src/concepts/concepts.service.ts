@@ -1,4 +1,5 @@
 import {
+  type Certainty,
   CognitiveState,
   type Concept,
   ConceptStatus,
@@ -51,6 +52,12 @@ export class ConceptsService {
       where: { id, userId, status: { not: ConceptStatus.INBOX } },
       include: {
         articulations: { orderBy: { createdAt: 'desc' } },
+        // Provenance (DET-199): an `include` of the related concept returns every
+        // scalar Link column too, so each edge already carries `proposedBy`
+        // (USER vs AI/Connector) and `relationKind` — the UI uses them to tag
+        // AI-suggested connections distinctly from user-drawn ones. The source
+        // fields (sourceUrl/captureSource/certainty) ride along on the concept
+        // row itself. (Specifics inferred pending the full DET-199 DoD.)
         outgoingLinks: {
           include: { targetConcept: { select: { id: true, title: true } } },
         },
@@ -148,6 +155,25 @@ export class ConceptsService {
    */
   revive(userId: string, id: string): Promise<string> {
     return this.decay.revive(userId, id)
+  }
+
+  /**
+   * Set how sure the user is of a concept (DET-199). Uncertainty is the user's
+   * own epistemic stance, so it is expressible (ASSERTED/TENTATIVE/UNCERTAIN)
+   * rather than flattened to implied certainty. Only earned (non-INBOX) concepts
+   * carry a certainty the user manages here — raw inbox material is rejected by
+   * {@link assertOwnedNonInbox}. (Specifics inferred pending the full DET-199 DoD.)
+   */
+  async setCertainty(
+    userId: string,
+    id: string,
+    certainty: Certainty,
+  ): Promise<Concept> {
+    await this.assertOwnedNonInbox(userId, id)
+    return this.prisma.concept.update({
+      where: { id },
+      data: { certainty },
+    })
   }
 
   /**

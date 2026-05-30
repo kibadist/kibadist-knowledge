@@ -108,6 +108,11 @@ model Concept {
   // it to 1.0. Below a threshold the concept fades; lower still it goes DORMANT.
   activation         Float    @default(1)
   activationAt       DateTime @default(now())
+  // How sure the user is of this concept (DET-199). Understanding includes
+  // knowing what you DON'T fully trust, so uncertainty is expressible rather
+  // than flattened — the user can mark a concept TENTATIVE or UNCERTAIN instead
+  // of asserting everything as settled fact. Defaults to ASSERTED.
+  certainty          Certainty @default(ASSERTED)
   userId       String
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -446,6 +451,15 @@ enum SessionItemReason {
   CONTESTED
   REDISCOVERY
   CHALLENGE
+}
+
+// How sure the user is of a concept (DET-199). Lets uncertainty be expressed
+// rather than flattened to implied certainty — the user owns the epistemic
+// status of their own knowledge.
+enum Certainty {
+  ASSERTED
+  TENTATIVE
+  UNCERTAIN
 }
 
 enum ConceptStatus {
