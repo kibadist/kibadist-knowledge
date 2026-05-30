@@ -31,6 +31,7 @@ model User {
   promotionDrafts PromotionDraft[]
   sourceQuestions SourceQuestion[]
   stateTransitions ConceptStateTransition[]
+  sessions         Session[]
 
   @@map("user")
 }
@@ -109,6 +110,7 @@ model Concept {
   promotionDraft  PromotionDraft?
   sourceQuestions SourceQuestion[]
   stateTransitions ConceptStateTransition[]
+  sessionItems    SessionItem[]
 
   @@index([userId])
   @@index([userId, status])
@@ -331,6 +333,64 @@ model ConceptStateTransition {
   @@index([conceptId, createdAt])
   @@index([userId])
   @@map("concept_state_transition")
+}
+
+// An Understanding Session (DET-198): the daily 5–15 min cognitive loop. A
+// session snapshots a small queue of concepts to resurface, records the user's
+// progress through them (so a partial session can resume and still counts), and
+// — later — its closing Reflection (DET-196). The per-concept retrieval outcome
+// is recorded on the RetrievalEvent by the retrieval engine; SessionItem tracks
+// the queue order, why each concept surfaced, and whether it was reached.
+model Session {
+  id            String        @id @default(cuid())
+  userId        String
+  startedAt     DateTime      @default(now())
+  endedAt       DateTime?
+  // The user's target length; concept-count is derived from it (DET-198).
+  targetMinutes Int           @default(10)
+  status        SessionStatus @default(ACTIVE)
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items SessionItem[]
+
+  @@index([userId, startedAt])
+  @@index([userId, status])
+  @@map("session")
+}
+
+// One concept in a session's queue (DET-198), in presentation order, with why it
+// surfaced and the recall grade once reviewed (null until reached — partial
+// sessions leave a tail unreviewed).
+model SessionItem {
+  id          String            @id @default(cuid())
+  sessionId   String
+  conceptId   String
+  position    Int
+  reason      SessionItemReason @default(DUE)
+  reviewedAt  DateTime?
+  recallScore Int?
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, position])
+  @@map("session_item")
+}
+
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+// Why a concept surfaced in a session (DET-198): a normal due review, a
+// priority contested concept, an occasional dormant "rediscovery", or an
+// empty-state Tutor challenge on a mastered concept.
+enum SessionItemReason {
+  DUE
+  CONTESTED
+  REDISCOVERY
+  CHALLENGE
 }
 
 enum ConceptStatus {

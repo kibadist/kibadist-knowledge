@@ -19,6 +19,7 @@ import { PrismaModule } from './prisma/prisma.module'
 import { PromotionModule } from './promotion/promotion.module'
 import { RetrievalModule } from './retrieval/retrieval.module'
 import { SearchModule } from './search/search.module'
+import { SessionsModule } from './sessions/sessions.module'
 import { SourceQaModule } from './source-qa/source-qa.module'
 import { TutorModule } from './tutor/tutor.module'
 import { UsersModule } from './users/users.module'
@@ -78,6 +79,7 @@ import { UsersModule } from './users/users.module'
     TutorModule,
     AiModule,
     SearchModule,
+    SessionsModule,
   ],
   providers: [
     // Global authentication: every route requires a valid JWT unless marked @Public().

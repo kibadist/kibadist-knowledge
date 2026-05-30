@@ -412,6 +412,46 @@ export interface EligibleConcept {
   cognitiveState: CognitiveState
 }
 
+// --- Understanding Sessions (DET-198) ---
+// Why a concept surfaced in a session + the session lifecycle. Mirror the
+// server's SessionItemReason / SessionStatus enums; keep in sync.
+export type SessionItemReason =
+  | 'DUE'
+  | 'CONTESTED'
+  | 'REDISCOVERY'
+  | 'CHALLENGE'
+export type SessionStatus = 'ACTIVE' | 'COMPLETED' | 'ABANDONED'
+
+// One concept in a session's queue, in presentation order, with its grade once
+// reviewed (null until reached).
+export interface SessionItem {
+  id: string
+  conceptId: string
+  title: string
+  position: number
+  reason: SessionItemReason
+  reviewedAt: string | null
+  recallScore: number | null
+}
+
+export interface Session {
+  id: string
+  startedAt: string
+  endedAt: string | null
+  targetMinutes: number
+  status: SessionStatus
+  items: SessionItem[]
+}
+
+// A row in the simple session history view.
+export interface SessionSummary {
+  id: string
+  startedAt: string
+  endedAt: string | null
+  status: SessionStatus
+  itemCount: number
+}
+
 export const api = {
   register: (input: { email: string; password: string; name?: string }) =>
     request<AuthResponse>('/auth/register', {
@@ -554,4 +594,20 @@ export const api = {
       body: JSON.stringify(input),
     }),
   getTutorEligible: () => request<EligibleConcept[]>('/tutor/eligible'),
+
+  // --- Understanding Sessions (DET-198) ---
+  startSession: (targetMinutes?: number) =>
+    request<Session>('/sessions', {
+      method: 'POST',
+      body: JSON.stringify(targetMinutes != null ? { targetMinutes } : {}),
+    }),
+  getActiveSession: () => request<Session | null>('/sessions/active'),
+  reviewSessionItem: (sessionId: string, conceptId: string, score: number) =>
+    request<GradeResult>(`/sessions/${sessionId}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ conceptId, score }),
+    }),
+  endSession: (sessionId: string) =>
+    request<Session>(`/sessions/${sessionId}/end`, { method: 'POST' }),
+  getSessionHistory: () => request<SessionSummary[]>('/sessions/history'),
 }

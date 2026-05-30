@@ -9,5 +9,6 @@ import { RetrievalService } from './retrieval.service'
   imports: [ConceptsModule, ConceptStateModule],
   controllers: [RetrievalController],
   providers: [RetrievalService],
+  exports: [RetrievalService],
 })
 export class RetrievalModule {}
