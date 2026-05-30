@@ -2,6 +2,7 @@ import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 
 import { BadRequestException } from '@nestjs/common'
+import { Agent, fetch as undiciFetch } from 'undici'
 
 import { MAX_RAW_TEXT_CHARS } from './inbox.constants'
 
@@ -14,12 +15,13 @@ import { MAX_RAW_TEXT_CHARS } from './inbox.constants'
  *   - DNS resolution + rejection of private/loopback/link-local/reserved IPs
  *   - manual redirect handling, re-validating the host at every hop (≤3)
  *   - request timeout + a hard cap on bytes read
+ *   - DNS-rebinding closed by PINNING (DET-206): resolvePublicHost validates the
+ *     resolved address set and pinnedDispatcher binds the undici socket to
+ *     exactly those IPs via connect.lookup, so the host can't re-resolve to a
+ *     private IP between the check and the connect. TLS SNI + cert validation
+ *     still use the original hostname, so HTTPS identity is preserved.
  *
- * Residual risk: DNS rebinding (the host could resolve to a public IP during
- * our check, then to a private IP when the socket actually connects). Closing
- * that fully requires pinning the validated IP into the connection; for this
- * single-tenant MVP the layered controls above are the accepted posture. The
- * extracted text is stored verbatim as *raw material* — never summarized,
+ * The extracted text is stored verbatim as *raw material* — never summarized,
  * tagged, or linked (DET-187 anti-behaviors).
  */
 
@@ -100,23 +102,34 @@ function isBlockedIp(ip: string): boolean {
   return true // not a recognizable IP → refuse
 }
 
+/** A resolved, validated address to pin a connection to. */
+export interface PinnedAddress {
+  address: string
+  family: number
+}
+
 /**
- * Resolve `hostname` and reject it if it (or any address it resolves to) is a
- * private/loopback/link-local/reserved IP. Exported so other server-side fetch
- * paths — e.g. the Wikipedia MediaWiki API call (DET-210) — enforce the same
- * SSRF posture instead of trusting that a hostname string implies a safe target.
- * Throws BadRequestException; callers that prefer to degrade should catch it.
+ * Resolve `hostname`, reject it if it (or any address it resolves to) is a
+ * private/loopback/link-local/reserved IP, and RETURN the validated addresses.
+ * The returned set is what the caller pins the actual socket to, closing the
+ * DNS-rebinding TOCTOU (DET-206): the IP we validated here is the only IP we
+ * will connect to, so the name can't re-resolve to a private host between the
+ * check and the connect. Throws BadRequestException on an unresolvable or
+ * disallowed host.
  */
-export async function assertPublicHost(hostname: string): Promise<void> {
+export async function resolvePublicHost(
+  hostname: string,
+): Promise<PinnedAddress[]> {
   // Strip IPv6 brackets if present.
   const host = hostname.replace(/^\[|\]$/g, '')
-  if (isIP(host)) {
+  const literal = isIP(host)
+  if (literal) {
     if (isBlockedIp(host)) {
       throw new BadRequestException('URL host is not allowed')
     }
-    return
+    return [{ address: host, family: literal }]
   }
-  let addresses: { address: string }[]
+  let addresses: { address: string; family: number }[]
   try {
     addresses = await lookup(host, { all: true })
   } catch {
@@ -130,6 +143,42 @@ export async function assertPublicHost(hostname: string): Promise<void> {
       throw new BadRequestException('URL host is not allowed')
     }
   }
+  return addresses.map((a) => ({ address: a.address, family: a.family }))
+}
+
+/**
+ * Resolve + validate `hostname`, discarding the addresses. Exported so other
+ * server-side fetch paths that don't pin the socket themselves — e.g. the
+ * Wikipedia MediaWiki API call (DET-210) — still enforce the same SSRF posture.
+ * Throws BadRequestException; callers that prefer to degrade should catch it.
+ */
+export async function assertPublicHost(hostname: string): Promise<void> {
+  await resolvePublicHost(hostname)
+}
+
+/**
+ * Build a one-shot undici dispatcher whose DNS lookup is PINNED to the
+ * already-validated addresses (DET-206). The socket can only connect to an IP we
+ * checked; TLS SNI and cert validation still use the original hostname (undici
+ * sets `servername` from the request URL), so HTTPS identity is preserved.
+ */
+function pinnedDispatcher(pinned: PinnedAddress[]): Agent {
+  return new Agent({
+    connect: {
+      lookup: (
+        _hostname: string,
+        options: { all?: boolean },
+        callback: (
+          err: Error | null,
+          address: string | PinnedAddress[],
+          family?: number,
+        ) => void,
+      ) => {
+        if (options?.all) callback(null, pinned)
+        else callback(null, pinned[0].address, pinned[0].family)
+      },
+    },
+  })
 }
 
 function assertHttpProtocol(url: URL): void {
@@ -232,49 +281,59 @@ export async function fetchReadable(rawUrl: string): Promise<FetchedPage> {
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     assertHttpProtocol(current)
-    await assertPublicHost(current.hostname)
-
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-    let res: Response
+    // Resolve + validate, then PIN the socket to exactly those addresses
+    // (DET-206) so DNS can't rebind to a private host between check and connect.
+    const pinned = await resolvePublicHost(current.hostname)
+    const dispatcher = pinnedDispatcher(pinned)
+    // Destroy the one-shot dispatcher when the hop ends — AFTER the body is read
+    // on success, or before we continue/throw — so the pinned sockets are always
+    // torn down exactly once and never leak.
     try {
-      res = await fetch(current, {
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: { 'user-agent': USER_AGENT, accept: 'text/html,*/*' },
-      })
-    } catch {
-      throw new BadRequestException('Could not fetch URL')
-    } finally {
-      clearTimeout(timer)
-    }
-
-    if (res.status >= 300 && res.status < 400) {
-      const location = res.headers.get('location')
-      if (!location) throw new BadRequestException('Could not fetch URL')
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      let res: Response
       try {
-        current = new URL(location, current)
+        res = (await undiciFetch(current, {
+          redirect: 'manual',
+          signal: controller.signal,
+          dispatcher,
+          headers: { 'user-agent': USER_AGENT, accept: 'text/html,*/*' },
+        })) as unknown as Response
       } catch {
         throw new BadRequestException('Could not fetch URL')
+      } finally {
+        clearTimeout(timer)
       }
-      continue // re-validate the new host on the next loop iteration
-    }
 
-    if (!res.ok) {
-      throw new BadRequestException(
-        fetchFailureMessage(res.status, res.headers.get('cf-mitigated')),
-      )
-    }
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get('location')
+        if (!location) throw new BadRequestException('Could not fetch URL')
+        try {
+          current = new URL(location, current)
+        } catch {
+          throw new BadRequestException('Could not fetch URL')
+        }
+        continue // re-validate (and re-pin) the new host on the next iteration
+      }
 
-    // Only extract from textual responses; capture is deliberately dumb, but we
-    // shouldn't run an HTML stripper over binary (images, PDFs served inline).
-    const contentType = res.headers.get('content-type') ?? ''
-    if (contentType && !/text\/|\+xml|\/xml|json/i.test(contentType)) {
-      throw new BadRequestException('URL did not return readable text')
-    }
+      if (!res.ok) {
+        throw new BadRequestException(
+          fetchFailureMessage(res.status, res.headers.get('cf-mitigated')),
+        )
+      }
 
-    const html = await readCapped(res)
-    return { title: extractTitle(html), text: htmlToText(html), html }
+      // Only extract from textual responses; capture is deliberately dumb, but we
+      // shouldn't run an HTML stripper over binary (images, PDFs served inline).
+      const contentType = res.headers.get('content-type') ?? ''
+      if (contentType && !/text\/|\+xml|\/xml|json/i.test(contentType)) {
+        throw new BadRequestException('URL did not return readable text')
+      }
+
+      const html = await readCapped(res)
+      return { title: extractTitle(html), text: htmlToText(html), html }
+    } finally {
+      void dispatcher.destroy().catch(() => {})
+    }
   }
 
   throw new BadRequestException('Too many redirects')
