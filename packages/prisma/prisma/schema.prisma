@@ -145,8 +145,19 @@ model Link {
   sourceConceptId String
   targetConceptId String
   userId          String
-  // Optional user-supplied relationship label (e.g. "supports", "contradicts").
+  // Optional free-text relationship label (e.g. the user's own phrasing).
   relation        String?
+  // The typed relationship the Connector (DET-191) proposed or the user chose:
+  // analogy, contradiction, supports, depends-on, refines, redundant. Null for
+  // pre-DET-191 links. CONTRADICTION/REDUNDANT are rendered distinctly and a
+  // confirmed CONTRADICTION drives the target to CONTESTED (DET-194).
+  relationKind    LinkRelation?
+  // One-sentence Connector rationale citing both compressions. AI-authored
+  // metadata that explains the proposal — never knowledge, never an articulation.
+  rationale       String?
+  // Who proposed this edge: the Connector (AI) or the user. SUGGESTED + AI = a
+  // pending proposal; a manual user link is created CONFIRMED + USER.
+  proposedBy      QuestionActor @default(USER)
   status          LinkStatus @default(SUGGESTED)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -332,6 +343,18 @@ enum LinkStatus {
   SUGGESTED
   CONFIRMED
   REJECTED
+}
+
+// The typed relationship the Connector (DET-191) attributes to a candidate edge.
+// CONTRADICTION and REDUNDANT are treated specially: a confirmed contradiction
+// moves the target concept to CONTESTED (DET-194), and redundancy offers a merge.
+enum LinkRelation {
+  ANALOGY
+  CONTRADICTION
+  SUPPORTS
+  DEPENDS_ON
+  REFINES
+  REDUNDANT
 }
 
 // Proof-of-learning gate depth (DET-189). QUICK = routine notes; DEEP = new

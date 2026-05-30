@@ -1,4 +1,4 @@
-import { GateMode } from '@kibadist/prisma'
+import { GateMode, LinkRelation } from '@kibadist/prisma'
 import { Type } from 'class-transformer'
 import {
   ArrayMaxSize,
@@ -26,6 +26,12 @@ export class ConnectionInputDto {
   @IsString()
   @MaxLength(60)
   relation?: string
+
+  // Optional typed relationship the user accepted from a Connector proposal
+  // (DET-191). Persisted on the CONFIRMED link so the graph carries the kind.
+  @IsOptional()
+  @IsEnum(LinkRelation)
+  relationKind?: LinkRelation
 }
 
 export class CommitPromotionDto {

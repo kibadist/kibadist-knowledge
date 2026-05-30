@@ -10,8 +10,28 @@ import {
   type ConceptArticulation,
   type ConceptLinkEnd,
   type ConceptRetrievalEvent,
+  type LinkRelation,
   type StateTransition,
 } from '@/lib/api'
+
+// DET-191: typed relationship labels + distinct styling for contradiction /
+// redundancy so a conflicting or duplicative edge stands out in the graph view.
+const RELATION_LABELS: Record<LinkRelation, string> = {
+  ANALOGY: 'analogy',
+  CONTRADICTION: 'contradiction',
+  SUPPORTS: 'supports',
+  DEPENDS_ON: 'depends on',
+  REFINES: 'refines',
+  REDUNDANT: 'redundant',
+}
+
+function relationChipClass(kind: LinkRelation): string {
+  if (kind === 'CONTRADICTION')
+    return 'border-red-700/60 bg-red-950/30 text-red-300'
+  if (kind === 'REDUNDANT')
+    return 'border-amber-700/60 bg-amber-950/30 text-amber-300'
+  return 'border-neutral-700 text-neutral-500'
+}
 
 /**
  * Concept view — a single unit of earned understanding and its proof-of-learning
@@ -107,29 +127,43 @@ export default function ConceptViewPage() {
                 How this idea relates to others.
               </p>
             </div>
-            {concept.outgoingLinks.length === 0 &&
-            concept.incomingLinks.length === 0 ? (
-              <p className='text-sm text-neutral-500'>No connections yet.</p>
-            ) : (
-              <ul className='flex flex-col gap-2'>
-                {concept.outgoingLinks.map((link) => (
-                  <LinkItem
-                    key={link.id}
-                    link={link}
-                    other={link.targetConcept}
-                    direction='→'
-                  />
-                ))}
-                {concept.incomingLinks.map((link) => (
-                  <LinkItem
-                    key={link.id}
-                    link={link}
-                    other={link.sourceConcept}
-                    direction='←'
-                  />
-                ))}
-              </ul>
-            )}
+            {(() => {
+              // Only CONFIRMED links are real graph edges (DET-191). SUGGESTED
+              // proposals and REJECTED dismissals are never rendered as edges.
+              const outgoing = concept.outgoingLinks.filter(
+                (l) => l.status === 'CONFIRMED',
+              )
+              const incoming = concept.incomingLinks.filter(
+                (l) => l.status === 'CONFIRMED',
+              )
+              if (outgoing.length === 0 && incoming.length === 0) {
+                return (
+                  <p className='text-sm text-neutral-500'>
+                    No connections yet.
+                  </p>
+                )
+              }
+              return (
+                <ul className='flex flex-col gap-2'>
+                  {outgoing.map((link) => (
+                    <LinkItem
+                      key={link.id}
+                      link={link}
+                      other={link.targetConcept}
+                      direction='→'
+                    />
+                  ))}
+                  {incoming.map((link) => (
+                    <LinkItem
+                      key={link.id}
+                      link={link}
+                      other={link.sourceConcept}
+                      direction='←'
+                    />
+                  ))}
+                </ul>
+              )
+            })()}
           </section>
 
           <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
@@ -244,26 +278,40 @@ function LinkItem({
   direction: string
 }) {
   return (
-    <li className='flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-950/50 p-3 text-sm'>
-      <span className='text-neutral-500'>{direction}</span>
-      {other ? (
-        <Link
-          href={`/concepts/${other.id}`}
-          className='font-medium text-neutral-100 hover:underline'
-        >
-          {other.title}
-        </Link>
-      ) : (
-        <span className='text-neutral-500'>Unknown concept</span>
-      )}
-      {link.relation && (
-        <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
-          {link.relation}
+    <li className='flex flex-col gap-1 rounded-md border border-neutral-800 bg-neutral-950/50 p-3 text-sm'>
+      <div className='flex flex-wrap items-center gap-2'>
+        <span className='text-neutral-500'>{direction}</span>
+        {other ? (
+          <Link
+            href={`/concepts/${other.id}`}
+            className='font-medium text-neutral-100 hover:underline'
+          >
+            {other.title}
+          </Link>
+        ) : (
+          <span className='text-neutral-500'>Unknown concept</span>
+        )}
+        {link.relationKind && (
+          <span
+            className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${relationChipClass(
+              link.relationKind,
+            )}`}
+          >
+            {RELATION_LABELS[link.relationKind]}
+          </span>
+        )}
+        {link.relation && (
+          <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
+            {link.relation}
+          </span>
+        )}
+        <span className='ml-auto rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
+          {link.status}
         </span>
+      </div>
+      {link.rationale && (
+        <p className='pl-5 text-xs text-neutral-500'>{link.rationale}</p>
       )}
-      <span className='ml-auto rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
-        {link.status}
-      </span>
     </li>
   )
 }

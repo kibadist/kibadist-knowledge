@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module'
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard'
 import { ConceptStateModule } from './concept-state/concept-state.module'
 import { ConceptsModule } from './concepts/concepts.module'
+import { ConnectorModule } from './connector/connector.module'
 import { InboxModule } from './inbox/inbox.module'
 import { IntakeModule } from './intake/intake.module'
 import { LinksModule } from './links/links.module'
@@ -65,6 +66,7 @@ import { UsersModule } from './users/users.module'
     NotesModule,
     ConceptStateModule,
     ConceptsModule,
+    ConnectorModule,
     InboxModule,
     IntakeModule,
     PromotionModule,

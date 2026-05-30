@@ -9,9 +9,30 @@ import { ArticleReader } from '@/components/reader/article-reader'
 import {
   api,
   type GateMode,
+  type LinkRelation,
   type PromotionState,
   type SuggestedConnection,
 } from '@/lib/api'
+
+// DET-191: relation chip styling. CONTRADICTION and REDUNDANT are flagged
+// distinctly (amber / red) so a conflicting or duplicative neighbor stands out
+// from ordinary structural relations.
+const RELATION_LABELS: Record<LinkRelation, string> = {
+  ANALOGY: 'analogy',
+  CONTRADICTION: 'contradiction',
+  SUPPORTS: 'supports',
+  DEPENDS_ON: 'depends on',
+  REFINES: 'refines',
+  REDUNDANT: 'redundant',
+}
+
+function relationChipClass(kind: LinkRelation): string {
+  if (kind === 'CONTRADICTION')
+    return 'border-red-700/60 bg-red-950/30 text-red-300'
+  if (kind === 'REDUNDANT')
+    return 'border-amber-700/60 bg-amber-950/30 text-amber-300'
+  return 'border-neutral-700 text-neutral-400'
+}
 
 /**
  * The Proof-of-Learning Gate (DET-189). Captured ≠ knowledge. Nothing becomes a
@@ -116,14 +137,24 @@ export default function PromoteConceptPage() {
   })
 
   const commit = useMutation({
-    mutationFn: () =>
-      api.commitPromotion(id, {
+    mutationFn: () => {
+      // Carry the Connector's typed relationKind through on each approved edge
+      // (DET-191), looked up from the suggestion the user checked.
+      const relationByTarget = new Map<string, LinkRelation>(
+        (suggestionsQuery.data ?? []).map((s) => [
+          s.targetConceptId,
+          s.relationKind,
+        ]),
+      )
+      return api.commitPromotion(id, {
         mode: effectiveMode,
         isRoot,
         connections: [...approved].map((targetConceptId) => ({
           targetConceptId,
+          relationKind: relationByTarget.get(targetConceptId),
         })),
-      }),
+      })
+    },
     onSuccess: (concept) => router.push(`/concepts/${concept.id}`),
   })
 
@@ -584,17 +615,24 @@ function SuggestionRow({
           className='mt-1'
         />
         <span className='flex flex-col gap-1'>
-          <span className='flex items-center gap-2'>
+          <span className='flex flex-wrap items-center gap-2'>
             <span className='font-medium text-neutral-100'>
               {suggestion.title}
+            </span>
+            <span
+              className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${relationChipClass(
+                suggestion.relationKind,
+              )}`}
+            >
+              {RELATION_LABELS[suggestion.relationKind]}
             </span>
             <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
               {Math.round(suggestion.similarity * 100)}%
             </span>
           </span>
-          {suggestion.snippet && (
-            <span className='line-clamp-2 text-sm text-neutral-400'>
-              {suggestion.snippet}
+          {suggestion.rationale && (
+            <span className='text-sm text-neutral-400'>
+              {suggestion.rationale}
             </span>
           )}
         </span>

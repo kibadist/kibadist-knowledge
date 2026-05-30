@@ -2,8 +2,10 @@ import {
   type CognitiveState,
   ConceptStatus,
   GateMode,
+  LinkRelation,
   LinkStatus,
   Prisma,
+  QuestionActor,
   StateTrigger,
 } from '@kibadist/prisma'
 import {
@@ -18,6 +20,7 @@ import {
 import { AiService } from '../ai/ai.service'
 import { ConceptStateService } from '../concept-state/concept-state.service'
 import { ConceptsService } from '../concepts/concepts.service'
+import { ConnectorService } from '../connector/connector.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { SearchService } from '../search/search.service'
 import {
@@ -63,6 +66,10 @@ export interface SuggestedConnection {
   title: string
   similarity: number
   snippet: string
+  /** The Connector's typed relationship proposal (DET-191). */
+  relationKind: LinkRelation
+  /** One-sentence Connector rationale citing both compressions. */
+  rationale: string
 }
 
 export interface PromotionStateDto {
@@ -103,6 +110,7 @@ export class PromotionService {
     private readonly search: SearchService,
     private readonly sourceQa: SourceQaService,
     private readonly conceptState: ConceptStateService,
+    private readonly connector: ConnectorService,
   ) {}
 
   /** Current promotion state for an inbox item: draft + gate checklist + the
@@ -187,56 +195,22 @@ export class PromotionService {
     const articulation = draft.articulation?.trim()
     if (!articulation) return []
 
-    let matches: Awaited<ReturnType<SearchService['searchArticulations']>>
-    try {
-      matches = await this.search.searchArticulations(
-        userId,
-        articulation,
-        SUGGESTION_LIMIT * 2,
-      )
-    } catch (error) {
-      // Suggestions ride the optional embeddings seam; degrade to none rather
-      // than blocking the gate, but log so a persistently-down provider shows.
-      this.logger.warn(
-        `Connection suggestions failed for ${conceptId}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      )
-      return []
-    }
-
-    // Collapse multiple articulations of the same concept to the best match,
-    // and never suggest linking the item to itself.
-    const bestByConcept = new Map<string, (typeof matches)[number]>()
-    for (const m of matches) {
-      if (m.conceptId === conceptId) continue
-      const prev = bestByConcept.get(m.conceptId)
-      if (!prev || m.similarity > prev.similarity) {
-        bestByConcept.set(m.conceptId, m)
-      }
-    }
-    if (bestByConcept.size === 0) return []
-
-    const titles = await this.prisma.concept.findMany({
-      where: {
-        id: { in: [...bestByConcept.keys()] },
-        userId,
-        status: { not: ConceptStatus.INBOX },
-      },
-      select: { id: true, title: true },
-    })
-    const titleById = new Map(titles.map((c) => [c.id, c.title]))
-
-    return [...bestByConcept.values()]
-      .filter((m) => titleById.has(m.conceptId))
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, SUGGESTION_LIMIT)
-      .map((m) => ({
-        targetConceptId: m.conceptId,
-        title: titleById.get(m.conceptId) as string,
-        similarity: m.similarity,
-        snippet: m.body.slice(0, 160),
-      }))
+    // DET-191: the Connector surfaces TYPED relationships, ephemerally — the
+    // concept is still INBOX, so nothing is persisted (DET-187). It is
+    // best-effort (returns [] on failure), so it never blocks the gate.
+    const proposals = await this.connector.proposeEphemeral(
+      userId,
+      conceptId,
+      articulation,
+    )
+    return proposals.slice(0, SUGGESTION_LIMIT).map((p) => ({
+      targetConceptId: p.targetConceptId,
+      title: p.title,
+      similarity: p.similarity,
+      snippet: p.rationale.slice(0, 160),
+      relationKind: p.relationKind,
+      rationale: p.rationale,
+    }))
   }
 
   /**
@@ -398,15 +372,22 @@ export class PromotionService {
 
     // Validate every approved connection: owned, earned (non-INBOX), not a self
     // link, and de-duplicated. AI suggestions never auto-apply — only what the
-    // user listed here is created.
-    const targets = new Map<string, string | undefined>()
+    // user listed here is created. We carry the relation label and the typed
+    // relationKind the user accepted from a Connector proposal (DET-191).
+    const targets = new Map<
+      string,
+      { relation?: string; relationKind?: LinkRelation }
+    >()
     for (const c of dto.connections) {
       if (c.targetConceptId === conceptId) {
         throw new BadRequestException('A concept cannot link to itself')
       }
       await this.concepts.assertOwnedNonInbox(userId, c.targetConceptId)
       if (!targets.has(c.targetConceptId)) {
-        targets.set(c.targetConceptId, c.relation)
+        targets.set(c.targetConceptId, {
+          relation: c.relation,
+          relationKind: c.relationKind,
+        })
       }
     }
 
@@ -471,13 +452,19 @@ export class PromotionService {
           score: draft.retrievalScore,
         },
       })
-      for (const [targetConceptId, relation] of targets) {
+      for (const [targetConceptId, edge] of targets) {
         try {
           await tx.link.create({
             data: {
               sourceConceptId: conceptId,
               targetConceptId,
-              relation,
+              relation: edge.relation,
+              relationKind: edge.relationKind,
+              // A typed relationKind means the user accepted a Connector
+              // proposal (AI); a bare manual link defaults to USER (DET-191).
+              proposedBy: edge.relationKind
+                ? QuestionActor.AI
+                : QuestionActor.USER,
               status: LinkStatus.CONFIRMED,
               userId,
             },
@@ -517,6 +504,40 @@ export class PromotionService {
     // Embed the new articulation so the now-permanent concept is searchable.
     // Best-effort (SearchService swallows failures) and outside the tx.
     await this.search.indexArticulation(articulationId, articulationBody)
+
+    // A contradiction confirmed at the gate contests its target, same as one
+    // confirmed later via the Links API (DET-191 → DET-194). Best-effort and
+    // post-commit: an illegal target transition (e.g. ARCHIVED) must not undo a
+    // promotion that already succeeded.
+    for (const [targetConceptId, edge] of targets) {
+      if (edge.relationKind !== LinkRelation.CONTRADICTION) continue
+      try {
+        await this.conceptState.transition({
+          conceptId: targetConceptId,
+          userId,
+          to: 'CONTESTED',
+          trigger: StateTrigger.CONTRADICTION,
+          note: `contradicted by ${conceptId}`,
+        })
+      } catch (error) {
+        this.logger.warn(
+          `Could not contest ${targetConceptId} after promotion of ${conceptId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      }
+    }
+
+    // DET-191 background pass: now that the concept is PERMANENT, surface and
+    // PERSIST typed SUGGESTED proposals for later user approval. Fire-and-forget
+    // and self-contained best-effort — a failure here never affects the commit.
+    void this.connector.proposeAndPersist(userId, conceptId).catch((error) => {
+      this.logger.warn(
+        `Connector background pass failed for ${conceptId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    })
 
     return this.concepts.findOne(userId, conceptId)
   }

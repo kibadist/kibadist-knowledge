@@ -165,6 +165,15 @@ export interface IntakeQuestion {
 
 // --- Proof-of-Learning Gate (DET-189) ---
 export type GateMode = 'QUICK' | 'DEEP'
+// The Connector's typed relationship vocabulary (DET-191). Mirrors the server's
+// LinkRelation enum; keep in sync.
+export type LinkRelation =
+  | 'ANALOGY'
+  | 'CONTRADICTION'
+  | 'SUPPORTS'
+  | 'DEPENDS_ON'
+  | 'REFINES'
+  | 'REDUNDANT'
 // The full cognitive-state lifecycle (DET-194). Mirrors the server's
 // CognitiveState enum; keep in sync.
 export type CognitiveState =
@@ -261,6 +270,9 @@ export interface SuggestedConnection {
   title: string
   similarity: number
   snippet: string
+  // The Connector's typed relationship proposal + rationale (DET-191).
+  relationKind: LinkRelation
+  rationale: string
 }
 
 export interface RetrievalGrade {
@@ -272,6 +284,8 @@ export interface RetrievalGrade {
 export interface ConnectionInput {
   targetConceptId: string
   relation?: string
+  // The typed relationship the user accepted from a Connector proposal (DET-191).
+  relationKind?: LinkRelation
 }
 
 export interface CommitPromotionInput {
@@ -301,6 +315,10 @@ export interface ConceptLinkEnd {
   id: string
   status: 'SUGGESTED' | 'CONFIRMED' | 'REJECTED'
   relation: string | null
+  // The Connector's typed relationship + rationale (DET-191). Null on
+  // pre-DET-191 links or bare user-drawn edges with no kind.
+  relationKind: LinkRelation | null
+  rationale: string | null
   targetConcept?: { id: string; title: string }
   sourceConcept?: { id: string; title: string }
 }

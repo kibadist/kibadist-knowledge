@@ -1,4 +1,4 @@
-import { ConceptStatus, GateMode } from '@kibadist/prisma'
+import { ConceptStatus, GateMode, LinkRelation } from '@kibadist/prisma'
 
 import { PromotionService } from './promotion.service'
 
@@ -47,6 +47,10 @@ function makePromotionService() {
   }
   const sourceQa = { recentForContext: jest.fn().mockResolvedValue([]) }
   const conceptState = { transition: jest.fn().mockResolvedValue(undefined) }
+  const connector = {
+    proposeEphemeral: jest.fn().mockResolvedValue([]),
+    proposeAndPersist: jest.fn().mockResolvedValue(undefined),
+  }
   const service = new PromotionService(
     prisma as never,
     concepts as never,
@@ -54,8 +58,9 @@ function makePromotionService() {
     search as never,
     sourceQa as never,
     conceptState as never,
+    connector as never,
   )
-  return { service, prisma, tx, concepts, sourceQa, conceptState }
+  return { service, prisma, tx, concepts, sourceQa, conceptState, connector }
 }
 
 const INBOX_CONCEPT = {
@@ -119,6 +124,50 @@ describe('DET-208 invariant — scaffold never becomes an Articulation', () => {
     const update = prisma.promotionDraft.update.mock.calls[0][0]
     expect(update.data).toEqual({ articulation: USER_ARTICULATION })
     expect(prisma.sourceQuestion.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('DET-191 — a contradiction approved at the gate contests its target', () => {
+  it('drives the target concept to CONTESTED after a CONTRADICTION link is committed', async () => {
+    const { service, prisma, conceptState } = makePromotionService()
+    prisma.concept.findFirst.mockResolvedValue(INBOX_CONCEPT)
+    prisma.promotionDraft.findUnique.mockResolvedValue(PASSING_DRAFT)
+
+    await service.commit('u1', 'c1', {
+      mode: GateMode.QUICK,
+      isRoot: false,
+      connections: [
+        { targetConceptId: 'other', relationKind: LinkRelation.CONTRADICTION },
+      ],
+    })
+
+    // The PROMOTION transition for the promoted concept, plus a CONTESTED
+    // transition for the contradicted target.
+    expect(conceptState.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conceptId: 'other',
+        to: 'CONTESTED',
+        trigger: 'CONTRADICTION',
+      }),
+    )
+  })
+
+  it('does not contest the target for a non-contradiction relationship', async () => {
+    const { service, prisma, conceptState } = makePromotionService()
+    prisma.concept.findFirst.mockResolvedValue(INBOX_CONCEPT)
+    prisma.promotionDraft.findUnique.mockResolvedValue(PASSING_DRAFT)
+
+    await service.commit('u1', 'c1', {
+      mode: GateMode.QUICK,
+      isRoot: false,
+      connections: [
+        { targetConceptId: 'other', relationKind: LinkRelation.SUPPORTS },
+      ],
+    })
+
+    expect(conceptState.transition).not.toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'CONTESTED' }),
+    )
   })
 })
 
