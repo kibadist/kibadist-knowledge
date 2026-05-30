@@ -12,6 +12,12 @@ export const MIN_ARTICULATION_CHARS = 10
 export interface GateState {
   /** Gate 1: the user's own-words articulation (canonical-to-be). */
   articulation: string | null
+  /**
+   * Gate 1 (DET-190): whether the articulation is the user's OWN words rather
+   * than a verbatim copy of the source. Computed by assessCompression against
+   * the concept's source text; a copy fails the Articulate gate.
+   */
+  articulationIsOriginal: boolean
   /** Gate 3: whether the server-graded recall cleared the pass threshold. */
   retrievalPassed: boolean
 }
@@ -46,7 +52,9 @@ export interface GateChecklist {
  * Evaluate the four gates. Pure and total — no exceptions, no I/O.
  *
  * Gate semantics:
- * - articulate: a non-trivial own-words articulation exists.
+ * - articulate: a non-trivial articulation exists AND it is the user's own words,
+ *               not a verbatim copy of the source (DET-190). Copying the source
+ *               past the gate is an explicit anti-behavior.
  * - connect:   at least one link, OR an explicit root. DEEP mode disallows a
  *              bare root — a new core-domain concept must be placed in the graph.
  * - retrieve:  a server-graded recall passed the mode's threshold.
@@ -60,7 +68,8 @@ export function evaluateGates(
 ): GateChecklist {
   const articulate =
     !!state.articulation &&
-    state.articulation.trim().length >= MIN_ARTICULATION_CHARS
+    state.articulation.trim().length >= MIN_ARTICULATION_CHARS &&
+    state.articulationIsOriginal
 
   const hasLink = decision.connectionCount >= 1
   const connect =

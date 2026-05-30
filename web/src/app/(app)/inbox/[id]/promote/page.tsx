@@ -257,6 +257,14 @@ export default function PromoteConceptPage() {
                 Explain it in your own words. Don’t quote the source — show that
                 you understand it.
               </p>
+              {/* Compression facets (DET-190): what a strong own-words
+                  articulation contains. Guidance only — we never write it for you. */}
+              <ul className='mt-2 flex flex-col gap-0.5 text-xs text-neutral-600'>
+                <li>• State the central claim in 1–3 plain sentences.</li>
+                <li>• Explain it as if to a smart friend, not an expert.</li>
+                <li>• What would have to be true for this to be wrong?</li>
+                <li>• What are you NOT claiming? (scope)</li>
+              </ul>
             </div>
             {promotion.referenceQa.length > 0 && (
               <details className='rounded-md border border-neutral-800 bg-neutral-950/40 p-3'>
@@ -288,6 +296,15 @@ export default function PromoteConceptPage() {
               rows={4}
               className='resize-y rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-neutral-400'
             />
+            {/* Verbatim-copy nudge (DET-190): the saved articulation is too
+                close to the source. We flag, never rewrite — the gate stays
+                blocked until it's in the user's own words. */}
+            {promotion.compression.verbatim &&
+              promotion.compression.message && (
+                <p className='rounded-md border border-amber-700/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-300'>
+                  {promotion.compression.message}
+                </p>
+              )}
             {saveArticulation.isError && (
               <p className='text-sm text-red-400'>
                 {saveArticulation.error instanceof Error

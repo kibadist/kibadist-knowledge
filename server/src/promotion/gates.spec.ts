@@ -1,8 +1,18 @@
 import { CognitiveState, GateMode } from '@kibadist/prisma'
 
-import { evaluateGates, MIN_ARTICULATION_CHARS } from './gates'
+import { evaluateGates, type GateState, MIN_ARTICULATION_CHARS } from './gates'
 
 const GOOD_ARTICULATION = 'x'.repeat(MIN_ARTICULATION_CHARS)
+
+/** A passing Gate 1/3 state; override per case. Original by default (DET-190). */
+function state(over: Partial<GateState> = {}): GateState {
+  return {
+    articulation: GOOD_ARTICULATION,
+    articulationIsOriginal: true,
+    retrievalPassed: true,
+    ...over,
+  }
+}
 
 function decision(over: Partial<Parameters<typeof evaluateGates>[1]> = {}) {
   return {
@@ -17,7 +27,7 @@ function decision(over: Partial<Parameters<typeof evaluateGates>[1]> = {}) {
 describe('evaluateGates', () => {
   it('passes all four gates for a linked QUICK promotion', () => {
     const out = evaluateGates(
-      { articulation: GOOD_ARTICULATION, retrievalPassed: true },
+      state(),
       decision({ connectionCount: 1, connectionsReviewed: true }),
     )
     expect(out).toEqual({
@@ -32,7 +42,7 @@ describe('evaluateGates', () => {
 
   it('allows a deliberate root in QUICK mode (EXPLAINED state)', () => {
     const out = evaluateGates(
-      { articulation: GOOD_ARTICULATION, retrievalPassed: true },
+      state(),
       decision({ isRoot: true, connectionsReviewed: true }),
     )
     expect(out.connect).toBe(true)
@@ -42,7 +52,7 @@ describe('evaluateGates', () => {
 
   it('rejects a bare root in DEEP mode — must be placed in the graph', () => {
     const out = evaluateGates(
-      { articulation: GOOD_ARTICULATION, retrievalPassed: true },
+      state(),
       decision({
         isRoot: true,
         connectionsReviewed: true,
@@ -55,7 +65,7 @@ describe('evaluateGates', () => {
 
   it('accepts a linked DEEP promotion', () => {
     const out = evaluateGates(
-      { articulation: GOOD_ARTICULATION, retrievalPassed: true },
+      state(),
       decision({
         connectionCount: 2,
         connectionsReviewed: true,
@@ -69,21 +79,31 @@ describe('evaluateGates', () => {
   it('fails articulate on missing or too-short text', () => {
     expect(
       evaluateGates(
-        { articulation: null, retrievalPassed: true },
+        state({ articulation: null }),
         decision({ connectionCount: 1, connectionsReviewed: true }),
       ).articulate,
     ).toBe(false)
     expect(
       evaluateGates(
-        { articulation: '   short   ', retrievalPassed: true },
+        state({ articulation: '   short   ' }),
         decision({ connectionCount: 1, connectionsReviewed: true }),
       ).articulate,
     ).toBe(false)
   })
 
+  it('fails articulate when the text is a verbatim copy of the source (DET-190)', () => {
+    const out = evaluateGates(
+      // Long enough text, but flagged as not the user's own words.
+      state({ articulationIsOriginal: false }),
+      decision({ connectionCount: 1, connectionsReviewed: true }),
+    )
+    expect(out.articulate).toBe(false)
+    expect(out.ready).toBe(false)
+  })
+
   it('fails retrieve until the graded recall passes', () => {
     const out = evaluateGates(
-      { articulation: GOOD_ARTICULATION, retrievalPassed: false },
+      state({ retrievalPassed: false }),
       decision({ connectionCount: 1, connectionsReviewed: true }),
     )
     expect(out.retrieve).toBe(false)
@@ -92,7 +112,7 @@ describe('evaluateGates', () => {
 
   it('fails validate if AI connections were never reviewed', () => {
     const out = evaluateGates(
-      { articulation: GOOD_ARTICULATION, retrievalPassed: true },
+      state(),
       decision({ connectionCount: 1, connectionsReviewed: false }),
     )
     expect(out.validate).toBe(false)
@@ -100,10 +120,7 @@ describe('evaluateGates', () => {
   })
 
   it('fails connect with no link and no root', () => {
-    const out = evaluateGates(
-      { articulation: GOOD_ARTICULATION, retrievalPassed: true },
-      decision({ connectionsReviewed: true }),
-    )
+    const out = evaluateGates(state(), decision({ connectionsReviewed: true }))
     expect(out.connect).toBe(false)
     expect(out.ready).toBe(false)
   })

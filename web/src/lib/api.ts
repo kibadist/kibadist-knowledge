@@ -235,6 +235,15 @@ export interface ReferenceQa {
   answerText: string
 }
 
+// Compression quality signal (DET-190). Flags when an articulation is a verbatim
+// copy of the source so the UI can nudge the user to rephrase. Mirrors the
+// server's CompressionSignal; keep in sync.
+export interface CompressionSignal {
+  verbatim: boolean
+  sourceOverlap: number
+  message: string | null
+}
+
 export interface PromotionState {
   conceptId: string
   title: string
@@ -242,6 +251,7 @@ export interface PromotionState {
   sourceDocument: SourceDocument | null
   draft: PromotionDraft
   checklist: GateChecklist
+  compression: CompressionSignal
   suggestedMode: GateMode
   referenceQa: ReferenceQa[]
 }

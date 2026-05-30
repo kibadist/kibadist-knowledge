@@ -28,6 +28,7 @@ import {
   type ReferenceQaContext,
   SourceQaService,
 } from '../source-qa/source-qa.service'
+import { assessCompression, type CompressionSignal } from './compression'
 import type { CommitPromotionDto } from './dto/commit-promotion.dto'
 import {
   buildGradePrompt,
@@ -72,6 +73,9 @@ export interface PromotionStateDto {
   sourceDocument: SourceDocument | null
   draft: PromotionDraftDto
   checklist: GateChecklist
+  /** Compression quality signal (DET-190): flags a verbatim copy of the source so
+   *  the UI can ask the user to rephrase. The Articulate gate fails when verbatim. */
+  compression: CompressionSignal
   suggestedMode: GateMode
   /** Read-only reference Q&A (DET-208) the user explored while reading. Surfaced
    *  so Compression can DISPLAY it as scaffold — it never prefills or writes the
@@ -123,13 +127,20 @@ export class PromotionService {
         }`,
       )
     }
+    // Compression quality (DET-190): is the articulation the user's own words,
+    // or a copy of the source? Drives both the Articulate gate and the UI nudge.
+    const compression = assessCompression(
+      draft.articulation,
+      concept.sourceText,
+    )
     return {
       conceptId,
       title: concept.title,
       sourceText: concept.sourceText,
       sourceDocument: asSourceDocument(concept.sourceDocument),
       draft: this.toDraftDto(draft),
-      checklist: this.checklistFor(draft, draft.mode),
+      checklist: this.checklistFor(draft, draft.mode, concept.sourceText),
+      compression,
       suggestedMode,
       referenceQa,
     }
@@ -369,7 +380,7 @@ export class PromotionService {
    * epistemic guarantee; there is no other path to PERMANENT anywhere in the app.
    */
   async commit(userId: string, conceptId: string, dto: CommitPromotionDto) {
-    await this.requireInboxConcept(userId, conceptId)
+    const concept = await this.requireInboxConcept(userId, conceptId)
     const draft = await this.prisma.promotionDraft.findUnique({
       where: { conceptId },
     })
@@ -412,8 +423,18 @@ export class PromotionService {
     const retrievalPassed =
       draft.retrievalScore != null &&
       isPassingScore(draft.retrievalScore, dto.mode)
+    // DET-190 authoritative re-check: a verbatim copy of the source can never be
+    // promoted, even if a client bypasses the UI. Compression must be original.
+    const articulationIsOriginal = !assessCompression(
+      draft.articulation,
+      concept.sourceText,
+    ).verbatim
     const checklist = evaluateGates(
-      { articulation: draft.articulation, retrievalPassed },
+      {
+        articulation: draft.articulation,
+        articulationIsOriginal,
+        retrievalPassed,
+      },
       decision,
     )
     if (!checklist.ready) {
@@ -553,6 +574,7 @@ export class PromotionService {
       retrievalScore: number | null
     },
     mode: GateMode,
+    sourceText: string | null,
   ): GateChecklist {
     // Pre-commit checklist is advisory for `connect` (which approved links are
     // chosen at commit, so we show it with count 0). `validate` is real here —
@@ -560,8 +582,17 @@ export class PromotionService {
     // all gates happens in commit().
     const retrievalPassed =
       draft.retrievalScore != null && isPassingScore(draft.retrievalScore, mode)
+    // DET-190: a verbatim copy of the source fails the Articulate gate.
+    const articulationIsOriginal = !assessCompression(
+      draft.articulation,
+      sourceText,
+    ).verbatim
     return evaluateGates(
-      { articulation: draft.articulation, retrievalPassed },
+      {
+        articulation: draft.articulation,
+        articulationIsOriginal,
+        retrievalPassed,
+      },
       {
         connectionCount: 0,
         isRoot: false,
