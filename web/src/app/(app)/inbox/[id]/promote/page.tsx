@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 import { ArticleReader } from '@/components/reader/article-reader'
@@ -72,6 +72,11 @@ export default function PromoteConceptPage() {
   const id = params.id
   const router = useRouter()
   const queryClient = useQueryClient()
+  // Concept Library handoff (DET-211): if we arrived from a candidate, its
+  // label + definition come back as DISPLAY-ONLY reference context. It is never
+  // prefilled into the articulation field below (DET-190 no-prefill invariant).
+  const searchParams = useSearchParams()
+  const candidateId = searchParams.get('candidateId') ?? undefined
 
   // Local gate state. AI suggestions are never auto-applied — only what the
   // user explicitly approves below is ever sent to the server.
@@ -88,8 +93,8 @@ export default function PromoteConceptPage() {
   } | null>(null)
 
   const promotionQuery = useQuery({
-    queryKey: ['promotion', id],
-    queryFn: () => api.getPromotion(id),
+    queryKey: ['promotion', id, candidateId ?? null],
+    queryFn: () => api.getPromotion(id, candidateId),
   })
 
   const promotion = promotionQuery.data
@@ -122,7 +127,7 @@ export default function PromoteConceptPage() {
   }, [promotion])
 
   function applyState(updated: PromotionState) {
-    queryClient.setQueryData(['promotion', id], updated)
+    queryClient.setQueryData(['promotion', id, candidateId ?? null], updated)
   }
 
   const saveArticulation = useMutation({
@@ -365,6 +370,29 @@ export default function PromoteConceptPage() {
                   ))}
                 </ul>
               </details>
+            )}
+            {/* Concept Library reference context (DET-211). DISPLAY-ONLY: the
+                candidate's source-grounded gloss is shown so the user knows what
+                they're earning. It is deliberately NOT written into the textarea
+                below — the articulation stays the user's own words (DET-190). */}
+            {promotion.candidateContext && (
+              <div className='rounded-md border border-neutral-800 bg-neutral-950/40 p-3'>
+                <span className='inline-block rounded border border-amber-700/40 bg-amber-950/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300/80'>
+                  From the article · reference only
+                </span>
+                <p className='mt-1.5 text-sm font-medium text-neutral-200'>
+                  {promotion.candidateContext.label}
+                </p>
+                {promotion.candidateContext.definition && (
+                  <p className='mt-1 text-sm text-neutral-500'>
+                    {promotion.candidateContext.definition}
+                  </p>
+                )}
+                <p className='mt-1.5 text-xs text-neutral-600'>
+                  This is the source’s gloss, for reference. Write your own
+                  understanding below — we won’t fill it in for you.
+                </p>
+              </div>
             )}
             <textarea
               value={articulation}

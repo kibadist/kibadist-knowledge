@@ -95,6 +95,11 @@ export interface PromotionStateDto {
    *  so Compression can DISPLAY it as scaffold — it never prefills or writes the
    *  canonical articulation, which stays user-authored via {@link saveArticulation}. */
   referenceQa: ReferenceQaContext[]
+  /** Concept Library handoff (DET-211): when promotion is opened FROM a candidate,
+   *  its source-grounded label + definition are surfaced as DISPLAY-ONLY reference
+   *  context. This is scaffold the user may consult — it is NEVER written into
+   *  draft.articulation (DET-190 no-prefill invariant), which stays user-authored. */
+  candidateContext?: { label: string; definition: string | null }
 }
 
 /**
@@ -125,6 +130,7 @@ export class PromotionService {
   async getState(
     userId: string,
     conceptId: string,
+    candidateId?: string,
   ): Promise<PromotionStateDto> {
     const concept = await this.requireInboxConcept(userId, conceptId)
     const draft = await this.ensureDraft(userId, conceptId)
@@ -159,6 +165,15 @@ export class PromotionService {
       draft.articulation,
       concept.sourceText,
     )
+    // Concept Library handoff (DET-211): if opened from a candidate, surface its
+    // label + definition as DISPLAY-ONLY reference context. We deliberately read
+    // it into a separate field and NEVER touch draft.articulation — the canonical
+    // articulation stays user-authored (DET-190 no-prefill invariant).
+    const candidateContext = await this.candidateContextFor(
+      userId,
+      conceptId,
+      candidateId,
+    )
     return {
       conceptId,
       title: concept.title,
@@ -174,7 +189,29 @@ export class PromotionService {
       frictionLevel: draft.frictionLevel,
       frictionProposal,
       referenceQa,
+      candidateContext,
     }
+  }
+
+  /**
+   * Concept Library handoff (DET-211): load a candidate's DISPLAY-ONLY reference
+   * context (label + source-grounded definition) for the promote screen. Scoped
+   * to the owner + this concept so a foreign/mismatched id yields nothing. This
+   * is reference scaffold ONLY — the caller surfaces it for display and never
+   * writes it into draft.articulation (DET-190 no-prefill invariant).
+   */
+  private async candidateContextFor(
+    userId: string,
+    conceptId: string,
+    candidateId?: string,
+  ): Promise<{ label: string; definition: string | null } | undefined> {
+    if (!candidateId) return undefined
+    const candidate = await this.prisma.sourceConceptCandidate.findFirst({
+      where: { id: candidateId, conceptId, userId },
+      select: { label: true, definition: true },
+    })
+    if (!candidate) return undefined
+    return { label: candidate.label, definition: candidate.definition }
   }
 
   /** Gate 1 — store the user's own-words articulation. */

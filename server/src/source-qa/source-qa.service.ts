@@ -16,7 +16,9 @@ import { AiService } from '../ai/ai.service'
 import { PrismaService } from '../prisma/prisma.service'
 import {
   asSourceDocument,
+  documentToContextLines,
   documentToPromptContext,
+  type SourceDocument,
 } from '../source-document/source-document'
 import type { AskQuestionDto } from './dto/ask-question.dto'
 import {
@@ -87,7 +89,19 @@ export class SourceQaService {
     // the AI attribute citations to specific blocks. Fall back to the flattened
     // raw text for items captured before structured extraction existed.
     const doc = asSourceDocument(concept.sourceDocument)
-    const structuredSource = doc ? documentToPromptContext(doc) : ''
+    // Concept Library scoping (DET-211): when the question is scoped to a chunk or
+    // candidate, narrow the grounding context to just those source blocks; absent
+    // a scope (or any structured doc), keep the whole-document default.
+    const scopedBlockIds = await this.resolveScopedBlockIds(
+      userId,
+      conceptId,
+      dto,
+    )
+    const structuredSource = doc
+      ? scopedBlockIds
+        ? scopedDocumentContext(doc, scopedBlockIds)
+        : documentToPromptContext(doc)
+      : ''
     const source = structuredSource || (concept.sourceText ?? '').trim()
     if (!source) {
       throw new BadRequestException('This item has no source text to ask about')
@@ -187,6 +201,35 @@ export class SourceQaService {
     }))
   }
 
+  /**
+   * Concept Library scoping (DET-211): resolve the source block ids a scoped
+   * question should be grounded in. A `chunkId` takes precedence over a
+   * `candidateId`. Both are owner+concept-scoped lookups, so a foreign or
+   * mismatched id yields no scope and we fall back to whole-document grounding
+   * rather than leaking another item's blocks. Returns null when unscoped.
+   */
+  private async resolveScopedBlockIds(
+    userId: string,
+    conceptId: string,
+    dto: AskQuestionDto,
+  ): Promise<string[] | null> {
+    if (dto.chunkId) {
+      const chunk = await this.prisma.sourceChunk.findFirst({
+        where: { id: dto.chunkId, conceptId, userId },
+        select: { blockIds: true },
+      })
+      return chunk?.blockIds.length ? chunk.blockIds : null
+    }
+    if (dto.candidateId) {
+      const candidate = await this.prisma.sourceConceptCandidate.findFirst({
+        where: { id: dto.candidateId, conceptId, userId },
+        select: { sourceBlockIds: true },
+      })
+      return candidate?.sourceBlockIds.length ? candidate.sourceBlockIds : null
+    }
+    return null
+  }
+
   /** Inbox-status concept the user owns (asking happens while reading an inbox
    *  item). Mirrors the intake/promotion guards. */
   private async requireInboxConcept(userId: string, conceptId: string) {
@@ -231,4 +274,26 @@ export class SourceQaService {
       createdAt: row.createdAt,
     }
   }
+}
+
+/**
+ * Concept Library scoping (DET-211): render block-id-annotated context limited to
+ * the given block ids (a chunk's or candidate's source blocks), preserving
+ * document order. The answer remains source-grounded scaffold — narrowing the
+ * grounding window doesn't change what the answer IS (DET-208 invariant).
+ */
+function scopedDocumentContext(
+  doc: SourceDocument,
+  blockIds: string[],
+  maxChars = 6000,
+): string {
+  const allowed = new Set(blockIds)
+  let out = ''
+  for (const line of documentToContextLines(doc)) {
+    if (!allowed.has(line.blockId)) continue
+    const entry = `[${line.blockId}] ${line.text}\n`
+    if (out.length + entry.length > maxChars) break
+    out += entry
+  }
+  return out.trim()
 }

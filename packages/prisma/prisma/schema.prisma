@@ -33,6 +33,8 @@ model User {
   stateTransitions ConceptStateTransition[]
   sessions         Session[]
   reflections      Reflection[]
+  sourceChunks     SourceChunk[]
+  conceptCandidates SourceConceptCandidate[]
 
   @@map("user")
 }
@@ -128,6 +130,8 @@ model Concept {
   stateTransitions ConceptStateTransition[]
   sessionItems    SessionItem[]
   reflections     Reflection[]
+  sourceChunks    SourceChunk[]
+  conceptCandidates SourceConceptCandidate[]
 
   @@index([userId])
   @@index([userId, status])
@@ -460,6 +464,113 @@ enum Certainty {
   ASSERTED
   TENTATIVE
   UNCERTAIN
+}
+
+// Semantic chunk of a captured article (DET-211). A structured SourceDocument
+// (DET-210) is divided into coherent, classified sections so the article becomes
+// LEARNABLE, not just readable. Lives against the INBOX concept that owns the
+// source. SCAFFOLD/source object — NEVER earned knowledge; promotion through the
+// Proof-of-Learning gate (DET-189) is the only path to a canonical Concept.
+model SourceChunk {
+  id         String        @id @default(cuid())
+  conceptId  String
+  userId     String
+  title      String?
+  // Optional AI scaffold summary — comprehension aid, never canonical knowledge.
+  summary    String?
+  blockIds   String[]
+  kind       ChunkKind     @default(OTHER)
+  importance ChunkImportance @default(SUPPORTING)
+  position   Int
+  createdAt  DateTime      @default(now())
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conceptId, position])
+  @@index([userId])
+  @@map("source_chunk")
+}
+
+// A candidate concept extracted from a captured article (DET-211). HARD BOUNDARY:
+// a candidate is a source/scaffold object, NOT an earned Concept. It never enters
+// the permanent graph automatically — only the user articulating + connecting +
+// retrieving + validating through the gate (DET-189) promotes it. `definition` is
+// source-grounded scaffold, shown as context but never prefilling the user's
+// canonical articulation (DET-190).
+model SourceConceptCandidate {
+  id            String                  @id @default(cuid())
+  conceptId     String
+  userId        String
+  chunkId       String?
+  label         String
+  definition    String?
+  aliases       String[]
+  sourceBlockIds String[]
+  kind          CandidateKind           @default(CONCEPT)
+  importance    CandidateImportance     @default(SUPPORTING)
+  generatedBy   Generator               @default(AI)
+  promotionStatus CandidatePromotionStatus @default(CANDIDATE)
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conceptId])
+  @@index([userId])
+  @@index([conceptId, promotionStatus])
+  @@map("source_concept_candidate")
+}
+
+enum ChunkKind {
+  MAIN_IDEA
+  DEFINITION
+  EXAMPLE
+  APPLICATION
+  HISTORY
+  REFERENCE
+  NOISE
+  OTHER
+}
+
+enum ChunkImportance {
+  CORE
+  SUPPORTING
+  PERIPHERAL
+}
+
+enum CandidateKind {
+  CONCEPT
+  TERM
+  PERSON
+  METHOD
+  FORMULA
+  THEOREM
+  APPLICATION
+}
+
+enum CandidateImportance {
+  CORE
+  SUPPORTING
+  PREREQUISITE
+  PERIPHERAL
+}
+
+// Who produced a chunk/candidate (DET-211). Deterministic segmentation = SYSTEM;
+// AI extraction = AI; a user-added candidate = USER.
+enum Generator {
+  SYSTEM
+  AI
+  USER
+}
+
+// Lifecycle of a candidate concept (DET-211). CANDIDATE until the user acts;
+// DISMISSED if they reject it; PROMOTED once it has been earned through the gate.
+enum CandidatePromotionStatus {
+  CANDIDATE
+  DISMISSED
+  PROMOTED
 }
 
 enum ConceptStatus {

@@ -2,16 +2,25 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
-import { ArticleBlocks } from '@/components/reader/article-blocks'
 import {
   ArticleReader,
   ReaderError,
   ReaderSkeleton,
 } from '@/components/reader/article-reader'
-import { api, type IntakeQuestion, type SourceQuestion } from '@/lib/api'
+import {
+  api,
+  type CandidateImportance,
+  type ChunkImportance,
+  type ChunkKind,
+  type ConceptLibrary,
+  type IntakeQuestion,
+  type SourceChunk,
+  type SourceConceptCandidate,
+  type SourceQuestion,
+} from '@/lib/api'
 
 const KIND_LABEL: Record<string, string> = {
   central_claim: 'Central claim',
@@ -343,64 +352,336 @@ function ReferenceQaPanel({ conceptId }: { conceptId: string }) {
   )
 }
 
+// Human labels for chunk kinds. REFERENCE/NOISE chunks are collapsed by default.
+const CHUNK_KIND_LABEL: Record<ChunkKind, string> = {
+  MAIN_IDEA: 'Main idea',
+  DEFINITION: 'Definition',
+  EXAMPLE: 'Example',
+  APPLICATION: 'Application',
+  HISTORY: 'History',
+  REFERENCE: 'Reference',
+  NOISE: 'Noise',
+  OTHER: 'Section',
+}
+
+const CHUNK_IMPORTANCE_LABEL: Record<ChunkImportance, string> = {
+  CORE: 'core',
+  SUPPORTING: 'supporting',
+  PERIPHERAL: 'peripheral',
+}
+
+const CANDIDATE_IMPORTANCE_LABEL: Record<CandidateImportance, string> = {
+  CORE: 'core',
+  SUPPORTING: 'supporting',
+  PREREQUISITE: 'prerequisite',
+  PERIPHERAL: 'peripheral',
+}
+
+// Chunks that are reference lists / boilerplate add little to study — collapse
+// them by default so the learnable sections lead.
+function isLowSignalChunk(kind: ChunkKind): boolean {
+  return kind === 'REFERENCE' || kind === 'NOISE'
+}
+
+// Rank for ordering: CORE concepts surface first within a chunk.
+const IMPORTANCE_RANK: Record<CandidateImportance, number> = {
+  CORE: 0,
+  PREREQUISITE: 1,
+  SUPPORTING: 2,
+  PERIPHERAL: 3,
+}
+
 /**
- * The Concept Library (DET-211). A captured structured article bundles many
- * cognitive objects into one wall of text. Here we surface it broken into
- * section-sized learnable pieces so the article becomes something you study and
- * recall one chunk at a time, not re-read whole. Only shown for an article with
- * ≥ 2 chunks — a single-chunk article gains nothing from being "split".
+ * The Concept Library (DET-211). A captured article bundles many cognitive
+ * objects into one wall of text. Here we surface it as the concepts it
+ * introduces, grouped by section, CORE concepts first — so the article becomes
+ * something you study one idea at a time.
  *
- * MVP scope: this SURFACES the library. Promoting an individual chunk into its
- * own concept is the natural next step (it needs schema/flow changes) and is not
- * wired yet — the note below keeps the UI honest about that.
+ * HARD BOUNDARY: everything shown here is SCAFFOLD / source material, never an
+ * earned concept. A candidate's definition is a source-grounded reference gloss
+ * — "Compress this" hands it to the gate as DISPLAY-ONLY context; it is never
+ * prefilled into your articulation (DET-190). Only the gate promotes knowledge.
  */
 function ConceptLibraryPanel({ inboxId }: { inboxId: string }) {
-  const chunksQuery = useQuery({
-    queryKey: ['inbox-chunks', inboxId],
-    queryFn: () => api.getInboxChunks(inboxId),
+  const queryClient = useQueryClient()
+  const router = useRouter()
+
+  const libraryQuery = useQuery({
+    queryKey: ['concept-library', inboxId],
+    queryFn: () => api.getConceptLibrary(inboxId),
   })
 
-  const chunks = chunksQuery.data
-  // A single-chunk (or empty) article gains nothing from being split — hide it.
-  if (!chunks || chunks.length < 2) return null
+  const regenerate = useMutation({
+    mutationFn: () => api.regenerateConceptLibrary(inboxId),
+    onSuccess: (data) =>
+      queryClient.setQueryData(['concept-library', inboxId], data),
+  })
+
+  const dismiss = useMutation({
+    mutationFn: (candidateId: string) => api.dismissCandidate(candidateId),
+    onSuccess: (_void, candidateId) => {
+      queryClient.setQueryData<ConceptLibrary>(
+        ['concept-library', inboxId],
+        (prev) =>
+          prev
+            ? {
+                ...prev,
+                candidates: prev.candidates.filter((c) => c.id !== candidateId),
+              }
+            : prev,
+      )
+    },
+  })
+
+  const library = libraryQuery.data
+  // An empty or single-chunk library with no candidates gains nothing — hide it.
+  if (
+    !library ||
+    (library.chunks.length < 2 && library.candidates.length === 0)
+  ) {
+    return null
+  }
+
+  // Group candidates under their owning chunk; keep chunk reading order.
+  const candidatesByChunk = new Map<string | null, SourceConceptCandidate[]>()
+  for (const cand of library.candidates) {
+    const list = candidatesByChunk.get(cand.chunkId) ?? []
+    list.push(cand)
+    candidatesByChunk.set(cand.chunkId, list)
+  }
+  for (const list of candidatesByChunk.values()) {
+    list.sort(
+      (a, b) => IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance],
+    )
+  }
 
   return (
     <section className='flex flex-col gap-4 rounded-lg border border-neutral-800 bg-neutral-950/30 p-4'>
-      <div>
-        <h2 className='text-sm font-semibold text-neutral-200'>
-          Concept Library
-        </h2>
-        <p className='text-xs text-neutral-500'>
-          This article, broken into learnable pieces — study and recall one at a
-          time instead of re-reading the whole thing.
-        </p>
+      <div className='flex items-start justify-between gap-3'>
+        <div>
+          <h2 className='text-sm font-semibold text-neutral-200'>
+            Concepts in this article
+          </h2>
+          <p className='text-xs text-neutral-500'>
+            What this article introduces, grouped by section. These are
+            reference scaffold — not your knowledge. You earn each one through
+            the gate.
+          </p>
+        </div>
+        <button
+          type='button'
+          onClick={() => regenerate.mutate()}
+          disabled={regenerate.isPending}
+          className='shrink-0 rounded-md border border-neutral-700 px-2.5 py-1 text-xs transition hover:bg-neutral-900 disabled:opacity-50'
+        >
+          {regenerate.isPending ? 'Rebuilding…' : 'Rebuild'}
+        </button>
       </div>
 
       <ol className='flex flex-col gap-3'>
-        {chunks.map((chunk, i) => (
-          <li
+        {library.chunks.map((chunk) => (
+          <ChunkGroup
             key={chunk.id}
-            className='rounded-md border border-neutral-800 bg-neutral-900/40 p-4'
-          >
-            <div className='flex items-baseline justify-between gap-3'>
-              <h3 className='font-medium text-neutral-100'>
-                <span className='mr-2 text-neutral-600'>{i + 1}.</span>
-                {chunk.title}
-              </h3>
-              <span className='shrink-0 rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
-                {chunk.wordCount} words
-              </span>
-            </div>
-            <div className='mt-3 max-h-72 overflow-y-auto border-l-2 border-neutral-800 pl-3'>
-              <ArticleBlocks blocks={chunk.blocks} />
-            </div>
-          </li>
+            inboxId={inboxId}
+            chunk={chunk}
+            candidates={candidatesByChunk.get(chunk.id) ?? []}
+            onCompress={(candidateId) =>
+              router.push(
+                `/inbox/${inboxId}/promote?candidateId=${encodeURIComponent(candidateId)}`,
+              )
+            }
+            onDismiss={(candidateId) => dismiss.mutate(candidateId)}
+          />
         ))}
       </ol>
-
-      <p className='text-xs text-neutral-600'>
-        Promoting an individual piece into its own concept is coming next.
-      </p>
     </section>
+  )
+}
+
+function ChunkGroup({
+  inboxId,
+  chunk,
+  candidates,
+  onCompress,
+  onDismiss,
+}: {
+  inboxId: string
+  chunk: SourceChunk
+  candidates: SourceConceptCandidate[]
+  onCompress: (candidateId: string) => void
+  onDismiss: (candidateId: string) => void
+}) {
+  // Low-signal sections (references, boilerplate) collapse by default.
+  const lowSignal = isLowSignalChunk(chunk.kind)
+
+  return (
+    <li className='rounded-md border border-neutral-800 bg-neutral-900/40 p-4'>
+      <details open={!lowSignal}>
+        <summary className='flex cursor-pointer flex-wrap items-center gap-2'>
+          <h3 className='font-medium text-neutral-100'>
+            {chunk.title ?? 'Section'}
+          </h3>
+          <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
+            {CHUNK_KIND_LABEL[chunk.kind]}
+          </span>
+          <span
+            className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+              chunk.importance === 'CORE'
+                ? 'border-emerald-700/60 text-emerald-300/80'
+                : 'border-neutral-700 text-neutral-500'
+            }`}
+          >
+            {CHUNK_IMPORTANCE_LABEL[chunk.importance]}
+          </span>
+          {candidates.length > 0 && (
+            <span className='text-[10px] text-neutral-600'>
+              {candidates.length} concept{candidates.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </summary>
+
+        {candidates.length === 0 ? (
+          <p className='mt-3 text-xs text-neutral-600'>
+            No distinct concepts extracted from this section.
+          </p>
+        ) : (
+          <ul className='mt-3 flex flex-col gap-2'>
+            {candidates.map((cand) => (
+              <CandidateRow
+                key={cand.id}
+                inboxId={inboxId}
+                candidate={cand}
+                onCompress={() => onCompress(cand.id)}
+                onDismiss={() => onDismiss(cand.id)}
+              />
+            ))}
+          </ul>
+        )}
+      </details>
+    </li>
+  )
+}
+
+function CandidateRow({
+  inboxId,
+  candidate,
+  onCompress,
+  onDismiss,
+}: {
+  inboxId: string
+  candidate: SourceConceptCandidate
+  onCompress: () => void
+  onDismiss: () => void
+}) {
+  const [askOpen, setAskOpen] = useState(false)
+  const [question, setQuestion] = useState('')
+  const [answer, setAnswer] = useState<string | null>(null)
+
+  // Ask scoped to THIS candidate's source blocks (DET-211 scoped Q&A). The answer
+  // is reference scaffold, shown transiently — never saved as knowledge.
+  const ask = useMutation({
+    mutationFn: (q: string) =>
+      api.askSourceQuestion(inboxId, q, { candidateId: candidate.id }),
+    onSuccess: (created) => {
+      setAnswer(created.answerText)
+      setQuestion('')
+    },
+  })
+
+  return (
+    <li className='rounded-md border border-neutral-800 bg-neutral-950/50 p-3'>
+      <div className='flex flex-wrap items-center gap-2'>
+        <span className='font-medium text-neutral-100'>{candidate.label}</span>
+        <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
+          {candidate.kind.toLowerCase()}
+        </span>
+        <span
+          className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+            candidate.importance === 'CORE'
+              ? 'border-emerald-700/60 text-emerald-300/80'
+              : 'border-neutral-700 text-neutral-500'
+          }`}
+        >
+          {CANDIDATE_IMPORTANCE_LABEL[candidate.importance]}
+        </span>
+      </div>
+
+      {candidate.definition && (
+        <details className='mt-1.5'>
+          <summary className='cursor-pointer text-xs uppercase tracking-wide text-neutral-600'>
+            Source-grounded definition (reference)
+          </summary>
+          <p className='mt-1 border-l-2 border-amber-700/40 pl-3 text-sm text-neutral-400'>
+            {candidate.definition}
+          </p>
+        </details>
+      )}
+
+      <div className='mt-2 flex flex-wrap gap-2'>
+        <button
+          type='button'
+          onClick={() => setAskOpen((v) => !v)}
+          className='rounded-md border border-neutral-700 px-2.5 py-1 text-xs transition hover:bg-neutral-900'
+        >
+          Ask about this
+        </button>
+        <button
+          type='button'
+          onClick={onCompress}
+          className='rounded-md bg-white px-2.5 py-1 text-xs font-medium text-black transition hover:bg-neutral-200'
+        >
+          Compress this
+        </button>
+        <button
+          type='button'
+          onClick={onDismiss}
+          className='rounded-md border border-neutral-800 px-2.5 py-1 text-xs text-neutral-500 transition hover:text-neutral-300'
+        >
+          Dismiss
+        </button>
+      </div>
+
+      {askOpen && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            const trimmed = question.trim()
+            if (trimmed) ask.mutate(trimmed)
+          }}
+          className='mt-2 flex flex-col gap-2'
+        >
+          <input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder={`Ask about “${candidate.label}”…`}
+            className='rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm outline-none focus:border-neutral-400'
+          />
+          {ask.isError && (
+            <p className='text-xs text-red-400'>
+              {ask.error instanceof Error
+                ? ask.error.message
+                : 'Could not answer right now'}
+            </p>
+          )}
+          <button
+            type='submit'
+            disabled={ask.isPending || !question.trim()}
+            className='self-start rounded-md border border-neutral-700 px-2.5 py-1 text-xs transition hover:bg-neutral-900 disabled:opacity-50'
+          >
+            {ask.isPending ? 'Asking…' : 'Ask'}
+          </button>
+          {answer && (
+            <div className='border-l-2 border-amber-700/40 pl-3'>
+              <span className='inline-block rounded border border-amber-700/40 bg-amber-950/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300/80'>
+                Reference · AI scaffold
+              </span>
+              <p className='mt-1.5 whitespace-pre-wrap text-sm text-neutral-400'>
+                {answer}
+              </p>
+            </div>
+          )}
+        </form>
+      )}
+    </li>
   )
 }

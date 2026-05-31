@@ -165,6 +165,69 @@ export interface ConceptChunk {
   wordCount: number
 }
 
+// --- Concept Library: persisted classification + candidates (DET-211) ---
+// Everything here is SCAFFOLD / source material, never an earned Concept. A
+// candidate's `definition` is a source-grounded gloss shown as CONTEXT — it never
+// prefills the user's articulation (DET-190). Mirrors the server DTOs; keep in sync.
+export type ChunkKind =
+  | 'MAIN_IDEA'
+  | 'DEFINITION'
+  | 'EXAMPLE'
+  | 'APPLICATION'
+  | 'HISTORY'
+  | 'REFERENCE'
+  | 'NOISE'
+  | 'OTHER'
+export type ChunkImportance = 'CORE' | 'SUPPORTING' | 'PERIPHERAL'
+export type CandidateKind =
+  | 'CONCEPT'
+  | 'TERM'
+  | 'PERSON'
+  | 'METHOD'
+  | 'FORMULA'
+  | 'THEOREM'
+  | 'APPLICATION'
+export type CandidateImportance =
+  | 'CORE'
+  | 'SUPPORTING'
+  | 'PREREQUISITE'
+  | 'PERIPHERAL'
+export type Generator = 'SYSTEM' | 'AI' | 'USER'
+export type CandidatePromotionStatus = 'CANDIDATE' | 'DISMISSED' | 'PROMOTED'
+
+// A classified, section-sized chunk persisted for the library.
+export interface SourceChunk {
+  id: string
+  conceptId: string
+  title: string | null
+  summary: string | null
+  blockIds: string[]
+  kind: ChunkKind
+  importance: ChunkImportance
+  position: number
+}
+
+// A candidate concept extracted from a chunk. NEVER an earned Concept.
+export interface SourceConceptCandidate {
+  id: string
+  conceptId: string
+  chunkId: string | null
+  label: string
+  definition: string | null
+  aliases: string[]
+  sourceBlockIds: string[]
+  kind: CandidateKind
+  importance: CandidateImportance
+  generatedBy: Generator
+  promotionStatus: CandidatePromotionStatus
+}
+
+export interface ConceptLibrary {
+  conceptId: string
+  chunks: SourceChunk[]
+  candidates: SourceConceptCandidate[]
+}
+
 export interface IntakeQuestion {
   id: string
   conceptId: string
@@ -285,6 +348,10 @@ export interface PromotionState {
   frictionLevel: FrictionLevel
   frictionProposal: { level: FrictionLevel; reasons: string[] }
   referenceQa: ReferenceQa[]
+  // Concept Library handoff (DET-211): when promotion is opened from a candidate,
+  // its label + source-grounded definition are surfaced as DISPLAY-ONLY reference
+  // context. It is NEVER prefilled into the articulation (DET-190).
+  candidateContext?: { label: string; definition: string | null }
 }
 
 export interface SuggestedConnection {
@@ -619,6 +686,15 @@ export const api = {
   // --- Semantic Chunking + Concept Library (DET-211) ---
   getInboxChunks: (id: string) =>
     request<ConceptChunk[]>(`/inbox/${id}/chunks`),
+  // The persisted library: classified chunks + candidate concepts (scaffold).
+  getConceptLibrary: (id: string) =>
+    request<ConceptLibrary>(`/inbox/${id}/concept-library`),
+  regenerateConceptLibrary: (id: string) =>
+    request<ConceptLibrary>(`/inbox/${id}/concept-library/regenerate`, {
+      method: 'POST',
+    }),
+  dismissCandidate: (id: string) =>
+    request<void>(`/concept-candidates/${id}/dismiss`, { method: 'POST' }),
 
   // --- Intake interrogation (DET-188) ---
   generateInterrogation: (conceptId: string) =>
@@ -637,8 +713,14 @@ export const api = {
     }),
 
   // --- Proof-of-Learning Gate (DET-189) ---
-  getPromotion: (conceptId: string) =>
-    request<PromotionState>(`/promotion/${conceptId}`),
+  // An optional candidateId (DET-211 handoff) surfaces that candidate's label +
+  // definition as DISPLAY-ONLY reference context — never prefilled (DET-190).
+  getPromotion: (conceptId: string, candidateId?: string) =>
+    request<PromotionState>(
+      `/promotion/${conceptId}${
+        candidateId ? `?candidateId=${encodeURIComponent(candidateId)}` : ''
+      }`,
+    ),
   saveArticulation: (conceptId: string, body: string) =>
     request<PromotionState>(`/promotion/${conceptId}/articulation`, {
       method: 'PUT',
@@ -673,10 +755,16 @@ export const api = {
     request<void>(`/promotion/${conceptId}`, { method: 'DELETE' }),
 
   // --- Reference Q&A (DET-208) ---
-  askSourceQuestion: (conceptId: string, questionText: string) =>
+  // An optional scope (DET-211) grounds the answer in a single chunk's or
+  // candidate's source blocks instead of the whole document.
+  askSourceQuestion: (
+    conceptId: string,
+    questionText: string,
+    scope?: { chunkId?: string; candidateId?: string },
+  ) =>
     request<SourceQuestion>(`/source-qa/${conceptId}/ask`, {
       method: 'POST',
-      body: JSON.stringify({ questionText }),
+      body: JSON.stringify({ questionText, ...scope }),
     }),
   listSourceQuestions: (conceptId: string) =>
     request<SourceQuestion[]>(`/source-qa/${conceptId}`),

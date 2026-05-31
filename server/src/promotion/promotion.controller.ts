@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
 } from '@nestjs/common'
 import { Throttle } from '@nestjs/throttler'
 
@@ -28,13 +29,17 @@ import { PromotionService } from './promotion.service'
 export class PromotionController {
   constructor(private readonly promotion: PromotionService) {}
 
-  /** Open the promotion flow — draft + gate checklist + suggested mode. */
+  /** Open the promotion flow — draft + gate checklist + suggested mode. An
+   *  optional `candidateId` (DET-211 handoff) surfaces that Concept Library
+   *  candidate's label + definition as DISPLAY-ONLY reference context; it never
+   *  prefills the user's articulation (DET-190). */
   @Get(':conceptId')
   getState(
     @CurrentUser() user: AuthUser,
     @Param('conceptId') conceptId: string,
+    @Query('candidateId') candidateId?: string,
   ) {
-    return this.promotion.getState(user.userId, conceptId)
+    return this.promotion.getState(user.userId, conceptId, candidateId)
   }
 
   /** Gate 1 — articulate in your own words. */
