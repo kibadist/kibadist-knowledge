@@ -85,7 +85,20 @@ export class ConceptsService {
       concept.activationAt,
       new Date(),
     )
-    return { ...concept, stateHistory, currentActivation: current }
+    // Evidence density (DET-199): a cheap, honest uncertainty signal beyond the
+    // user's own `certainty` — how many of the user's supporting compressions
+    // (Articulations) back this concept. More articulations ⇒ more times the
+    // user has re-explained it from memory ⇒ better-supported. This is a proxy,
+    // not a citation count. REFINEMENT: a richer signal would count distinct
+    // source references / citations behind the concept; deferred because that
+    // requires comparing articulations against the source, which is non-trivial.
+    const evidenceDensity = concept.articulations.length
+    return {
+      ...concept,
+      stateHistory,
+      currentActivation: current,
+      evidenceDensity,
+    }
   }
 
   // Always lands in the inbox (status defaults to INBOX). Promotion to a

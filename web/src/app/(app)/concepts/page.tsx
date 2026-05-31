@@ -60,6 +60,11 @@ function ConceptRow({ concept }: { concept: Concept }) {
   // retrieval — call it out so the user can choose to revive it.
   const dormant = concept.cognitiveState === 'DORMANT'
   const faded = dormant || concept.currentActivation < 0.5
+  // Contested (DET-199): a concept flagged as conflicting with something the
+  // user holds. It must be visibly marked here in the list, just as it is on the
+  // concept detail and in the session view — never hidden behind the plain state
+  // chip.
+  const contested = concept.cognitiveState === 'CONTESTED'
 
   return (
     <li
@@ -76,6 +81,11 @@ function ConceptRow({ concept }: { concept: Concept }) {
         {dormant && (
           <span className='rounded border border-amber-700/60 bg-amber-950/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300'>
             Dormant
+          </span>
+        )}
+        {contested && (
+          <span className='rounded border border-red-600/70 bg-red-950/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300'>
+            Contested
           </span>
         )}
         {concept.gateMode && (

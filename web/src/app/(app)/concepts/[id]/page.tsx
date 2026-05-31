@@ -97,6 +97,10 @@ export default function ConceptViewPage() {
 
   const concept = conceptQuery.data
   const dormant = concept?.cognitiveState === 'DORMANT'
+  // Contested (DET-199): a concept the user has flagged as conflicting with
+  // something they hold. It must be unmistakable here, as it is in the list and
+  // the session view — never a quiet state chip.
+  const contested = concept?.cognitiveState === 'CONTESTED'
 
   return (
     <div className='flex flex-col gap-6'>
@@ -144,6 +148,11 @@ export default function ConceptViewPage() {
                 Dormant
               </span>
             )}
+            {contested && (
+              <span className='rounded border border-red-600/70 bg-red-950/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300'>
+                Contested
+              </span>
+            )}
             {dormant && (
               <button
                 type='button'
@@ -170,6 +179,18 @@ export default function ConceptViewPage() {
         )}
       </div>
 
+      {contested && (
+        <div className='rounded-lg border border-red-600/70 bg-red-950/40 p-4'>
+          <p className='text-sm font-semibold uppercase tracking-wide text-red-300'>
+            Contested
+          </p>
+          <p className='mt-1 text-sm text-red-200/80'>
+            This concept conflicts with something else you hold. It&apos;s
+            flagged so the tension stays visible until you resolve it.
+          </p>
+        </div>
+      )}
+
       {conceptQuery.isLoading && (
         <p className='text-neutral-400'>Loading concept…</p>
       )}
@@ -181,7 +202,13 @@ export default function ConceptViewPage() {
         <>
           <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
             <div>
-              <h2 className='font-medium'>Articulations</h2>
+              <div className='flex flex-wrap items-center gap-2'>
+                <h2 className='font-medium'>Articulations</h2>
+                {/* Authorship (DET-199): the Articulations are user-authored —
+                    the user's own compression + tutor responses. Tagged so it's
+                    unmistakable this is what the user wrote, not AI or source. */}
+                <AuthorTag author='USER' />
+              </div>
               <p className='mt-1 text-sm text-neutral-500'>
                 Your explanations, in your own words.
               </p>
@@ -325,13 +352,37 @@ export default function ConceptViewPage() {
                 Could not update certainty. Try again.
               </p>
             )}
+            {/* Evidence density (DET-199): a second, objective uncertainty
+                signal beyond the user's own stance — how many of their own
+                compressions back this concept. A cheap, honest proxy; richer
+                source-citation counting is a deferred refinement (server). */}
+            <div className='flex flex-wrap items-center gap-2 border-t border-neutral-800 pt-3'>
+              <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
+                Evidence {concept.evidenceDensity}
+              </span>
+              <p className='text-xs text-neutral-500'>
+                {concept.evidenceDensity === 0
+                  ? 'No articulations back this yet — thin support.'
+                  : `Backed by ${concept.evidenceDensity} of your own ${
+                      concept.evidenceDensity === 1
+                        ? 'articulation'
+                        : 'articulations'
+                    } — more re-explanations mean better-supported.`}
+              </p>
+            </div>
           </section>
 
           {/* Provenance (DET-199): the source is where this came FROM, not the
               concept itself — the canonical text is the user's own compression. */}
           <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
             <div>
-              <h2 className='font-medium'>Provenance</h2>
+              <div className='flex flex-wrap items-center gap-2'>
+                <h2 className='font-medium'>Provenance</h2>
+                {/* Authorship (DET-199): the source material is quoted, not
+                    written by the user or the AI — tagged distinctly so it's
+                    never mistaken for earned, user-authored knowledge. */}
+                <AuthorTag author='SOURCE' />
+              </div>
               <p className='mt-1 text-sm text-neutral-500'>
                 The source below is where this came from — provenance, not the
                 concept. The concept itself is your own articulation, compressed
@@ -376,6 +427,40 @@ export default function ConceptViewPage() {
         </>
       )}
     </div>
+  )
+}
+
+// Authorship classes (DET-199): every text region in a concept is one of three
+// kinds, kept visually unmistakable so the user can always tell at a glance what
+// they wrote vs. what the AI suggested vs. what was quoted from a source.
+//  - USER   (emerald): user-authored — the compression + tutor responses.
+//  - AI     (violet):  AI-assisted — e.g. Connector-proposed links.
+//  - SOURCE (neutral): source-quoted — the original material, never knowledge.
+type Author = 'USER' | 'AI' | 'SOURCE'
+
+const AUTHOR_TAGS: Record<Author, { label: string; className: string }> = {
+  USER: {
+    label: 'You wrote this',
+    className: 'border-emerald-700/60 bg-emerald-950/30 text-emerald-300',
+  },
+  AI: {
+    label: 'AI-assisted',
+    className: 'border-violet-700/60 bg-violet-950/30 text-violet-300',
+  },
+  SOURCE: {
+    label: 'Source — quoted',
+    className: 'border-neutral-700 bg-neutral-900 text-neutral-400',
+  },
+}
+
+function AuthorTag({ author }: { author: Author }) {
+  const { label, className } = AUTHOR_TAGS[author]
+  return (
+    <span
+      className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${className}`}
+    >
+      {label}
+    </span>
   )
 }
 
@@ -481,11 +566,11 @@ function LinkItem({
         {/* Provenance (DET-199): keep AI-assisted connections visibly distinct
             from edges the user drew themselves — never blur the two. */}
         {link.proposedBy === 'AI' ? (
-          <span className='rounded border border-violet-700/60 bg-violet-950/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-violet-300'>
+          <span className='rounded border border-violet-700/60 bg-violet-950/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300'>
             AI-suggested
           </span>
         ) : (
-          <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
+          <span className='rounded border border-emerald-700/60 bg-emerald-950/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300'>
             You drew this
           </span>
         )}

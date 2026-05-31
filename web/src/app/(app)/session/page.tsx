@@ -271,6 +271,13 @@ function SessionCard({
         <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
           {REASON_LABELS[item.reason]}
         </span>
+        {/* Contested (DET-199): mark a contested concept here too, so the signal
+            is visible everywhere it surfaces — detail, list, and this view. */}
+        {item.cognitiveState === 'CONTESTED' && (
+          <span className='rounded border border-red-600/70 bg-red-950/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300'>
+            Contested
+          </span>
+        )}
       </div>
 
       {item.reason === 'CHALLENGE' && (

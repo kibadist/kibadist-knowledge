@@ -10,14 +10,14 @@ function makeService() {
       update: jest.fn().mockResolvedValue({ id: 'c1' }),
     },
   }
-  const conceptState = {}
+  const conceptState = { history: jest.fn().mockResolvedValue([]) }
   const decay = {}
   const service = new ConceptsService(
     prisma as never,
     conceptState as never,
     decay as never,
   )
-  return { service, prisma }
+  return { service, prisma, conceptState }
 }
 
 describe('ConceptsService.setCertainty', () => {
@@ -51,5 +51,46 @@ describe('ConceptsService.setCertainty', () => {
       service.setCertainty('u1', 'inbox', Certainty.TENTATIVE),
     ).rejects.toBeInstanceOf(NotFoundException)
     expect(prisma.concept.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('ConceptsService.findOne', () => {
+  // The minimal concept row findOne reads, with the activation fields the
+  // current-activation computation needs and an empty relation set we override.
+  const baseConcept = {
+    id: 'c1',
+    activation: 1,
+    activationAt: new Date(),
+    articulations: [],
+    outgoingLinks: [],
+    incomingLinks: [],
+    retrievalEvents: [],
+    reflections: [],
+  }
+
+  it('returns evidenceDensity equal to the number of articulations', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findFirst.mockResolvedValue({
+      ...baseConcept,
+      // Evidence density (DET-199) is a cheap proxy: the count of the user's
+      // own supporting compressions backing the concept.
+      articulations: [{ id: 'a1' }, { id: 'a2' }, { id: 'a3' }],
+    })
+
+    const result = await service.findOne('u1', 'c1')
+
+    expect(result.evidenceDensity).toBe(3)
+  })
+
+  it('reports zero evidence density when there are no articulations', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findFirst.mockResolvedValue({
+      ...baseConcept,
+      articulations: [],
+    })
+
+    const result = await service.findOne('u1', 'c1')
+
+    expect(result.evidenceDensity).toBe(0)
   })
 })

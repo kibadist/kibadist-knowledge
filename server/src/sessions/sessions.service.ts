@@ -230,7 +230,12 @@ export class SessionsService {
       include: {
         items: {
           orderBy: { position: 'asc' },
-          include: { concept: { select: { title: true } } },
+          // Provenance (DET-199): carry the concept's cognitiveState so the
+          // session UI can mark a CONTESTED item across this view too — the
+          // contested signal must be visible everywhere the concept appears.
+          include: {
+            concept: { select: { title: true, cognitiveState: true } },
+          },
         },
       },
     })
@@ -245,6 +250,7 @@ export class SessionsService {
         id: item.id,
         conceptId: item.conceptId,
         title: item.concept.title,
+        cognitiveState: item.concept.cognitiveState,
         position: item.position,
         reason: item.reason as QueueReason,
         reviewedAt: item.reviewedAt,

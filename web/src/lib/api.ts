@@ -406,6 +406,11 @@ export interface ConceptDetail extends Concept {
   retrievalEvents: ConceptRetrievalEvent[]
   stateHistory: StateTransition[]
   reflections: Reflection[]
+  // Uncertainty signal (DET-199): how many of the user's supporting
+  // compressions (Articulations) back this concept — a cheap, honest proxy for
+  // how well-supported it is, beyond the user's own `certainty`. A richer
+  // source-citation count is a deferred refinement (see ConceptsService.findOne).
+  evidenceDensity: number
 }
 
 // --- Retrieval Engine (DET-192) ---
@@ -480,6 +485,10 @@ export interface SessionItem {
   id: string
   conceptId: string
   title: string
+  // The concept's current cognitive state (DET-199): lets the session view mark
+  // a CONTESTED item, so the contested signal is visible everywhere a concept
+  // surfaces (detail, list, and here).
+  cognitiveState: CognitiveState
   position: number
   reason: SessionItemReason
   reviewedAt: string | null

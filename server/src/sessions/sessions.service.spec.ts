@@ -92,6 +92,37 @@ describe('SessionsService.start', () => {
     expect(result?.items.map((i) => i.conceptId)).toEqual(['c1', 'c2'])
   })
 
+  it('surfaces each item concept cognitiveState so the session view can mark contested items (DET-199)', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findMany.mockResolvedValue([
+      { id: 'c1', cognitiveState: 'CONTESTED', nextReviewAt: null },
+    ])
+    prisma.session.create.mockResolvedValue({ id: 's1' })
+    prisma.session.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 's1',
+      startedAt: new Date(),
+      endedAt: null,
+      targetMinutes: 10,
+      status: 'ACTIVE',
+      items: [
+        {
+          id: 'i1',
+          conceptId: 'c1',
+          position: 0,
+          reason: 'CONTESTED',
+          reviewedAt: null,
+          recallScore: null,
+          // loadSession selects the concept's cognitiveState alongside title.
+          concept: { title: 'Conflicted', cognitiveState: 'CONTESTED' },
+        },
+      ],
+    })
+
+    const result = await service.start('u1', 10)
+
+    expect(result?.items[0].cognitiveState).toBe('CONTESTED')
+  })
+
   it('returns the existing ACTIVE session instead of creating a new one', async () => {
     const { service, prisma } = makeService()
     prisma.session.findFirst
