@@ -47,6 +47,20 @@ function MetricsBody({ metrics }: { metrics: UnderstandingMetrics }) {
       ? null
       : Math.round(metrics.retrievalSuccessRate * 100)
 
+  // The server provides the one-line "why this is a real signal" per metric;
+  // look each up by key so the explanation stays a single source of truth.
+  const why = (key: string): string =>
+    metrics.explanations.find((e) => e.key === key)?.explanation ?? ''
+
+  const sharperPct =
+    metrics.compressionQualityTrend.sharperShare === null
+      ? null
+      : Math.round(metrics.compressionQualityTrend.sharperShare * 100)
+  const advancedPct =
+    metrics.advancedShare === null
+      ? null
+      : Math.round(metrics.advancedShare * 100)
+
   return (
     <div className='flex flex-col gap-6'>
       <section className='flex flex-col gap-3'>
@@ -62,6 +76,7 @@ function MetricsBody({ metrics }: { metrics: UnderstandingMetrics }) {
                 ? 'Recall something in a session and this starts tracking.'
                 : `${metrics.retrievalsPassed} of ${metrics.retrievalsTotal} recalls held up.`
             }
+            why={why('retrievalSuccessRate')}
           />
           <MetricCard
             label='Concepts retained'
@@ -87,14 +102,55 @@ function MetricsBody({ metrics }: { metrics: UnderstandingMetrics }) {
             hint='Held up under a Tutor challenge.'
           />
           <MetricCard
-            label='Connections you’ve drawn'
+            label='Synthesis events'
             value={metrics.connectionsValidated}
             hint='Edges you confirmed between ideas — synthesis, not storage.'
+            why={why('connectionsValidated')}
           />
           <MetricCard
             label='Reflections logged'
             value={metrics.reflectionsLogged}
             hint='Times you noticed what moved in your understanding.'
+          />
+        </div>
+      </section>
+
+      <section className='flex flex-col gap-3'>
+        <h2 className='text-xs font-medium uppercase tracking-wide text-neutral-500'>
+          Depth & transfer
+        </h2>
+        <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+          <MetricCard
+            label='Compression quality'
+            value={sharperPct === null ? '—' : `${sharperPct}%`}
+            hint={
+              metrics.compressionQualityTrend.revisitedConcepts === 0
+                ? 'Re-explain a concept a second time and this starts tracking.'
+                : `${metrics.compressionQualityTrend.revisitedConcepts} concepts re-articulated; this share got shorter.`
+            }
+            why={why('compressionQualityTrend')}
+          />
+          <MetricCard
+            label='Transfer signals'
+            value={metrics.transferSignals}
+            hint='Older ideas you reached back to while building newer ones.'
+            why={why('transferSignals')}
+          />
+          <MetricCard
+            label='Defended / internalized share'
+            value={advancedPct === null ? '—' : `${advancedPct}%`}
+            hint={
+              advancedPct === null
+                ? 'Earn a concept past the inbox and this starts tracking.'
+                : 'Of your live concepts, the share you’ve defended or internalized.'
+            }
+            why={why('advancedShare')}
+          />
+          <MetricCard
+            label='Decay recovery'
+            value={metrics.decayRecovery}
+            hint='Dormant concepts you brought back to life.'
+            why={why('decayRecovery')}
           />
         </div>
       </section>
@@ -107,16 +163,70 @@ function MetricsBody({ metrics }: { metrics: UnderstandingMetrics }) {
           label='Understanding moved (30d)'
           value={metrics.forwardTransitions30d}
           hint='Concepts that climbed the mastery ladder in the last month. A quiet month is fine — depth isn’t a streak.'
+          why={why('forwardTransitions30d')}
         />
+      </section>
+
+      <section className='flex flex-col gap-3'>
+        <h2 className='text-xs font-medium uppercase tracking-wide text-neutral-500'>
+          Retrieval over time
+        </h2>
+        <RetrievalTrend points={metrics.retrievalTrend} />
       </section>
 
       <section className='rounded-lg border border-dashed border-neutral-800 p-4'>
         <p className='text-sm text-neutral-400'>
-          We don’t track streaks, how many notes you’ve captured, or how many AI
-          summaries got generated. Hoarding isn’t learning — so it isn’t a score
-          here.
+          We don’t track streaks, how many notes you’ve captured, words written,
+          how many AI summaries got generated, inbox throughput, or time spent
+          in the app. Hoarding isn’t learning — so it isn’t a score here.
         </p>
       </section>
+    </div>
+  )
+}
+
+// A tiny inline weekly bar list (no chart lib): one row per week, the bar width
+// is the pass rate. Weeks with no graded recalls render as a muted "no data".
+function RetrievalTrend({
+  points,
+}: {
+  points: UnderstandingMetrics['retrievalTrend']
+}) {
+  const hasAny = points.some((p) => p.rate !== null)
+
+  return (
+    <div className='rounded-lg border border-neutral-800 bg-neutral-900 p-4'>
+      {!hasAny ? (
+        <p className='text-sm text-neutral-500'>
+          Recall concepts over a few weeks and your trend appears here.
+        </p>
+      ) : (
+        <ul className='flex flex-col gap-2'>
+          {points.map((p) => {
+            const pct = p.rate === null ? null : Math.round(p.rate * 100)
+            const label = new Date(p.weekStart).toLocaleDateString(undefined, {
+              month: 'short',
+              day: 'numeric',
+            })
+            return (
+              <li key={p.weekStart} className='flex items-center gap-3'>
+                <span className='w-12 shrink-0 text-xs text-neutral-500'>
+                  {label}
+                </span>
+                <div className='h-2 flex-1 overflow-hidden rounded bg-neutral-800'>
+                  <div
+                    className='h-full rounded bg-neutral-300'
+                    style={{ width: `${pct ?? 0}%` }}
+                  />
+                </div>
+                <span className='w-10 shrink-0 text-right text-xs text-neutral-400'>
+                  {pct === null ? '—' : `${pct}%`}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </div>
   )
 }
@@ -125,16 +235,24 @@ function MetricCard({
   label,
   value,
   hint,
+  why,
 }: {
   label: string
   value: number | string
   hint: string
+  // The server-provided "why this is a real signal of understanding" line.
+  why?: string
 }) {
   return (
     <div className='rounded-lg border border-neutral-800 bg-neutral-900 p-4'>
       <p className='text-sm text-neutral-400'>{label}</p>
       <p className='mt-1 text-3xl font-semibold text-neutral-100'>{value}</p>
       <p className='mt-1 text-xs text-neutral-500'>{hint}</p>
+      {why ? (
+        <p className='mt-2 border-t border-neutral-800 pt-2 text-xs text-neutral-600'>
+          {why}
+        </p>
+      ) : null}
     </div>
   )
 }

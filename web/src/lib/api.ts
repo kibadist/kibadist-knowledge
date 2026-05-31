@@ -507,9 +507,37 @@ export interface SessionSummary {
 // --- Anti-Vanity Metrics (DET-200) ---
 // A read-only understanding surface. Every field goes up only when the user
 // actually understands MORE (retention + synthesis), never by raw activity.
-// It DELIBERATELY has no streak / note-count / "AI summaries generated" field —
-// the product's thesis is that hoarding is the problem, so volume isn't a score.
-// Mirrors the server's UnderstandingMetrics; keep in sync.
+// It DELIBERATELY has no streak / note-count / words / AI-summary / inbox-
+// throughput / time-in-app field — the product's thesis is that hoarding is the
+// problem, so volume isn't a score. Mirrors the server's UnderstandingMetrics
+// (now reconciled to the full DET-200 DoD); keep in sync.
+
+// Compression-quality trend: do re-articulated concepts get sharper (shorter)?
+export interface CompressionQualityTrend {
+  // Concepts with ≥2 articulations — the only ones a trend can be read from.
+  revisitedConcepts: number
+  // Fraction (0..1) whose latest articulation is shorter than their first;
+  // null when there are no revisited concepts.
+  sharperShare: number | null
+}
+
+// One weekly bucket of retrieval pass rate (history-over-time).
+export interface RetrievalTrendPoint {
+  // ISO date string for the start (UTC midnight) of the week bucket.
+  weekStart: string
+  // Passed / total graded in that week, or null if nothing was graded.
+  rate: number | null
+}
+
+// One metric paired with its server-provided "why this is a real signal of
+// understanding" line, so the web renders a single source of truth.
+export interface MetricExplanation {
+  key: string
+  label: string
+  value: number | null
+  explanation: string
+}
+
 export interface UnderstandingMetrics {
   // Retention: share of graded retrievals passed (0..1), or null if none yet.
   retrievalSuccessRate: number | null
@@ -520,10 +548,23 @@ export interface UnderstandingMetrics {
   // Synthesis / depth.
   conceptsInternalized: number
   conceptsDefended: number
+  // Synthesis events: confirmed connections the user drew between ideas.
   connectionsValidated: number
   reflectionsLogged: number
+  // Compression-quality trend: are re-articulated concepts getting sharper?
+  compressionQualityTrend: CompressionQualityTrend
+  // Transfer signals: concepts reached by a CONFIRMED link from a LATER concept.
+  transferSignals: number
+  // Defended/Internalized share of live concepts (0..1), or null if none.
+  advancedShare: number | null
   // Transitions that moved a concept UP the mastery ladder in the last 30 days.
   forwardTransitions30d: number
+  // Decay recovery: dormant concepts the user revived (REACTIVATED transitions).
+  decayRecovery: number
+  // Retrieval pass rate bucketed by week for the last ~8 weeks (trend, not snapshot).
+  retrievalTrend: RetrievalTrendPoint[]
+  // Per-metric "why this is a real signal of understanding" lines.
+  explanations: MetricExplanation[]
 }
 
 export const api = {
