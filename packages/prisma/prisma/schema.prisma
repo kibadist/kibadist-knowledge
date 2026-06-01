@@ -35,6 +35,8 @@ model User {
   reflections      Reflection[]
   sourceChunks     SourceChunk[]
   conceptCandidates SourceConceptCandidate[]
+  graphNodePositions GraphNodePosition[]
+  livingConcepts   LivingConcept[]
 
   @@map("user")
 }
@@ -132,6 +134,8 @@ model Concept {
   reflections     Reflection[]
   sourceChunks    SourceChunk[]
   conceptCandidates SourceConceptCandidate[]
+  graphPosition   GraphNodePosition?
+  livingConcept   LivingConcept?
 
   @@index([userId])
   @@index([userId, status])
@@ -692,4 +696,74 @@ enum AnswerKind {
   REFERENCE_SCAFFOLD
   USER_ATTEMPT
   VALIDATED_ARTICULATION
+}
+
+// The Concept Graph / Overview Map (DET-230): the user's manual layout of a
+// concept node on the React Flow canvas. Stored SEPARATELY from the domain so
+// the graph can be recomputed/relaid-out without ever destroying the user's
+// hand-placed positions. There is no graph-snapshot of nodes/edges — those are
+// always derived live from Concept (nodes) + Link (edges); only the (x, y)
+// coordinate the user dragged a node to is persisted here.
+model GraphNodePosition {
+  id        String   @id @default(cuid())
+  userId    String
+  // One position per concept (the layout is per-user, and a concept belongs to one
+  // user) — `@unique` makes Concept↔GraphNodePosition a true 1:1.
+  conceptId String   @unique
+  x         Float
+  y         Float
+  // A locked node is pinned: layout re-runs and "fit/auto-arrange" must not move it.
+  locked    Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("graph_node_position")
+}
+
+// A Living Concept (DET-230): a lightweight AI-assisted persona/mental-model
+// scaffold attached to an ALREADY-EARNED concept. It is created from the graph
+// when the user wants a memorable scaffold for a concept they already understand.
+// HARD BOUNDARY: it is SCAFFOLD, not earned knowledge — it can only attach to a
+// non-INBOX Concept (the concept itself earned its place through the
+// Proof-of-Learning gate), it is born DRAFT + createdBy AI, and its persona text
+// never becomes an Articulation or the concept's canonical summary. The user
+// validates it (DRAFT → USER_VALIDATED) or archives it; nothing here mints
+// permanent knowledge.
+model LivingConcept {
+  id             String              @id @default(cuid())
+  conceptId      String              @unique
+  userId         String
+  // The persona's name/handle (AI-seeded, user-editable). Metadata, not knowledge.
+  personaName    String
+  // One-paragraph persona summary: how this concept "introduces itself".
+  personaSummary String
+  // Optional persona voice/tone descriptor.
+  voice          String?
+  // Optional core metaphor the persona leans on, and where that metaphor BREAKS
+  // (kept explicit so the scaffold never hardens a misleading analogy into fact).
+  coreMetaphor   String?
+  metaphorBreaks String?
+  status         LivingConceptStatus @default(DRAFT)
+  // Provenance: AI-seeded by default; USER if hand-authored. Never SYSTEM here.
+  createdBy      Generator           @default(AI)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("living_concept")
+}
+
+// A Living Concept's lifecycle (DET-230). Born DRAFT (AI scaffold), promoted to
+// USER_VALIDATED once the user vouches for it, or ARCHIVED when retired. This is
+// NOT the cognitive-state machine — it governs the persona scaffold only.
+enum LivingConceptStatus {
+  DRAFT
+  USER_VALIDATED
+  ARCHIVED
 }

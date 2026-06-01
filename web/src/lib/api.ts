@@ -643,6 +643,81 @@ export interface UnderstandingMetrics {
   explanations: MetricExplanation[]
 }
 
+// --- Concept Graph (Map) ---
+// The persona lifecycle for a Living Concept. A persona is an AI scaffold —
+// always visibly marked as such, never blurred with earned knowledge. Mirrors
+// the server's LivingConceptStatus enum; keep in sync.
+export type LivingConceptStatus = 'DRAFT' | 'USER_VALIDATED' | 'ARCHIVED'
+
+// A single node in the concept map: a concept with the signals the graph view
+// needs (cognitive state, activation, persona presence). Mirrors the server's
+// GraphNode DTO; keep in sync.
+export interface GraphNode {
+  id: string
+  title: string
+  summary: string | null
+  cognitiveState: CognitiveState
+  status: ConceptStatus
+  certainty: Certainty
+  currentActivation: number
+  hasPersona: boolean
+  personaStatus: LivingConceptStatus | null
+  createdAt: string
+}
+
+// A directed edge between two concepts. SUGGESTED edges are AI/Connector
+// proposals awaiting validation; CONFIRMED edges are real, earned connections.
+export interface GraphEdge {
+  id: string
+  sourceConceptId: string
+  targetConceptId: string
+  relationKind: LinkRelation | null
+  relation: string | null
+  status: 'SUGGESTED' | 'CONFIRMED'
+  proposedBy: QuestionActor
+  rationale: string | null
+}
+
+// A saved canvas position for a node. `locked` pins it against re-layout.
+export interface GraphPosition {
+  conceptId: string
+  x: number
+  y: number
+  locked: boolean
+}
+
+export interface GraphData {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  positions: GraphPosition[]
+}
+
+// The bare Link row returned by PATCH /links/:id (validate/reject). It carries no
+// source/target concept includes — that's why it isn't a ConceptLinkEnd.
+export interface LinkRow {
+  id: string
+  status: 'SUGGESTED' | 'CONFIRMED' | 'REJECTED'
+  relationKind: LinkRelation | null
+  relation: string | null
+}
+
+// A Living Concept: an AI-authored persona that gives a concept a voice and a
+// core metaphor. It is SCAFFOLD, never earned knowledge — the UI marks it as a
+// draft until the user explicitly validates it.
+export interface LivingConcept {
+  id: string
+  conceptId: string
+  personaName: string
+  personaSummary: string
+  voice: string | null
+  coreMetaphor: string | null
+  metaphorBreaks: string | null
+  status: LivingConceptStatus
+  createdBy: Generator
+  createdAt: string
+  updatedAt: string
+}
+
 export const api = {
   register: (input: { email: string; password: string; name?: string }) =>
     request<AuthResponse>('/auth/register', {
@@ -852,4 +927,56 @@ export const api = {
 
   // --- Anti-Vanity Metrics (DET-200) ---
   getMetrics: () => request<UnderstandingMetrics>('/metrics'),
+
+  // --- Concept Graph (Map) ---
+  getGraph: () => request<GraphData>('/graph'),
+  // Persist node positions after a drag. `locked` pins a node against re-layout.
+  saveGraphPositions: (
+    positions: { conceptId: string; x: number; y: number; locked?: boolean }[],
+  ) =>
+    request<{ saved: number }>('/graph/positions', {
+      method: 'PUT',
+      body: JSON.stringify({ positions }),
+    }),
+
+  // --- Living Concepts (AI persona scaffold) ---
+  createLivingConcept: (conceptId: string) =>
+    request<LivingConcept>('/living-concepts', {
+      method: 'POST',
+      body: JSON.stringify({ conceptId }),
+    }),
+  getLivingConcept: (conceptId: string) =>
+    request<LivingConcept | null>(`/living-concepts/concept/${conceptId}`),
+  updateLivingConcept: (
+    id: string,
+    input: Partial<
+      Pick<
+        LivingConcept,
+        | 'personaName'
+        | 'personaSummary'
+        | 'voice'
+        | 'coreMetaphor'
+        | 'metaphorBreaks'
+        | 'status'
+      >
+    >,
+  ) =>
+    request<LivingConcept>(`/living-concepts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  // --- Links (validate / reject a suggested connection from the map) ---
+  // PATCH /links/:id returns the bare updated Link (no source/target concept
+  // includes), so the response is typed as that accurate subset, not ConceptLinkEnd.
+  confirmLink: (id: string) =>
+    request<LinkRow>(`/links/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'CONFIRMED' }),
+    }),
+  rejectLink: (id: string) =>
+    request<LinkRow>(`/links/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'REJECTED' }),
+    }),
 }

@@ -1,0 +1,288 @@
+/* ============================================================================
+   CONCEPT GRAPH (Map) — paper theme for React Flow + custom node/inspector.
+   Scoped under .kbapp so it inherits the editorial-manuscript tokens and never
+   leaks into the reader/editor/landing scopes. Calm, paper-like — no neon, no
+   glow, no gradients. Shadows are hard offset, matching the rest of the app.
+   ============================================================================ */
+
+/* The Map breaks out of the narrow editorial reading column — a spatial overview
+   needs width. Falls back to the viewport on small screens. */
+.kbapp .graph-screen {
+  max-width: min(1440px, 95vw);
+}
+
+/* ---------------- layout shell ---------------- */
+.kbapp .graph-shell {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 0;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  min-height: 640px;
+  height: 72vh;
+}
+/* No selection → the inspector column collapses so the canvas gets the full
+   width (overview-first). The inspector is only mounted when a node is picked. */
+.kbapp .graph-shell.is-idle {
+  grid-template-columns: 1fr;
+}
+.kbapp .graph-canvas {
+  position: relative;
+  border-right: 1px solid var(--rule);
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .kbapp .graph-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .kbapp .graph-canvas {
+    height: 60vh;
+    border-right: none;
+    border-bottom: 1px solid var(--rule);
+  }
+}
+
+/* ---------------- react-flow surface ---------------- */
+.kbapp .react-flow {
+  background: var(--paper);
+}
+.kbapp .react-flow__attribution {
+  display: none;
+}
+
+/* ---------------- custom concept node ---------------- */
+.kbapp .concept-node {
+  background: var(--paper-hi);
+  border: 1px solid var(--rule);
+  padding: 12px 14px;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 4px 4px 0 var(--rule-soft);
+  transition:
+    box-shadow 0.15s,
+    border-color 0.15s;
+}
+.kbapp .concept-node.is-faded {
+  opacity: 0.55;
+}
+.kbapp .concept-node.is-selected {
+  border-color: var(--accent);
+  box-shadow: 4px 4px 0 var(--accent);
+}
+.kbapp .concept-node-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.kbapp .concept-node-title {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* Handles — small, quiet dots on the ink rule. */
+.kbapp .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+}
+
+/* ---------------- edges ---------------- */
+.kbapp .react-flow__edge-path {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.kbapp .react-flow__edge.is-suggested .react-flow__edge-path {
+  stroke: var(--rule-soft);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+/* AI-proposed suggestions read indigo (info) rather than plain soft rule. */
+.kbapp .react-flow__edge.is-suggested.is-ai .react-flow__edge-path {
+  stroke: var(--indigo);
+  stroke-dasharray: 5 4;
+}
+.kbapp .react-flow__edge.is-confirmed .react-flow__edge-path {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+/* Contradiction always reads accent — even when AI-suggested (which also carries
+   .is-ai). These come LAST and match two state classes so they out-specify the
+   .is-suggested.is-ai indigo rule above. Dashed while a suggestion, solid once
+   confirmed; this matches the legend and the JS arrowhead color. */
+.kbapp .react-flow__edge.is-contradiction.is-confirmed .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+.kbapp .react-flow__edge.is-contradiction.is-suggested .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-dasharray: 5 4;
+}
+
+/* Edge labels — tiny mono, uppercase, matching chips. */
+.kbapp .react-flow__edge-text {
+  font-family: var(--font-mono), monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  fill: var(--ink-muted);
+}
+.kbapp .react-flow__edge-textbg {
+  fill: var(--paper);
+}
+
+/* ---------------- controls ---------------- */
+.kbapp .react-flow__controls {
+  box-shadow: 4px 4px 0 var(--rule-soft);
+  border: 1px solid var(--rule);
+}
+.kbapp .react-flow__controls-button {
+  background: var(--paper-hi);
+  border-bottom: 1px solid var(--rule-soft);
+  color: var(--ink);
+  width: 26px;
+  height: 26px;
+}
+.kbapp .react-flow__controls-button:hover {
+  background: var(--paper-2);
+}
+.kbapp .react-flow__controls-button svg {
+  fill: var(--ink-soft);
+}
+
+/* ---------------- minimap ---------------- */
+.kbapp .react-flow__minimap {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  box-shadow: 4px 4px 0 var(--rule-soft);
+}
+
+/* ---------------- legend ---------------- */
+.kbapp .graph-legend {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 5;
+  background: var(--paper-hi);
+  border: 1px solid var(--rule);
+  box-shadow: 4px 4px 0 var(--rule-soft);
+  padding: 14px 16px;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kbapp .graph-legend-h {
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-muted);
+  margin-top: 4px;
+}
+.kbapp .graph-legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kbapp .graph-legend-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body), serif;
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.3;
+}
+.kbapp .graph-legend-edge {
+  flex: none;
+  width: 26px;
+  height: 0;
+  border-top: 1.5px solid var(--ink);
+}
+.kbapp .graph-legend-edge.is-suggested {
+  border-top: 1.5px dashed var(--rule-soft);
+}
+.kbapp .graph-legend-edge.is-confirmed {
+  border-top: 1.5px solid var(--ink);
+}
+.kbapp .graph-legend-edge.is-contradiction {
+  border-top: 2.5px solid var(--accent);
+}
+
+/* ---------------- inspector ---------------- */
+.kbapp .graph-inspector {
+  background: var(--paper-2);
+  padding: 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.kbapp .graph-inspector-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--rule-soft);
+  padding-bottom: 12px;
+}
+.kbapp .graph-inspector-title {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kbapp .graph-inspector-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--rule-soft);
+  padding-top: 16px;
+}
+.kbapp .source-excerpt {
+  font-family: var(--font-body), serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  white-space: pre-wrap;
+}
+
+/* ---------------- living concept card ---------------- */
+.kbapp .living-card {
+  border: 1px solid var(--rule-soft);
+  background: var(--paper-hi);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kbapp .living-name {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.kbapp .living-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--font-body), serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  margin: 0;
+}

@@ -38,3 +38,6 @@ pnpm-debug.log*
 
 # test
 coverage/
+
+# claude code local artifacts
+.claude/scheduled_tasks.lock

@@ -14,9 +14,11 @@ import { ConceptStateModule } from './concept-state/concept-state.module'
 import { ConceptsModule } from './concepts/concepts.module'
 import { ConnectorModule } from './connector/connector.module'
 import { DecayModule } from './decay/decay.module'
+import { GraphModule } from './graph/graph.module'
 import { InboxModule } from './inbox/inbox.module'
 import { IntakeModule } from './intake/intake.module'
 import { LinksModule } from './links/links.module'
+import { LivingConceptModule } from './living-concept/living-concept.module'
 import { MetricsModule } from './metrics/metrics.module'
 import { NotesModule } from './notes/notes.module'
 import { PrismaModule } from './prisma/prisma.module'
@@ -87,8 +89,10 @@ import { UsersModule } from './users/users.module'
     ConceptLibraryModule,
     ConnectorModule,
     DecayModule,
+    GraphModule,
     InboxModule,
     IntakeModule,
+    LivingConceptModule,
     PromotionModule,
     SourceQaModule,
     ArticulationsModule,
