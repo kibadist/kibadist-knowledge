@@ -459,12 +459,33 @@ export default function PromoteConceptPage() {
             )}
 
             {suggestionsQuery.data && suggestionsQuery.data.length === 0 && (
-              <p className='text-sm text-neutral-500'>
-                No neighbors suggested.{' '}
-                {requiredGates.connect
-                  ? 'This level needs a connection — drop to Minimal if this stands alone.'
-                  : 'You can mark this as a new conceptual root below.'}
-              </p>
+              <div className='flex flex-col gap-2'>
+                <p className='text-sm text-neutral-500'>
+                  No neighbors suggested.{' '}
+                  {requiredGates.connect
+                    ? 'This level needs a connection — drop to Minimal if this stands alone.'
+                    : 'You can mark this as a new conceptual root below.'}
+                </p>
+                {/* When there is nothing to link to AND this level requires a
+                    connection, the only honest path is to treat the concept as a
+                    standalone clip — which is exactly MINIMAL (a compression is
+                    enough). The escape already lives in the friction picker above;
+                    this surfaces it as a one-click action so the stuck state isn't
+                    a dead end. No gate semantics change — chooseLevel() is the same
+                    deliberate de-escalation the picker performs. */}
+                {requiredGates.connect && (
+                  <button
+                    type='button'
+                    onClick={() => chooseLevel('MINIMAL')}
+                    disabled={setMutationFriction.isPending}
+                    className='self-start rounded-md border border-neutral-700 px-3 py-1.5 text-sm transition hover:bg-neutral-900 disabled:opacity-50'
+                  >
+                    {setMutationFriction.isPending
+                      ? 'Switching…'
+                      : 'Drop to Minimal — this stands alone'}
+                  </button>
+                )}
+              </div>
             )}
 
             {suggestionsQuery.data && suggestionsQuery.data.length > 0 && (
