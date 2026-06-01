@@ -1,8 +1,102 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   KIBADIST — Editorial-manuscript design tokens (light only, no dark theme).
+   Ported from the Kibadist design system (colors_and_type.css). Fonts are
+   provided by next/font as --font-display / --font-body / --font-mono.
+   ============================================================================ */
+
+@theme {
+  /* Surfaces — warm bone paper */
+  --color-paper: #f1ebde;
+  --color-paper-2: #ebe4d3;
+  --color-paper-hi: #f6f1e7;
+  --color-ink-panel: #1a1714;
+
+  /* Ink — text on paper */
+  --color-ink: #1a1714;
+  --color-ink-soft: #3a332c;
+  --color-ink-muted: #6b6157;
+  --color-ink-faint: #948876;
+  --color-paper-ink: #d4ccbb;
+  --color-paper-mute: #b5a896;
+
+  /* Rules & borders */
+  --color-rule: #2a2520;
+  --color-rule-soft: #c8bea8;
+
+  /* Accent — the single hot color */
+  --color-accent: #8a2a1f;
+  --color-accent-deep: #6b1f17;
+
+  /* Supporting hues (quiet, low-chroma) */
+  --color-indigo: #1f3a4d;
+  --color-olive: #5b6638;
+  --color-ochre: #8a5a1f;
+  --color-highlight: #f3d27a;
+}
+
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  /* Raw aliases so the verbatim component layer can use --paper / --ink / … */
+  --paper: var(--color-paper);
+  --paper-2: var(--color-paper-2);
+  --paper-hi: var(--color-paper-hi);
+  --ink-panel: var(--color-ink-panel);
+  --ink: var(--color-ink);
+  --ink-soft: var(--color-ink-soft);
+  --ink-muted: var(--color-ink-muted);
+  --ink-faint: var(--color-ink-faint);
+  --paper-ink: var(--color-paper-ink);
+  --paper-mute: var(--color-paper-mute);
+  --rule: var(--color-rule);
+  --rule-soft: var(--color-rule-soft);
+  --accent: var(--color-accent);
+  --accent-deep: var(--color-accent-deep);
+  --accent-tint: rgba(138, 42, 31, 0.08);
+  --indigo: var(--color-indigo);
+  --olive: var(--color-olive);
+  --ochre: var(--color-ochre);
+  --highlight: var(--color-highlight);
+
+  /* Optical / variation defaults for Fraunces */
+  --fv-display: "SOFT" 30, "opsz" 144;
+  --fv-display-em: "SOFT" 100;
+
+  /* Type scale */
+  --t-display: clamp(56px, 11vw, 144px);
+  --t-h1: clamp(46px, 6vw, 88px);
+  --t-h2: clamp(36px, 4.5vw, 64px);
+  --t-h3: clamp(26px, 2.4vw, 32px);
+  --lh-tight: 0.95;
+  --lh-body: 1.55;
+  --tracking-mono: 0.18em;
+
+  /* Shadow — hard offset, no blur */
+  --shadow-sm: 6px 6px 0 var(--rule);
+  --shadow-md: 8px 8px 0 var(--rule);
+  --shadow-lg: 10px 10px 0 var(--rule);
+  --shadow-xl: 12px 12px 0 var(--rule);
+  --shadow-accent: 12px 12px 0 var(--accent);
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --dur-fast: 0.2s;
+  --dur-reveal: 0.8s;
+}
+
+/* Expose the next/font families to Tailwind's font utilities (font-display,
+   font-body, font-mono) without re-declaring the variables. */
+@theme inline {
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+}
+
+/* ============================================================================
+   BASE — light paper everywhere; the dark theme is retired.
+   ============================================================================ */
+* {
+  box-sizing: border-box;
 }
 
 html,
@@ -12,14 +106,935 @@ body {
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, sans-serif;
+  font-family: var(--font-sans), Inter, Arial, sans-serif;
+  font-size: 18px;
+  line-height: 1.6;
+  background-color: #f7f3ea;
+  color: #1f2933;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-* {
-  box-sizing: border-box;
+/* Small helpers usable on any app surface. */
+.u-mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+.u-display {
+  font-family: var(--font-display), Georgia, serif;
+}
+.u-body {
+  font-family: var(--font-body), Georgia, serif;
+}
+
+/* ============================================================================
+   APP CHROME + SCREENS — editorial-manuscript component layer.
+   Scoped under .kbapp (the app shell wrapper) so it never touches the
+   reader/editor/landing scopes. Ported from ui_kits/app.
+   ============================================================================ */
+
+/* paper grain overlay */
+.kbapp::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 0.3;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.08  0 0 0 0 0.05  0 0 0 0.4 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* ---------------- masthead strip ---------------- */
+.kbapp .mh-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 9px 32px;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-soft);
+  background: var(--paper);
+  white-space: nowrap;
+}
+.kbapp .mh-strip span {
+  white-space: nowrap;
+}
+.kbapp .mh-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.kbapp .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--olive);
+  display: inline-block;
+  animation: kbapp-blink 2.4s ease-in-out infinite;
+}
+@keyframes kbapp-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (max-width: 720px) {
+  .kbapp .mh-mid {
+    display: none;
+  }
+}
+
+/* ---------------- nav ---------------- */
+.kbapp .app-nav-wrap {
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(6px);
+}
+.kbapp .app-nav {
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 32px;
+}
+.kbapp .app-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+}
+.kbapp .nav-brand {
+  font-family: var(--font-display), serif;
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  background: none;
+  border: none;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+  font-variation-settings: "opsz" 40;
+}
+.kbapp .nav-items {
+  display: flex;
+  gap: 6px;
+}
+.kbapp .nav-item {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 7px 12px;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.kbapp .nav-item::before {
+  content: "§ ";
+  color: var(--accent);
+  font-weight: 700;
+}
+.kbapp .nav-item:hover {
+  color: var(--accent);
+}
+.kbapp .nav-item.is-active {
+  color: var(--ink);
+  border-bottom: 2px solid var(--accent);
+}
+.kbapp .app-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.kbapp .nav-user {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+@media (max-width: 720px) {
+  .kbapp .nav-user {
+    display: none;
+  }
+  .kbapp .app-nav {
+    padding: 12px 20px;
+  }
+  .kbapp .nav-items {
+    gap: 0;
+  }
+}
+.kbapp .btn-ghost-sm {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  padding: 8px 14px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.kbapp .btn-ghost-sm:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ---------------- page frame ---------------- */
+.kbapp .page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 48px 32px 96px;
+}
+@media (max-width: 720px) {
+  .kbapp .page {
+    padding: 32px 20px 64px;
+  }
+}
+.kbapp .screen {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+.kbapp .page-head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-bottom: 1px solid var(--rule-soft);
+  padding-bottom: 26px;
+}
+.kbapp .section-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  color: var(--accent);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.kbapp .section-label::before {
+  content: "";
+  width: 24px;
+  height: 1px;
+  background: var(--accent);
+}
+.kbapp .page-head h1 {
+  font-family: var(--font-display), serif;
+  font-weight: 400;
+  font-size: clamp(40px, 6vw, 64px);
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  margin: 0;
+  font-variation-settings:
+    "SOFT" 40,
+    "opsz" 144;
+}
+.kbapp .page-head h1 em {
+  font-style: italic;
+  color: var(--accent);
+  font-variation-settings: "SOFT" 100;
+}
+.kbapp .lede {
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 20px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  margin: 0;
+  max-width: 660px;
+}
+
+/* back-link (detail pages) */
+.kbapp .back-link {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.kbapp .back-link:hover {
+  color: var(--accent);
+}
+
+/* ---------------- panels ---------------- */
+.kbapp .panel {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  padding: 28px;
+}
+.kbapp .panel-raised {
+  box-shadow: 8px 8px 0 var(--rule);
+}
+.kbapp .panel.center {
+  text-align: center;
+}
+.kbapp .panel-ink {
+  background: var(--ink-panel);
+  color: var(--paper-ink);
+  border-color: var(--ink);
+}
+.kbapp .block-h {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 24px;
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
+}
+.kbapp .block-sub {
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  color: var(--ink-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+.kbapp .panel-h {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 21px;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+/* ---------------- form bits ---------------- */
+.kbapp .seg-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kbapp .seg {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 8px 16px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.kbapp .seg:hover {
+  background: var(--paper-hi);
+}
+.kbapp .seg.on {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.kbapp .seg:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.kbapp .fld {
+  font-family: var(--font-body), serif;
+  font-size: 16px;
+  color: var(--ink);
+  background: var(--paper-hi);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 12px 14px;
+  outline: none;
+  width: 100%;
+  display: block;
+}
+.kbapp textarea.fld {
+  resize: vertical;
+}
+.kbapp .fld:focus {
+  border-color: var(--accent);
+}
+.kbapp .fld:disabled {
+  opacity: 0.6;
+}
+.kbapp .fld::placeholder {
+  color: var(--ink-faint);
+}
+.kbapp .file-drop {
+  border: 1px dashed var(--rule-soft);
+  background: var(--paper-hi);
+  padding: 26px;
+  text-align: center;
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  color: var(--ink-muted);
+}
+.kbapp .file-drop .u {
+  color: var(--accent);
+  border-bottom: 1px solid currentColor;
+  font-style: normal;
+}
+.kbapp .btn-primary {
+  align-self: flex-start;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 13px 26px;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+.kbapp .btn-primary:hover {
+  background: var(--accent);
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.kbapp .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+  background: var(--ink);
+}
+.kbapp .btn-primary .ar {
+  transition: transform 0.2s;
+}
+.kbapp .btn-primary:hover:not(:disabled) .ar {
+  transform: translateX(4px);
+}
+.kbapp .btn-ghost {
+  align-self: flex-start;
+  background: transparent;
+  color: var(--ink);
+  padding: 13px 26px;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  border: 1px solid var(--rule);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+.kbapp .btn-ghost:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.kbapp .btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* compact ghost button (inline actions) */
+.kbapp .btn-ghost-xs {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 7px 12px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.kbapp .btn-ghost-xs:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.kbapp .btn-ghost-xs:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* mono label / kicker */
+.kbapp .mono-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-muted);
+}
+
+/* ---------------- chips ---------------- */
+.kbapp .chip {
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  padding: 5px 9px;
+  border: 1px solid;
+  display: inline-block;
+  white-space: nowrap;
+}
+.kbapp .chip-quiet {
+  color: var(--ink-muted);
+  border-color: var(--rule-soft);
+  background: transparent;
+  font-weight: 500;
+}
+.kbapp .chip-pending {
+  color: var(--ochre);
+  background: rgba(138, 90, 31, 0.1);
+  border-color: rgba(138, 90, 31, 0.45);
+}
+.kbapp .chip-cleared {
+  color: var(--olive);
+  background: rgba(91, 102, 56, 0.12);
+  border-color: rgba(91, 102, 56, 0.45);
+}
+.kbapp .chip-contested {
+  color: var(--accent);
+  background: rgba(138, 42, 31, 0.1);
+  border-color: rgba(138, 42, 31, 0.45);
+}
+.kbapp .chip-info {
+  color: var(--indigo);
+  background: rgba(31, 58, 77, 0.1);
+  border-color: rgba(31, 58, 77, 0.4);
+}
+/* AI-assisted provenance — indigo (the brand has no violet). */
+.kbapp .chip-ai {
+  color: var(--indigo);
+  background: rgba(31, 58, 77, 0.1);
+  border-color: rgba(31, 58, 77, 0.4);
+}
+
+/* ---------------- list rows ---------------- */
+.kbapp .rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--rule-soft);
+}
+.kbapp .inbox-row,
+.kbapp .concept-row {
+  border-bottom: 1px solid var(--rule-soft);
+  padding: 22px 4px;
+  transition: background 0.2s;
+}
+.kbapp .inbox-row:hover,
+.kbapp .concept-row:hover {
+  background: var(--paper-2);
+}
+.kbapp .concept-row.faded {
+  opacity: 0.5;
+}
+.kbapp .row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kbapp .row-discard {
+  margin-left: auto;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.kbapp .row-discard:hover {
+  color: var(--accent);
+}
+.kbapp .row-discard:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.kbapp .row-title {
+  display: block;
+  margin-top: 12px;
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 21px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+}
+.kbapp .row-title:hover {
+  color: var(--accent);
+}
+.kbapp .row-url {
+  margin-top: 3px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  color: var(--ochre);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  text-decoration: none;
+}
+.kbapp .row-url:hover {
+  text-decoration: underline;
+}
+.kbapp .row-excerpt {
+  margin: 8px 0 0;
+  font-size: 15.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  max-width: 680px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.kbapp .row-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+}
+.kbapp .row-foot time {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+.kbapp .row-process {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+.kbapp .row-process:hover {
+  color: var(--accent-deep);
+}
+.kbapp .empty {
+  border: 1px dashed var(--rule-soft);
+  padding: 48px;
+  text-align: center;
+  color: var(--ink-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-style: italic;
+}
+.kbapp .empty span {
+  font-size: 14px;
+  color: var(--ink-faint);
+}
+
+/* status / inline notices */
+.kbapp .notice {
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  color: var(--ink-muted);
+}
+.kbapp .notice-error {
+  color: var(--accent);
+}
+.kbapp .notice-ok {
+  color: var(--olive);
+}
+.kbapp .callout {
+  border: 1px dashed var(--rule-soft);
+  background: var(--paper-hi);
+  padding: 16px;
+  font-size: 14.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+.kbapp .callout-pending {
+  border-color: rgba(138, 90, 31, 0.45);
+  background: rgba(138, 90, 31, 0.08);
+  color: var(--ochre);
+}
+.kbapp .callout-contested {
+  border: 1px solid rgba(138, 42, 31, 0.45);
+  background: rgba(138, 42, 31, 0.08);
+  color: var(--accent);
+}
+.kbapp .callout-ok {
+  border-color: rgba(91, 102, 56, 0.45);
+  background: rgba(91, 102, 56, 0.1);
+  color: var(--olive);
+}
+
+/* ---------------- session ---------------- */
+.kbapp .session-card .prompt {
+  font-family: var(--font-body), serif;
+  font-size: 18px;
+  color: var(--ink);
+  margin: 18px 0 0;
+  line-height: 1.5;
+}
+.kbapp .reveal-block {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.kbapp .your-comp {
+  background: var(--paper-hi);
+  border: 1px solid var(--rule-soft);
+  padding: 16px;
+}
+.kbapp .your-comp .label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-muted);
+  margin-bottom: 8px;
+}
+.kbapp .your-comp p {
+  margin: 0;
+  font-size: 15.5px;
+  color: var(--ink-soft);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.kbapp .rate-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kbapp .rate-btn {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--rule);
+  background: var(--paper-hi);
+  font-family: var(--font-mono), monospace;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.kbapp .rate-btn:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.kbapp .rate-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.kbapp .rate-hint {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  margin: 10px 0 0;
+}
+.kbapp .reflect {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.kbapp .reflect-q {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kbapp .reflect-q label {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 17px;
+}
+.kbapp .stamp {
+  display: inline-block;
+  border: 2px solid var(--olive);
+  color: var(--olive);
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  padding: 8px 18px;
+  transform: rotate(-2deg);
+  font-weight: 600;
+}
+
+/* ---------------- metrics ---------------- */
+.kbapp .metric-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.kbapp .metric-head {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--ink-muted);
+  margin: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.kbapp .metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+@media (max-width: 560px) {
+  .kbapp .metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.kbapp .metric {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  padding: 22px;
+}
+.kbapp .metric .label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-muted);
+}
+.kbapp .metric-num {
+  font-family: var(--font-display), serif;
+  font-weight: 300;
+  font-size: 48px;
+  line-height: 1;
+  color: var(--ink);
+  font-variation-settings: "SOFT" 100;
+  margin: 10px 0 8px;
+}
+.kbapp .metric-hint {
+  font-family: var(--font-body), serif;
+  font-size: 13.5px;
+  font-style: italic;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+.kbapp .metric-why {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--rule-soft);
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+  line-height: 1.5;
+  text-transform: none;
+}
+.kbapp .trend {
+  background: var(--paper-2);
+}
+.kbapp .trend-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 0;
+}
+.kbapp .trend-w {
+  width: 54px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+.kbapp .trend-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--paper-hi);
+  border: 1px solid var(--rule-soft);
+  overflow: hidden;
+}
+.kbapp .trend-fill {
+  height: 100%;
+  background: var(--olive);
+}
+.kbapp .trend-pct {
+  width: 40px;
+  text-align: right;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.kbapp .anti-vanity {
+  border: 1px dashed var(--rule-soft);
+  padding: 22px;
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-muted);
+  line-height: 1.55;
+}
+
+/* ---------------- generic detail sections ---------------- */
+.kbapp .doc-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: 1px solid var(--rule);
+  background: var(--paper-2);
+  padding: 24px;
+}
+.kbapp .doc-section.flat {
+  background: transparent;
+  border-color: var(--rule-soft);
+}
+.kbapp .item-card {
+  border: 1px solid var(--rule-soft);
+  background: var(--paper-hi);
+  padding: 16px;
+}
+.kbapp .gate-checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  border: 1px solid var(--rule);
+  background: var(--paper-2);
+  padding: 18px 22px;
+}
+.kbapp .gate-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-muted);
+}
+.kbapp .gate-item.done {
+  color: var(--olive);
+}
+
+/* simple checkbox alignment */
+.kbapp .check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+.kbapp .check-row input[type="checkbox"] {
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .kbapp .mh-strip {
+    padding: 9px 20px;
+    font-size: 10px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
 }

@@ -19,32 +19,32 @@ export default function ConceptsPage() {
   const concepts = conceptsQuery.data ?? []
 
   return (
-    <div className='flex flex-col gap-6'>
-      <div>
-        <h1 className='text-2xl font-semibold'>Concepts</h1>
-        <p className='text-sm text-neutral-400'>
+    <div className='screen'>
+      <div className='page-head'>
+        <div className='section-label'>§ Knowledge · Earned</div>
+        <h1>Concepts</h1>
+        <p className='lede'>
           Ideas you’ve articulated in your own words and connected to others.
+          Captured ≠ knowledge — everything here passed the gate.
         </p>
       </div>
 
-      {conceptsQuery.isLoading && (
-        <p className='text-neutral-400'>Loading concepts…</p>
-      )}
+      {conceptsQuery.isLoading && <p className='notice'>Loading concepts…</p>}
       {conceptsQuery.isError && (
-        <p className='text-red-400'>Could not load your concepts.</p>
+        <p className='notice notice-error'>Could not load your concepts.</p>
       )}
 
       {!conceptsQuery.isLoading && concepts.length === 0 && (
-        <section className='rounded-lg border border-dashed border-neutral-800 p-8 text-center'>
-          <p className='text-neutral-400'>No concepts yet.</p>
-          <p className='mt-1 text-sm text-neutral-500'>
+        <div className='empty'>
+          No concepts yet.
+          <span>
             Compress something from your inbox to create your first concept.
-          </p>
-        </section>
+          </span>
+        </div>
       )}
 
       {concepts.length > 0 && (
-        <ul className='flex flex-col gap-3'>
+        <ul className='rows'>
           {concepts.map((concept) => (
             <ConceptRow key={concept.id} concept={concept} />
           ))}
@@ -67,44 +67,23 @@ function ConceptRow({ concept }: { concept: Concept }) {
   const contested = concept.cognitiveState === 'CONTESTED'
 
   return (
-    <li
-      className={`rounded-lg border border-neutral-800 bg-neutral-900 p-4 ${
-        faded ? 'opacity-50' : ''
-      }`}
-    >
-      <div className='flex items-center gap-2'>
+    <li className={`concept-row${faded ? ' faded' : ''}`}>
+      <div className='row-top'>
         {concept.cognitiveState && (
-          <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
-            {concept.cognitiveState}
-          </span>
+          <span className='chip chip-quiet'>{concept.cognitiveState}</span>
         )}
-        {dormant && (
-          <span className='rounded border border-amber-700/60 bg-amber-950/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300'>
-            Dormant
-          </span>
-        )}
-        {contested && (
-          <span className='rounded border border-red-600/70 bg-red-950/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300'>
-            Contested
-          </span>
-        )}
+        {dormant && <span className='chip chip-pending'>Dormant</span>}
+        {contested && <span className='chip chip-contested'>Contested</span>}
         {concept.gateMode && (
-          <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
-            {concept.gateMode}
-          </span>
+          <span className='chip chip-quiet'>{concept.gateMode}</span>
         )}
       </div>
 
-      <Link
-        href={`/concepts/${concept.id}`}
-        className='mt-2 block font-medium text-neutral-100 hover:underline'
-      >
+      <Link href={`/concepts/${concept.id}`} className='row-title'>
         {concept.title}
       </Link>
 
-      <p className='mt-1 line-clamp-3 text-sm text-neutral-400'>
-        {concept.summary || '—'}
-      </p>
+      <p className='row-excerpt'>{concept.summary || '—'}</p>
     </li>
   )
 }

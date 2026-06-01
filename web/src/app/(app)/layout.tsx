@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { type ReactNode, useEffect } from 'react'
 
-import { AppNav } from '@/components/app-shell/app-nav'
+import { AppNav, MastheadStrip } from '@/components/app-shell/app-nav'
 import { useAuth } from '@/lib/auth-context'
 
 /**
@@ -14,6 +14,9 @@ import { useAuth } from '@/lib/auth-context'
  *
  * This is a UI gate, not a security boundary — it only hides screens. The API
  * enforces real access control per request via the JWT (global JwtAuthGuard).
+ *
+ * The whole shell is wrapped in `.kbapp` so the editorial-manuscript component
+ * layer (masthead, § nav, panels, chips, ruled rows) applies.
  */
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -25,16 +28,19 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   if (loading || !user) {
     return (
-      <main className='flex min-h-screen items-center justify-center'>
-        <p className='text-neutral-400'>Loading…</p>
-      </main>
+      <div className='kbapp'>
+        <main className='page'>
+          <p className='notice'>Loading…</p>
+        </main>
+      </div>
     )
   }
 
   return (
-    <div className='min-h-screen'>
+    <div className='kbapp'>
+      <MastheadStrip />
       <AppNav />
-      <main className='mx-auto max-w-3xl p-6'>{children}</main>
+      <main className='page'>{children}</main>
     </div>
   )
 }

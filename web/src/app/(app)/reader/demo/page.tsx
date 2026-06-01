@@ -133,26 +133,21 @@ export default function ReaderDemoPage() {
   const [active, setActive] = useState<Case>('Structured blocks (DET-210)')
 
   return (
-    <div className='flex flex-col gap-6'>
-      <div>
-        <h1 className='text-2xl font-semibold'>Reader — demo states</h1>
-        <p className='text-sm text-neutral-400'>
-          Representative article structures and states for the DET-209 reading
-          surface. Toggle the OS color scheme to check light/dark.
-        </p>
-      </div>
+    <div className='screen'>
+      <p className='section-label'>§ Reader · Demo</p>
+      <h1>Reader — demo states</h1>
+      <p className='lede'>
+        Representative article structures and states for the DET-209 reading
+        surface.
+      </p>
 
-      <div className='flex flex-wrap gap-2'>
+      <div className='seg-row'>
         {CASES.map((c) => (
           <button
             key={c}
             type='button'
             onClick={() => setActive(c)}
-            className={`rounded-md px-3 py-1.5 text-sm transition ${
-              active === c
-                ? 'bg-neutral-100 text-black'
-                : 'border border-neutral-700 text-neutral-300 hover:bg-neutral-900'
-            }`}
+            className={`seg${active === c ? ' on' : ''}`}
           >
             {c}
           </button>

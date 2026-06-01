@@ -45,19 +45,15 @@ const CERTAINTY_OPTIONS: { value: Certainty; label: string }[] = [
 ]
 
 function certaintyChipClass(certainty: Certainty): string {
-  if (certainty === 'UNCERTAIN')
-    return 'border-amber-700/60 bg-amber-950/30 text-amber-300'
-  if (certainty === 'TENTATIVE')
-    return 'border-sky-700/60 bg-sky-950/30 text-sky-300'
-  return 'border-emerald-700/60 bg-emerald-950/30 text-emerald-300'
+  if (certainty === 'UNCERTAIN') return 'chip-pending'
+  if (certainty === 'TENTATIVE') return 'chip-info'
+  return 'chip-cleared'
 }
 
 function relationChipClass(kind: LinkRelation): string {
-  if (kind === 'CONTRADICTION')
-    return 'border-red-700/60 bg-red-950/30 text-red-300'
-  if (kind === 'REDUNDANT')
-    return 'border-amber-700/60 bg-amber-950/30 text-amber-300'
-  return 'border-neutral-700 text-neutral-500'
+  if (kind === 'CONTRADICTION') return 'chip-contested'
+  if (kind === 'REDUNDANT') return 'chip-pending'
+  return 'chip-quiet'
 }
 
 /**
@@ -103,62 +99,41 @@ export default function ConceptViewPage() {
   const contested = concept?.cognitiveState === 'CONTESTED'
 
   return (
-    <div className='flex flex-col gap-6'>
-      <div>
-        <Link
-          href='/concepts'
-          className='text-sm text-neutral-400 hover:text-white'
-        >
+    <div className='screen'>
+      <div className='page-head'>
+        <Link href='/concepts' className='back-link'>
           ← Concepts
         </Link>
-        <h1 className='mt-2 text-2xl font-semibold'>
-          {concept?.title ?? 'Concept'}
-        </h1>
+        <h1>{concept?.title ?? 'Concept'}</h1>
         {concept && (
-          <div className='mt-2 flex flex-wrap items-center gap-2'>
-            <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
-              {concept.status}
-            </span>
+          <div className='flex flex-wrap items-center gap-2'>
+            <span className='chip chip-quiet'>{concept.status}</span>
             {concept.cognitiveState && (
-              <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
-                {concept.cognitiveState}
-              </span>
+              <span className='chip chip-quiet'>{concept.cognitiveState}</span>
             )}
             {concept.gateMode && (
-              <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
-                {concept.gateMode}
-              </span>
+              <span className='chip chip-quiet'>{concept.gateMode}</span>
             )}
             {/* Uncertainty (DET-199): the user's own stance, shown plainly so
                 what they're unsure of is never flattened into implied certainty. */}
-            <span
-              className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${certaintyChipClass(
-                concept.certainty,
-              )}`}
-            >
+            <span className={`chip ${certaintyChipClass(concept.certainty)}`}>
               {concept.certainty}
             </span>
             {/* Memory decay (DET-195): current activation, with a DORMANT
                 call-out + a Revive control when it has faded past the floor. */}
-            <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
+            <span className='chip chip-quiet'>
               Activation {Math.round(concept.currentActivation * 100)}%
             </span>
-            {dormant && (
-              <span className='rounded border border-amber-700/60 bg-amber-950/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300'>
-                Dormant
-              </span>
-            )}
+            {dormant && <span className='chip chip-pending'>Dormant</span>}
             {contested && (
-              <span className='rounded border border-red-600/70 bg-red-950/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300'>
-                Contested
-              </span>
+              <span className='chip chip-contested'>Contested</span>
             )}
             {dormant && (
               <button
                 type='button'
                 onClick={() => reviveMutation.mutate()}
                 disabled={reviveMutation.isPending}
-                className='rounded border border-amber-700/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-300 hover:bg-amber-950/30 disabled:opacity-50'
+                className='btn-ghost-xs'
               >
                 {reviveMutation.isPending ? 'Reviving…' : 'Revive'}
               </button>
@@ -166,12 +141,12 @@ export default function ConceptViewPage() {
           </div>
         )}
         {reviveMutation.isError && (
-          <p className='mt-2 text-xs text-red-400'>
+          <p className='notice notice-error'>
             Could not revive this concept. Try again.
           </p>
         )}
         {concept && concept.stateHistory.length > 0 && (
-          <ol className='mt-3 flex flex-col gap-1 text-xs text-neutral-500'>
+          <ol className='u-mono flex flex-col gap-1 text-xs text-ink-muted'>
             {concept.stateHistory.map((t) => (
               <StateHistoryItem key={t.id} transition={t} />
             ))}
@@ -180,43 +155,37 @@ export default function ConceptViewPage() {
       </div>
 
       {contested && (
-        <div className='rounded-lg border border-red-600/70 bg-red-950/40 p-4'>
-          <p className='text-sm font-semibold uppercase tracking-wide text-red-300'>
-            Contested
-          </p>
-          <p className='mt-1 text-sm text-red-200/80'>
+        <div className='callout-contested'>
+          <p className='mono-label'>Contested</p>
+          <p className='mt-1'>
             This concept conflicts with something else you hold. It&apos;s
             flagged so the tension stays visible until you resolve it.
           </p>
         </div>
       )}
 
-      {conceptQuery.isLoading && (
-        <p className='text-neutral-400'>Loading concept…</p>
-      )}
+      {conceptQuery.isLoading && <p className='notice'>Loading concept…</p>}
       {conceptQuery.isError && (
-        <p className='text-red-400'>Could not load this concept.</p>
+        <p className='notice notice-error'>Could not load this concept.</p>
       )}
 
       {concept && (
         <>
-          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+          <section className='doc-section'>
             <div>
               <div className='flex flex-wrap items-center gap-2'>
-                <h2 className='font-medium'>Articulations</h2>
+                <h2 className='panel-h'>Articulations</h2>
                 {/* Authorship (DET-199): the Articulations are user-authored —
                     the user's own compression + tutor responses. Tagged so it's
                     unmistakable this is what the user wrote, not AI or source. */}
                 <AuthorTag author='USER' />
               </div>
-              <p className='mt-1 text-sm text-neutral-500'>
+              <p className='block-sub mt-1'>
                 Your explanations, in your own words.
               </p>
             </div>
             {concept.articulations.length === 0 ? (
-              <p className='text-sm text-neutral-500'>
-                No articulations recorded.
-              </p>
+              <p className='notice'>No articulations recorded.</p>
             ) : (
               <ol className='flex flex-col gap-3'>
                 {concept.articulations.map((a, i) => (
@@ -230,12 +199,10 @@ export default function ConceptViewPage() {
             )}
           </section>
 
-          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+          <section className='doc-section'>
             <div>
-              <h2 className='font-medium'>Connections</h2>
-              <p className='mt-1 text-sm text-neutral-500'>
-                How this idea relates to others.
-              </p>
+              <h2 className='panel-h'>Connections</h2>
+              <p className='block-sub mt-1'>How this idea relates to others.</p>
             </div>
             {(() => {
               // Only CONFIRMED links are real graph edges (DET-191). SUGGESTED
@@ -247,11 +214,7 @@ export default function ConceptViewPage() {
                 (l) => l.status === 'CONFIRMED',
               )
               if (outgoing.length === 0 && incoming.length === 0) {
-                return (
-                  <p className='text-sm text-neutral-500'>
-                    No connections yet.
-                  </p>
-                )
+                return <p className='notice'>No connections yet.</p>
               }
               return (
                 <ul className='flex flex-col gap-2'>
@@ -276,17 +239,15 @@ export default function ConceptViewPage() {
             })()}
           </section>
 
-          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+          <section className='doc-section'>
             <div>
-              <h2 className='font-medium'>Retrieval</h2>
-              <p className='mt-1 text-sm text-neutral-500'>
+              <h2 className='panel-h'>Retrieval</h2>
+              <p className='block-sub mt-1'>
                 Proof you recalled this from memory.
               </p>
             </div>
             {concept.retrievalEvents.length === 0 ? (
-              <p className='text-sm text-neutral-500'>
-                No retrieval events yet.
-              </p>
+              <p className='notice'>No retrieval events yet.</p>
             ) : (
               <ol className='flex flex-col gap-3'>
                 {concept.retrievalEvents.map((event, i) => (
@@ -296,17 +257,15 @@ export default function ConceptViewPage() {
             )}
           </section>
 
-          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+          <section className='doc-section'>
             <div>
-              <h2 className='font-medium'>What changed</h2>
-              <p className='mt-1 text-sm text-neutral-500'>
+              <h2 className='panel-h'>What changed</h2>
+              <p className='block-sub mt-1'>
                 How your understanding moved over time.
               </p>
             </div>
             {concept.reflections.length === 0 ? (
-              <p className='text-sm text-neutral-500'>
-                No reflections recorded yet.
-              </p>
+              <p className='notice'>No reflections recorded yet.</p>
             ) : (
               <ol className='flex flex-col gap-2'>
                 {concept.reflections.map((reflection) => (
@@ -318,16 +277,16 @@ export default function ConceptViewPage() {
 
           {/* Certainty control (DET-199): the user owns their epistemic stance.
               Framed so marking something unsure is legitimate, not a failure. */}
-          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+          <section className='doc-section'>
             <div>
-              <h2 className='font-medium'>How sure are you?</h2>
-              <p className='mt-1 text-sm text-neutral-500'>
+              <h2 className='panel-h'>How sure are you?</h2>
+              <p className='block-sub mt-1'>
                 Your understanding has an honest edge. It&apos;s fine to mark
                 what you&apos;re still unsure of — uncertainty is information,
                 not a gap to hide.
               </p>
             </div>
-            <div className='flex flex-wrap gap-2'>
+            <div className='seg-row'>
               {CERTAINTY_OPTIONS.map((option) => {
                 const active = concept.certainty === option.value
                 return (
@@ -336,11 +295,7 @@ export default function ConceptViewPage() {
                     type='button'
                     onClick={() => certaintyMutation.mutate(option.value)}
                     disabled={certaintyMutation.isPending}
-                    className={`rounded border px-2.5 py-1 text-xs transition disabled:opacity-50 ${
-                      active
-                        ? certaintyChipClass(option.value)
-                        : 'border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-200'
-                    }`}
+                    className={`seg${active ? ' on' : ''}`}
                   >
                     {option.label}
                   </button>
@@ -348,7 +303,7 @@ export default function ConceptViewPage() {
               })}
             </div>
             {certaintyMutation.isError && (
-              <p className='text-xs text-red-400'>
+              <p className='notice notice-error'>
                 Could not update certainty. Try again.
               </p>
             )}
@@ -356,11 +311,11 @@ export default function ConceptViewPage() {
                 signal beyond the user's own stance — how many of their own
                 compressions back this concept. A cheap, honest proxy; richer
                 source-citation counting is a deferred refinement (server). */}
-            <div className='flex flex-wrap items-center gap-2 border-t border-neutral-800 pt-3'>
-              <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
+            <div className='flex flex-wrap items-center gap-2 border-t border-[var(--rule-soft)] pt-3'>
+              <span className='chip chip-quiet'>
                 Evidence {concept.evidenceDensity}
               </span>
-              <p className='text-xs text-neutral-500'>
+              <p className='block-sub'>
                 {concept.evidenceDensity === 0
                   ? 'No articulations back this yet — thin support.'
                   : `Backed by ${concept.evidenceDensity} of your own ${
@@ -374,38 +329,36 @@ export default function ConceptViewPage() {
 
           {/* Provenance (DET-199): the source is where this came FROM, not the
               concept itself — the canonical text is the user's own compression. */}
-          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+          <section className='doc-section'>
             <div>
               <div className='flex flex-wrap items-center gap-2'>
-                <h2 className='font-medium'>Provenance</h2>
+                <h2 className='panel-h'>Provenance</h2>
                 {/* Authorship (DET-199): the source material is quoted, not
                     written by the user or the AI — tagged distinctly so it's
                     never mistaken for earned, user-authored knowledge. */}
                 <AuthorTag author='SOURCE' />
               </div>
-              <p className='mt-1 text-sm text-neutral-500'>
+              <p className='block-sub mt-1'>
                 The source below is where this came from — provenance, not the
                 concept. The concept itself is your own articulation, compressed
                 from this material in your words.
               </p>
             </div>
-            <div className='flex flex-wrap items-center gap-2 text-sm text-neutral-400'>
+            <div className='flex flex-wrap items-center gap-2'>
               {concept.captureSource && (
-                <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
-                  {concept.captureSource}
-                </span>
+                <span className='chip chip-quiet'>{concept.captureSource}</span>
               )}
               {concept.sourceUrl ? (
                 <a
                   href={concept.sourceUrl}
                   target='_blank'
                   rel='noopener noreferrer'
-                  className='truncate text-amber-400/80 hover:underline'
+                  className='row-url'
                 >
                   {concept.sourceUrl}
                 </a>
               ) : (
-                <span className='text-neutral-500'>
+                <span className='notice'>
                   {concept.captureSource === 'PDF'
                     ? 'From a PDF you captured'
                     : concept.captureSource === 'PASTE'
@@ -441,44 +394,36 @@ type Author = 'USER' | 'AI' | 'SOURCE'
 const AUTHOR_TAGS: Record<Author, { label: string; className: string }> = {
   USER: {
     label: 'You wrote this',
-    className: 'border-emerald-700/60 bg-emerald-950/30 text-emerald-300',
+    className: 'chip-cleared',
   },
   AI: {
     label: 'AI-assisted',
-    className: 'border-violet-700/60 bg-violet-950/30 text-violet-300',
+    className: 'chip-ai',
   },
   SOURCE: {
     label: 'Source — quoted',
-    className: 'border-neutral-700 bg-neutral-900 text-neutral-400',
+    className: 'chip-quiet',
   },
 }
 
 function AuthorTag({ author }: { author: Author }) {
   const { label, className } = AUTHOR_TAGS[author]
-  return (
-    <span
-      className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${className}`}
-    >
-      {label}
-    </span>
-  )
+  return <span className={`chip ${className}`}>{label}</span>
 }
 
 function ReflectionItem({ reflection }: { reflection: Reflection }) {
   return (
-    <li className='flex flex-col gap-1 rounded-md border border-neutral-800 bg-neutral-950/50 p-3 text-sm'>
+    <li className='item-card flex flex-col gap-1 text-sm'>
       <div className='flex flex-wrap items-center gap-2'>
-        <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
+        <span className='chip chip-quiet'>
           {REFLECTION_LABELS[reflection.kind]}
         </span>
-        <time className='ml-auto text-xs text-neutral-600'>
+        <time className='u-mono ml-auto text-xs text-ink-faint'>
           {new Date(reflection.createdAt).toLocaleString()}
         </time>
       </div>
       {reflection.note && (
-        <p className='whitespace-pre-wrap text-neutral-300'>
-          {reflection.note}
-        </p>
+        <p className='whitespace-pre-wrap text-ink-soft'>{reflection.note}</p>
       )}
     </li>
   )
@@ -487,13 +432,13 @@ function ReflectionItem({ reflection }: { reflection: Reflection }) {
 function StateHistoryItem({ transition }: { transition: StateTransition }) {
   return (
     <li className='flex flex-wrap items-center gap-1.5'>
-      <span className='uppercase tracking-wide text-neutral-400'>
+      <span className='uppercase tracking-wide text-ink-muted'>
         {transition.from
           ? `${transition.from} → ${transition.to}`
           : transition.to}
       </span>
-      <span className='text-neutral-600'>· {transition.trigger}</span>
-      <time className='text-neutral-600'>
+      <span className='text-ink-faint'>· {transition.trigger}</span>
+      <time className='text-ink-faint'>
         · {new Date(transition.createdAt).toLocaleString()}
       </time>
     </li>
@@ -508,18 +453,14 @@ function ArticulationItem({
   canonical: boolean
 }) {
   return (
-    <li className='rounded-md border border-neutral-800 bg-neutral-950/50 p-3'>
+    <li className='item-card'>
       <div className='mb-1 flex items-center gap-2'>
-        {canonical && (
-          <span className='rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-300'>
-            Canonical
-          </span>
-        )}
-        <time className='text-xs text-neutral-600'>
+        {canonical && <span className='chip chip-cleared'>Canonical</span>}
+        <time className='u-mono text-xs text-ink-faint'>
           {new Date(articulation.createdAt).toLocaleString()}
         </time>
       </div>
-      <p className='whitespace-pre-wrap text-sm text-neutral-100'>
+      <p className='whitespace-pre-wrap text-sm text-ink'>
         {articulation.body}
       </p>
     </li>
@@ -536,50 +477,38 @@ function LinkItem({
   direction: string
 }) {
   return (
-    <li className='flex flex-col gap-1 rounded-md border border-neutral-800 bg-neutral-950/50 p-3 text-sm'>
+    <li className='item-card flex flex-col gap-1 text-sm'>
       <div className='flex flex-wrap items-center gap-2'>
-        <span className='text-neutral-500'>{direction}</span>
+        <span className='text-ink-muted'>{direction}</span>
         {other ? (
           <Link
             href={`/concepts/${other.id}`}
-            className='font-medium text-neutral-100 hover:underline'
+            className='font-medium text-ink hover:underline'
           >
             {other.title}
           </Link>
         ) : (
-          <span className='text-neutral-500'>Unknown concept</span>
+          <span className='text-ink-muted'>Unknown concept</span>
         )}
         {link.relationKind && (
-          <span
-            className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${relationChipClass(
-              link.relationKind,
-            )}`}
-          >
+          <span className={`chip ${relationChipClass(link.relationKind)}`}>
             {RELATION_LABELS[link.relationKind]}
           </span>
         )}
         {link.relation && (
-          <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
-            {link.relation}
-          </span>
+          <span className='chip chip-quiet'>{link.relation}</span>
         )}
         {/* Provenance (DET-199): keep AI-assisted connections visibly distinct
             from edges the user drew themselves — never blur the two. */}
         {link.proposedBy === 'AI' ? (
-          <span className='rounded border border-violet-700/60 bg-violet-950/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300'>
-            AI-suggested
-          </span>
+          <span className='chip chip-ai'>AI-suggested</span>
         ) : (
-          <span className='rounded border border-emerald-700/60 bg-emerald-950/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300'>
-            You drew this
-          </span>
+          <span className='chip chip-cleared'>You drew this</span>
         )}
-        <span className='ml-auto rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
-          {link.status}
-        </span>
+        <span className='chip chip-quiet ml-auto'>{link.status}</span>
       </div>
       {link.rationale && (
-        <p className='pl-5 text-xs text-neutral-500'>{link.rationale}</p>
+        <p className='pl-5 text-xs text-ink-muted'>{link.rationale}</p>
       )}
     </li>
   )
@@ -593,27 +522,21 @@ function RetrievalItem({
   first: boolean
 }) {
   return (
-    <li className='rounded-md border border-neutral-800 bg-neutral-950/50 p-3'>
+    <li className='item-card'>
       <div className='mb-2 flex items-center gap-2'>
-        {first && (
-          <span className='rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-300'>
-            First retrieval
-          </span>
-        )}
+        {first && <span className='chip chip-cleared'>First retrieval</span>}
         {event.score !== null && (
-          <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
-            Score {event.score}/5
-          </span>
+          <span className='chip chip-quiet'>Score {event.score}/5</span>
         )}
-        <time className='ml-auto text-xs text-neutral-600'>
+        <time className='u-mono ml-auto text-xs text-ink-faint'>
           {new Date(event.createdAt).toLocaleString()}
         </time>
       </div>
       {event.question && (
-        <p className='text-sm font-medium text-neutral-100'>{event.question}</p>
+        <p className='text-sm font-medium text-ink'>{event.question}</p>
       )}
       {event.response && (
-        <p className='mt-1 whitespace-pre-wrap text-sm text-neutral-400'>
+        <p className='mt-1 whitespace-pre-wrap text-sm text-ink-soft'>
           {event.response}
         </p>
       )}

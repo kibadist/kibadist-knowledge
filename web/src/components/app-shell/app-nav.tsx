@@ -12,48 +12,54 @@ const NAV_ITEMS = [
   { href: '/metrics', label: 'Understanding' },
 ] as const
 
-/** Top navigation for the authenticated app shell. */
+/**
+ * The ISSN-style masthead strip that sits above the nav — a live workspace
+ * marker, the sovereignty tagline, and a volume number. Pure brand chrome.
+ */
+export function MastheadStrip() {
+  return (
+    <div className='mh-strip'>
+      <span className='mh-live'>
+        <span className='dot' /> Workspace · Lab Notebooks
+      </span>
+      <span className='mh-mid'>Local-first · Logseq-based · Sovereign</span>
+      <span>Vol I · № 014</span>
+    </div>
+  )
+}
+
+/** Primary navigation for the authenticated app shell — §-prefixed mono items. */
 export function AppNav() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
 
   return (
-    <header className='border-b border-neutral-800'>
-      <nav className='mx-auto flex max-w-3xl items-center justify-between gap-4 p-4'>
-        <div className='flex items-center gap-1'>
-          <Link href='/inbox' className='mr-3 font-semibold'>
+    <header className='app-nav-wrap'>
+      <nav className='app-nav'>
+        <div className='app-nav-left'>
+          <Link href='/inbox' className='nav-brand'>
             Kibadist
           </Link>
-          {NAV_ITEMS.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(`${item.href}/`)
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? 'page' : undefined}
-                className={`rounded-md px-3 py-1.5 text-sm transition ${
-                  active
-                    ? 'bg-neutral-800 text-white'
-                    : 'text-neutral-400 hover:bg-neutral-900 hover:text-white'
-                }`}
-              >
-                {item.label}
-              </Link>
-            )
-          })}
+          <div className='nav-items'>
+            {NAV_ITEMS.map((item) => {
+              const active =
+                pathname === item.href || pathname.startsWith(`${item.href}/`)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? 'page' : undefined}
+                  className={`nav-item${active ? ' is-active' : ''}`}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+          </div>
         </div>
-        <div className='flex items-center gap-3'>
-          {user && (
-            <span className='hidden text-sm text-neutral-400 sm:inline'>
-              {user.email}
-            </span>
-          )}
-          <button
-            type='button'
-            onClick={logout}
-            className='rounded-md border border-neutral-700 px-3 py-1.5 text-sm transition hover:bg-neutral-900'
-          >
+        <div className='app-nav-right'>
+          {user && <span className='nav-user'>{user.email}</span>}
+          <button type='button' onClick={logout} className='btn-ghost-sm'>
             Sign out
           </button>
         </div>

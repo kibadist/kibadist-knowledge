@@ -88,26 +88,20 @@ export default function ProcessInboxItemPage() {
   })
 
   return (
-    <div className='flex flex-col gap-6'>
-      <div>
-        <Link
-          href='/inbox'
-          className='text-sm text-neutral-400 hover:underline'
-        >
+    <div className='screen'>
+      <div className='page-head'>
+        <Link href='/inbox' className='back-link'>
           ← Back to inbox
         </Link>
-        <h1 className='mt-2 text-2xl font-semibold'>
-          {itemQuery.data?.title ?? 'Processing…'}
-        </h1>
-        <p className='text-sm text-neutral-400'>
+        <span className='section-label'>§ Process</span>
+        <h1>{itemQuery.data?.title ?? 'Processing…'}</h1>
+        <p className='lede'>
           Answer in your own words. We ask the questions — we won’t write your
           understanding for you.
         </p>
-        <Link
-          href={`/inbox/${id}/promote`}
-          className='mt-3 inline-block rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200'
-        >
-          Promote to a concept →
+        <Link href={`/inbox/${id}/promote`} className='btn-primary'>
+          Promote to a concept
+          <span className='ar'>→</span>
         </Link>
       </div>
 
@@ -138,13 +132,11 @@ export default function ProcessInboxItemPage() {
       {itemQuery.data?.sourceText && <ReferenceQaPanel conceptId={id} />}
 
       {questionsQuery.isLoading && (
-        <p className='text-neutral-400'>
-          Reading it and thinking up questions…
-        </p>
+        <p className='notice'>Reading it and thinking up questions…</p>
       )}
       {questionsQuery.isError && (
-        <div className='rounded-lg border border-amber-700/50 bg-amber-950/10 p-4'>
-          <p className='text-sm text-amber-300/90'>
+        <div className='callout-pending'>
+          <p className='notice notice-error'>
             {questionsQuery.error instanceof Error
               ? questionsQuery.error.message
               : 'Could not generate questions.'}
@@ -152,7 +144,8 @@ export default function ProcessInboxItemPage() {
           <button
             type='button'
             onClick={() => questionsQuery.refetch()}
-            className='mt-2 rounded-md border border-neutral-700 px-3 py-1.5 text-sm transition hover:bg-neutral-900'
+            className='btn-ghost'
+            style={{ marginTop: 8 }}
           >
             Try again
           </button>
@@ -166,22 +159,23 @@ export default function ProcessInboxItemPage() {
             setSaved(false)
             save.mutate(questionsQuery.data)
           }}
-          className='flex flex-col gap-5'
+          className='doc-section'
         >
-          <ol className='flex flex-col gap-5'>
+          <h2 className='panel-h'>Interrogation</h2>
+          <ol className='flex flex-col gap-4'>
             {questionsQuery.data.map((q, i) => (
-              <li key={q.id} className='flex flex-col gap-2'>
+              <li key={q.id} className='item-card flex flex-col gap-2'>
                 <div className='flex items-baseline gap-2'>
-                  <span className='text-sm font-medium text-neutral-500'>
+                  <span className='u-mono text-sm text-ink-muted'>
                     {i + 1}.
                   </span>
                   {q.kind && KIND_LABEL[q.kind] && (
-                    <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
+                    <span className='chip chip-quiet'>
                       {KIND_LABEL[q.kind]}
                     </span>
                   )}
                 </div>
-                <p className='font-medium text-neutral-100'>{q.prompt}</p>
+                <p className='font-medium text-ink'>{q.prompt}</p>
                 <textarea
                   value={answers[q.id] ?? ''}
                   onChange={(e) => {
@@ -190,14 +184,14 @@ export default function ProcessInboxItemPage() {
                   }}
                   placeholder='Your answer, in your own words…'
                   rows={3}
-                  className='resize-y rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-neutral-400'
+                  className='fld'
                 />
               </li>
             ))}
           </ol>
 
           {save.isError && (
-            <p className='text-sm text-red-400'>
+            <p className='notice notice-error'>
               {save.error instanceof Error
                 ? save.error.message
                 : 'Failed to save answers'}
@@ -208,12 +202,13 @@ export default function ProcessInboxItemPage() {
             <button
               type='submit'
               disabled={save.isPending}
-              className='self-start rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50'
+              className='btn-primary'
             >
               {save.isPending ? 'Saving…' : 'Save my answers'}
+              <span className='ar'>→</span>
             </button>
             {saved && !save.isPending && (
-              <span className='text-sm text-green-400'>Saved.</span>
+              <span className='notice notice-ok'>Saved.</span>
             )}
           </div>
         </form>
@@ -261,12 +256,10 @@ function ReferenceQaPanel({ conceptId }: { conceptId: string }) {
   const trimmed = question.trim()
 
   return (
-    <section className='flex flex-col gap-4 rounded-lg border border-neutral-800 bg-neutral-950/30 p-4'>
+    <section className='doc-section flat'>
       <div>
-        <h2 className='text-sm font-semibold text-neutral-200'>
-          Ask about the source
-        </h2>
-        <p className='text-xs text-neutral-500'>
+        <h2 className='panel-h'>Ask about the source</h2>
+        <p className='block-sub'>
           Answers are grounded in the text to help you read. They’re reference
           scaffold — not your knowledge. You’ll still articulate it yourself.
         </p>
@@ -275,29 +268,30 @@ function ReferenceQaPanel({ conceptId }: { conceptId: string }) {
       {historyQuery.data && historyQuery.data.length > 0 && (
         <ul className='flex flex-col gap-3'>
           {historyQuery.data.map((entry) => (
-            <li
-              key={entry.id}
-              className='rounded-md border border-neutral-800 bg-neutral-900/40 p-3'
-            >
+            <li key={entry.id} className='item-card'>
               <div className='flex items-start justify-between gap-2'>
-                <p className='text-sm font-medium text-neutral-200'>
-                  {entry.questionText}
-                </p>
+                <p className='font-medium text-ink'>{entry.questionText}</p>
                 <button
                   type='button'
                   onClick={() => remove.mutate(entry.id)}
-                  className='shrink-0 text-xs text-neutral-600 transition hover:text-neutral-300'
+                  className='shrink-0 u-mono text-xs text-ink-faint transition hover:text-accent'
                   aria-label='Discard this question'
                 >
                   ✕
                 </button>
               </div>
               {entry.answerText && (
-                <div className='mt-2 border-l-2 border-amber-700/40 pl-3'>
-                  <span className='inline-block rounded border border-amber-700/40 bg-amber-950/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300/80'>
+                <div
+                  className='mt-2'
+                  style={{
+                    borderLeft: '2px solid var(--ochre)',
+                    paddingLeft: 12,
+                  }}
+                >
+                  <span className='chip chip-pending'>
                     Reference · AI scaffold
                   </span>
-                  <p className='mt-1.5 whitespace-pre-wrap text-sm text-neutral-400'>
+                  <p className='mt-1.5 whitespace-pre-wrap text-sm text-ink-muted'>
                     {entry.answerText}
                   </p>
                   {entry.citations.length > 0 && (
@@ -305,7 +299,8 @@ function ReferenceQaPanel({ conceptId }: { conceptId: string }) {
                       {entry.citations.map((c, i) => (
                         <li
                           key={i}
-                          className='border-l border-neutral-700 pl-2 text-xs italic text-neutral-500'
+                          className='pl-2 text-xs italic text-ink-muted'
+                          style={{ borderLeft: '1px solid var(--rule-soft)' }}
                         >
                           “{c.quote}”
                         </li>
@@ -331,10 +326,10 @@ function ReferenceQaPanel({ conceptId }: { conceptId: string }) {
           onChange={(e) => setQuestion(e.target.value)}
           placeholder='e.g. What does the author mean by this term?'
           rows={2}
-          className='resize-y rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-neutral-400'
+          className='fld'
         />
         {ask.isError && (
-          <p className='text-sm text-red-400'>
+          <p className='notice notice-error'>
             {ask.error instanceof Error
               ? ask.error.message
               : 'Could not answer right now'}
@@ -343,7 +338,7 @@ function ReferenceQaPanel({ conceptId }: { conceptId: string }) {
         <button
           type='submit'
           disabled={ask.isPending || !trimmed}
-          className='self-start rounded-md border border-neutral-700 px-3 py-1.5 text-sm transition hover:bg-neutral-900 disabled:opacity-50'
+          className='btn-ghost'
         >
           {ask.isPending ? 'Asking…' : 'Ask the source'}
         </button>
@@ -456,13 +451,11 @@ function ConceptLibraryPanel({ inboxId }: { inboxId: string }) {
   }
 
   return (
-    <section className='flex flex-col gap-4 rounded-lg border border-neutral-800 bg-neutral-950/30 p-4'>
+    <section className='doc-section flat'>
       <div className='flex items-start justify-between gap-3'>
         <div>
-          <h2 className='text-sm font-semibold text-neutral-200'>
-            Concepts in this article
-          </h2>
-          <p className='text-xs text-neutral-500'>
+          <h2 className='panel-h'>Concepts in this article</h2>
+          <p className='block-sub'>
             What this article introduces, grouped by section. These are
             reference scaffold — not your knowledge. You earn each one through
             the gate.
@@ -472,7 +465,7 @@ function ConceptLibraryPanel({ inboxId }: { inboxId: string }) {
           type='button'
           onClick={() => regenerate.mutate()}
           disabled={regenerate.isPending}
-          className='shrink-0 rounded-md border border-neutral-700 px-2.5 py-1 text-xs transition hover:bg-neutral-900 disabled:opacity-50'
+          className='btn-ghost-xs shrink-0'
         >
           {regenerate.isPending ? 'Rebuilding…' : 'Rebuild'}
         </button>
@@ -515,33 +508,27 @@ function ChunkGroup({
   const lowSignal = isLowSignalChunk(chunk.kind)
 
   return (
-    <li className='rounded-md border border-neutral-800 bg-neutral-900/40 p-4'>
+    <li className='item-card'>
       <details open={!lowSignal}>
         <summary className='flex cursor-pointer flex-wrap items-center gap-2'>
-          <h3 className='font-medium text-neutral-100'>
-            {chunk.title ?? 'Section'}
-          </h3>
-          <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
+          <h3 className='font-medium text-ink'>{chunk.title ?? 'Section'}</h3>
+          <span className='chip chip-quiet'>
             {CHUNK_KIND_LABEL[chunk.kind]}
           </span>
           <span
-            className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
-              chunk.importance === 'CORE'
-                ? 'border-emerald-700/60 text-emerald-300/80'
-                : 'border-neutral-700 text-neutral-500'
-            }`}
+            className={`chip ${chunk.importance === 'CORE' ? 'chip-cleared' : 'chip-quiet'}`}
           >
             {CHUNK_IMPORTANCE_LABEL[chunk.importance]}
           </span>
           {candidates.length > 0 && (
-            <span className='text-[10px] text-neutral-600'>
+            <span className='u-mono text-xs text-ink-faint'>
               {candidates.length} concept{candidates.length === 1 ? '' : 's'}
             </span>
           )}
         </summary>
 
         {candidates.length === 0 ? (
-          <p className='mt-3 text-xs text-neutral-600'>
+          <p className='mt-3 text-xs text-ink-faint'>
             No distinct concepts extracted from this section.
           </p>
         ) : (
@@ -589,18 +576,12 @@ function CandidateRow({
   })
 
   return (
-    <li className='rounded-md border border-neutral-800 bg-neutral-950/50 p-3'>
+    <li className='item-card'>
       <div className='flex flex-wrap items-center gap-2'>
-        <span className='font-medium text-neutral-100'>{candidate.label}</span>
-        <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
-          {candidate.kind.toLowerCase()}
-        </span>
+        <span className='font-medium text-ink'>{candidate.label}</span>
+        <span className='chip chip-quiet'>{candidate.kind.toLowerCase()}</span>
         <span
-          className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
-            candidate.importance === 'CORE'
-              ? 'border-emerald-700/60 text-emerald-300/80'
-              : 'border-neutral-700 text-neutral-500'
-          }`}
+          className={`chip ${candidate.importance === 'CORE' ? 'chip-cleared' : 'chip-quiet'}`}
         >
           {CANDIDATE_IMPORTANCE_LABEL[candidate.importance]}
         </span>
@@ -608,10 +589,13 @@ function CandidateRow({
 
       {candidate.definition && (
         <details className='mt-1.5'>
-          <summary className='cursor-pointer text-xs uppercase tracking-wide text-neutral-600'>
+          <summary className='cursor-pointer u-mono text-xs uppercase text-ink-muted'>
             Source-grounded definition (reference)
           </summary>
-          <p className='mt-1 border-l-2 border-amber-700/40 pl-3 text-sm text-neutral-400'>
+          <p
+            className='mt-1 block-sub'
+            style={{ borderLeft: '2px solid var(--ochre)', paddingLeft: 12 }}
+          >
             {candidate.definition}
           </p>
         </details>
@@ -621,22 +605,15 @@ function CandidateRow({
         <button
           type='button'
           onClick={() => setAskOpen((v) => !v)}
-          className='rounded-md border border-neutral-700 px-2.5 py-1 text-xs transition hover:bg-neutral-900'
+          className='btn-ghost-xs'
         >
           Ask about this
         </button>
-        <button
-          type='button'
-          onClick={onCompress}
-          className='rounded-md bg-white px-2.5 py-1 text-xs font-medium text-black transition hover:bg-neutral-200'
-        >
+        <button type='button' onClick={onCompress} className='btn-primary'>
           Compress this
+          <span className='ar'>→</span>
         </button>
-        <button
-          type='button'
-          onClick={onDismiss}
-          className='rounded-md border border-neutral-800 px-2.5 py-1 text-xs text-neutral-500 transition hover:text-neutral-300'
-        >
+        <button type='button' onClick={onDismiss} className='btn-ghost-xs'>
           Dismiss
         </button>
       </div>
@@ -654,10 +631,10 @@ function CandidateRow({
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             placeholder={`Ask about “${candidate.label}”…`}
-            className='rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm outline-none focus:border-neutral-400'
+            className='fld'
           />
           {ask.isError && (
-            <p className='text-xs text-red-400'>
+            <p className='notice notice-error'>
               {ask.error instanceof Error
                 ? ask.error.message
                 : 'Could not answer right now'}
@@ -666,16 +643,16 @@ function CandidateRow({
           <button
             type='submit'
             disabled={ask.isPending || !question.trim()}
-            className='self-start rounded-md border border-neutral-700 px-2.5 py-1 text-xs transition hover:bg-neutral-900 disabled:opacity-50'
+            className='btn-ghost-xs'
           >
             {ask.isPending ? 'Asking…' : 'Ask'}
           </button>
           {answer && (
-            <div className='border-l-2 border-amber-700/40 pl-3'>
-              <span className='inline-block rounded border border-amber-700/40 bg-amber-950/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300/80'>
-                Reference · AI scaffold
-              </span>
-              <p className='mt-1.5 whitespace-pre-wrap text-sm text-neutral-400'>
+            <div
+              style={{ borderLeft: '2px solid var(--ochre)', paddingLeft: 12 }}
+            >
+              <span className='chip chip-pending'>Reference · AI scaffold</span>
+              <p className='mt-1.5 whitespace-pre-wrap text-sm text-ink-muted'>
                 {answer}
               </p>
             </div>

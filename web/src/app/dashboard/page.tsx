@@ -47,92 +47,118 @@ export default function DashboardPage() {
 
   if (loading || !user) {
     return (
-      <main className='flex min-h-screen items-center justify-center'>
-        <p className='text-neutral-400'>Loading…</p>
-      </main>
+      <div className='kbapp'>
+        <main className='page' style={{ paddingTop: '6rem' }}>
+          <p className='text-ink-muted'>Loading…</p>
+        </main>
+      </div>
     )
   }
 
   return (
-    <main className='mx-auto max-w-2xl p-6'>
-      <header className='mb-8 flex items-center justify-between'>
-        <div>
-          <h1 className='text-2xl font-semibold'>Your notes</h1>
-          <p className='text-sm text-neutral-400'>{user.email}</p>
-        </div>
-        <button
-          type='button'
-          onClick={logout}
-          className='rounded-md border border-neutral-700 px-3 py-1.5 text-sm transition hover:bg-neutral-900'
-        >
-          Sign out
-        </button>
-      </header>
-
-      <form
-        onSubmit={onSubmit}
-        className='mb-8 flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'
-      >
-        <input
-          type='text'
-          placeholder='Note title'
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          required
-          className='rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 outline-none focus:border-neutral-400'
-        />
-        <RichTextEditor
-          key={editorKey}
-          placeholder='Write something…'
-          onChange={(serializedState, isEmpty) => {
-            setBody(serializedState)
-            setBodyEmpty(isEmpty)
+    <div className='kbapp'>
+      <main className='page screen'>
+        <header
+          className='page-head'
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: '1rem',
           }}
-        />
-        {createNote.isError && (
-          <p className='text-sm text-red-400'>
-            {createNote.error instanceof Error
-              ? createNote.error.message
-              : 'Failed to create note'}
-          </p>
-        )}
-        <button
-          type='submit'
-          disabled={createNote.isPending}
-          className='self-start rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50'
         >
-          {createNote.isPending ? 'Adding…' : 'Add note'}
-        </button>
-      </form>
-
-      {notesQuery.isLoading && (
-        <p className='text-neutral-400'>Loading notes…</p>
-      )}
-      {notesQuery.isError && (
-        <p className='text-red-400'>Could not load notes.</p>
-      )}
-      {notesQuery.data?.length === 0 && (
-        <p className='text-neutral-400'>No notes yet. Add your first one.</p>
-      )}
-
-      <ul className='flex flex-col gap-3'>
-        {notesQuery.data?.map((note) => (
-          <li
-            key={note.id}
-            className='rounded-lg border border-neutral-800 p-4'
+          <div>
+            <span className='section-label'>§ Notebook</span>
+            <h1>Your notes</h1>
+            <p className='block-sub u-mono'>{user.email}</p>
+          </div>
+          <button
+            type='button'
+            onClick={logout}
+            className='btn-ghost-xs'
+            style={{ marginTop: '0.25rem', flexShrink: 0 }}
           >
-            <h2 className='font-medium'>{note.title}</h2>
-            {note.body && (
-              <div className='mt-1 text-sm text-neutral-300'>
-                <RichTextViewer value={note.body} />
+            Sign out
+          </button>
+        </header>
+
+        <div className='panel panel-raised'>
+          <form
+            onSubmit={onSubmit}
+            className='flex flex-col'
+            style={{ gap: '0.75rem' }}
+          >
+            <input
+              type='text'
+              placeholder='Note title'
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              className='fld'
+            />
+            <RichTextEditor
+              key={editorKey}
+              placeholder='Write something…'
+              onChange={(serializedState, isEmpty) => {
+                setBody(serializedState)
+                setBodyEmpty(isEmpty)
+              }}
+            />
+            {createNote.isError && (
+              <div className='notice notice-error'>
+                {createNote.error instanceof Error
+                  ? createNote.error.message
+                  : 'Failed to create note'}
               </div>
             )}
-            <time className='mt-2 block text-xs text-neutral-500'>
-              {new Date(note.createdAt).toLocaleString()}
-            </time>
-          </li>
-        ))}
-      </ul>
-    </main>
+            <button
+              type='submit'
+              disabled={createNote.isPending}
+              className='btn-primary'
+              style={{ alignSelf: 'flex-start', marginTop: '0.25rem' }}
+            >
+              {createNote.isPending ? 'Adding…' : 'Add note'}{' '}
+              <span className='ar'>→</span>
+            </button>
+          </form>
+        </div>
+
+        {notesQuery.isLoading && <div className='notice'>Loading notes…</div>}
+        {notesQuery.isError && (
+          <div className='notice notice-error'>Could not load notes.</div>
+        )}
+        {notesQuery.data?.length === 0 && (
+          <div className='empty'>
+            <span>No notes yet. Add your first one above.</span>
+          </div>
+        )}
+
+        <ul
+          className='rows'
+          style={{ listStyle: 'none', padding: 0, margin: 0 }}
+        >
+          {notesQuery.data?.map((note) => (
+            <li key={note.id} className='item-card'>
+              <h2 className='block-h'>{note.title}</h2>
+              {note.body && (
+                <div className='u-body' style={{ marginTop: '0.25rem' }}>
+                  <RichTextViewer value={note.body} />
+                </div>
+              )}
+              <time
+                className='u-mono text-ink-muted'
+                style={{
+                  display: 'block',
+                  marginTop: '0.5rem',
+                  fontSize: '0.75rem',
+                }}
+              >
+                {new Date(note.createdAt).toLocaleString()}
+              </time>
+            </li>
+          ))}
+        </ul>
+      </main>
+    </div>
   )
 }

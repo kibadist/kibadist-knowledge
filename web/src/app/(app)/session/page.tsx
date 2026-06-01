@@ -30,7 +30,7 @@ export default function SessionPage() {
   const session = activeQuery.data
 
   if (activeQuery.isLoading) {
-    return <p className='text-neutral-400'>Loading session…</p>
+    return <p className='notice'>Loading session…</p>
   }
 
   if (!session) {
@@ -57,35 +57,30 @@ function StartScreen({ onStarted }: { onStarted: (s: Session) => void }) {
   })
 
   return (
-    <div className='flex flex-col gap-6'>
-      <div>
-        <h1 className='text-2xl font-semibold'>Session</h1>
-        <p className='text-sm text-neutral-400'>
+    <div className='screen'>
+      <div className='page-head'>
+        <div className='section-label'>§ Recall · The daily loop</div>
+        <h1>Session</h1>
+        <p className='lede'>
           The system resurfaces concepts as questions, so you rebuild
           understanding instead of rereading.
         </p>
       </div>
 
-      <section className='flex flex-col gap-4 rounded-lg border border-neutral-800 p-6'>
-        <div>
-          <h2 className='font-medium'>How long do you have?</h2>
-          <p className='mt-1 text-sm text-neutral-500'>
-            We&apos;ll build a queue to fit. Five focused minutes beats an hour
-            of rereading.
-          </p>
-        </div>
-        <div className='flex flex-wrap gap-2'>
+      <section className='panel panel-raised'>
+        <h3 className='block-h'>How long do you have?</h3>
+        <p className='block-sub'>
+          We’ll build a queue to fit. Five focused minutes beats an hour of
+          rereading.
+        </p>
+        <div className='seg-row' style={{ marginTop: 18 }}>
           {TARGET_OPTIONS.map((minutes) => (
             <button
               key={minutes}
               type='button'
               onClick={() => setTargetMinutes(minutes)}
               aria-pressed={targetMinutes === minutes}
-              className={`rounded-md border px-3 py-1.5 text-sm transition ${
-                targetMinutes === minutes
-                  ? 'border-white bg-white text-black'
-                  : 'border-neutral-700 text-neutral-300 hover:bg-neutral-900'
-              }`}
+              className={`seg${targetMinutes === minutes ? ' on' : ''}`}
             >
               {minutes} min
             </button>
@@ -95,12 +90,14 @@ function StartScreen({ onStarted }: { onStarted: (s: Session) => void }) {
           type='button'
           onClick={() => start.mutate()}
           disabled={start.isPending}
-          className='self-start rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50'
+          className='btn-primary'
+          style={{ marginTop: 22 }}
         >
-          {start.isPending ? 'Starting…' : 'Start session'}
+          {start.isPending ? 'Starting…' : 'Start session'}{' '}
+          <span className='ar'>→</span>
         </button>
         {start.isError && (
-          <p className='text-sm text-red-400'>
+          <p className='notice notice-error' style={{ marginTop: 12 }}>
             Could not start a session. Try again.
           </p>
         )}
@@ -146,22 +143,23 @@ function RunningSession({ session }: { session: Session }) {
   // than a blank loop.
   if (session.items.length === 0) {
     return (
-      <div className='flex flex-col gap-6'>
-        <div>
-          <h1 className='text-2xl font-semibold'>Session</h1>
+      <div className='screen'>
+        <div className='page-head'>
+          <div className='section-label'>§ Recall · The daily loop</div>
+          <h1>Session</h1>
         </div>
-        <section className='rounded-lg border border-dashed border-neutral-800 p-8 text-center'>
-          <p className='text-neutral-400'>Nothing is due for review.</p>
-          <p className='mt-1 text-sm text-neutral-500'>
-            Concepts you articulate will resurface here when it&apos;s time to
-            recall them.
-          </p>
-          <div className='mt-4 flex justify-center gap-3'>
-            <Link
-              href='/inbox'
-              className='rounded-md bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-neutral-200'
-            >
-              Capture something
+        <div className='empty'>
+          Nothing is due for review.
+          <span>
+            Concepts you articulate will resurface here when it’s time to recall
+            them.
+          </span>
+          <div
+            className='seg-row'
+            style={{ marginTop: 18, justifyContent: 'center' }}
+          >
+            <Link href='/inbox' className='btn-primary'>
+              Capture something <span className='ar'>→</span>
             </Link>
             <button
               type='button'
@@ -169,12 +167,12 @@ function RunningSession({ session }: { session: Session }) {
                 endSession.mutate(undefined, { onSuccess: leaveSession })
               }
               disabled={endSession.isPending}
-              className='rounded-md border border-neutral-700 px-4 py-2 text-sm transition hover:bg-neutral-900 disabled:opacity-50'
+              className='btn-ghost'
             >
               {endSession.isPending ? 'Ending…' : 'End session'}
             </button>
           </div>
-        </section>
+        </div>
       </div>
     )
   }
@@ -202,12 +200,14 @@ function RunningSession({ session }: { session: Session }) {
   const current = session.items[index]
 
   return (
-    <div className='flex flex-col gap-6'>
-      <div>
-        <h1 className='text-2xl font-semibold'>Session</h1>
-        <p className='text-sm text-neutral-400'>
-          Concept {index + 1} of {session.items.length} — recall it from memory
-          first, then check yourself.
+    <div className='screen'>
+      <div className='page-head'>
+        <div className='section-label'>
+          § Recall · Concept {index + 1} of {session.items.length}
+        </div>
+        <h1>Session</h1>
+        <p className='lede'>
+          Recall it from memory first — then check yourself.
         </p>
       </div>
 
@@ -265,36 +265,30 @@ function SessionCard({
   const articulation = conceptQuery.data?.articulations[0]?.body
 
   return (
-    <section className='flex flex-col gap-4 rounded-lg border border-neutral-800 p-6'>
-      <div className='flex flex-wrap items-center gap-2'>
-        <h2 className='font-medium'>{item.title}</h2>
-        <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
-          {REASON_LABELS[item.reason]}
-        </span>
+    <section className='panel panel-raised session-card'>
+      <div className='row-top'>
+        <h3 className='panel-h'>{item.title}</h3>
+        <span className='chip chip-quiet'>{REASON_LABELS[item.reason]}</span>
         {/* Contested (DET-199): mark a contested concept here too, so the signal
             is visible everywhere it surfaces — detail, list, and this view. */}
         {item.cognitiveState === 'CONTESTED' && (
-          <span className='rounded border border-red-600/70 bg-red-950/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300'>
-            Contested
-          </span>
+          <span className='chip chip-contested'>Contested</span>
         )}
       </div>
 
       {item.reason === 'CHALLENGE' && (
-        <p className='text-sm text-amber-300/80'>
-          You&apos;ve internalized this — the Tutor would push on it. Recall the
-          core idea and rate how solid it still feels.
+        <p className='callout callout-pending' style={{ marginTop: 14 }}>
+          You’ve internalized this — the Tutor would push on it. Recall the core
+          idea and rate how solid it still feels.
         </p>
       )}
 
-      {cardsQuery.isLoading && (
-        <p className='text-sm text-neutral-500'>Loading the prompt…</p>
-      )}
+      {cardsQuery.isLoading && <p className='prompt'>Loading the prompt…</p>}
       {prompt ? (
-        <p className='text-sm font-medium text-neutral-100'>{prompt}</p>
+        <p className='prompt'>{prompt}</p>
       ) : (
         !cardsQuery.isLoading && (
-          <p className='text-sm text-neutral-500'>
+          <p className='prompt'>
             Recall what you understand about this concept, in your own words.
           </p>
         )
@@ -306,58 +300,52 @@ function SessionCard({
         placeholder='Answer from memory…'
         rows={4}
         disabled={revealed}
-        className='w-full rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none disabled:opacity-60'
+        className='fld'
+        style={{ marginTop: 18 }}
       />
 
       {!revealed ? (
         <button
           type='button'
           onClick={onReveal}
-          className='self-start rounded-md border border-neutral-700 px-3 py-1.5 text-sm transition hover:bg-neutral-900'
+          className='btn-ghost'
+          style={{ marginTop: 18 }}
         >
           Reveal &amp; rate
         </button>
       ) : (
-        <div className='flex flex-col gap-4'>
-          <div className='rounded-md border border-neutral-800 bg-neutral-950/50 p-3'>
-            <p className='mb-1 text-[10px] uppercase tracking-wide text-neutral-500'>
-              Your compression
-            </p>
+        <div className='reveal-block'>
+          <div className='your-comp'>
+            <div className='label'>Your compression</div>
             {conceptQuery.isLoading ? (
-              <p className='text-sm text-neutral-500'>Loading…</p>
+              <p>Loading…</p>
             ) : articulation ? (
-              <p className='whitespace-pre-wrap text-sm text-neutral-100'>
-                {articulation}
-              </p>
+              <p>{articulation}</p>
             ) : (
-              <p className='text-sm text-neutral-500'>
-                No articulation recorded yet.
-              </p>
+              <p>No articulation recorded yet.</p>
             )}
           </div>
 
-          <div>
-            <p className='mb-2 text-sm text-neutral-400'>
+          <div className='rate'>
+            <p className='block-sub' style={{ marginBottom: 10 }}>
               How well did you recall it?
             </p>
-            <div className='flex flex-wrap gap-2'>
+            <div className='rate-row'>
               {RATINGS.map((score) => (
                 <button
                   key={score}
                   type='button'
                   onClick={() => review.mutate(score)}
                   disabled={review.isPending}
-                  className='h-10 w-10 rounded-md border border-neutral-700 text-sm transition hover:bg-neutral-900 disabled:opacity-50'
+                  className='rate-btn'
                 >
                   {score}
                 </button>
               ))}
             </div>
-            <p className='mt-1 text-xs text-neutral-600'>
-              0 = blank · 5 = effortless
-            </p>
+            <p className='rate-hint'>0 = blank · 5 = effortless</p>
             {review.isError && (
-              <p className='mt-1 text-sm text-red-400'>
+              <p className='notice notice-error' style={{ marginTop: 10 }}>
                 Could not record that. Try again.
               </p>
             )}
@@ -429,29 +417,27 @@ function ReflectionStep({
   }
 
   return (
-    <div className='flex flex-col gap-6'>
-      <div>
-        <h1 className='text-2xl font-semibold'>What moved?</h1>
-        <p className='text-sm text-neutral-400'>
+    <div className='screen'>
+      <div className='page-head'>
+        <div className='section-label'>§ Recall · Reflection</div>
+        <h1>
+          What <em>moved?</em>
+        </h1>
+        <p className='lede'>
           A quick reflection so this session changes something. Answer what
           fits, skip the rest.
         </p>
       </div>
 
-      <section className='flex flex-col gap-5 rounded-lg border border-neutral-800 p-6'>
+      <section className='panel panel-raised reflect'>
         {REFLECTION_PROMPTS.map((p) => (
-          <div key={p.kind} className='flex flex-col gap-2'>
-            <label
-              htmlFor={`reflect-${p.kind}`}
-              className='text-sm font-medium text-neutral-100'
-            >
-              {p.question}
-            </label>
+          <div key={p.kind} className='reflect-q'>
+            <label htmlFor={`reflect-${p.kind}`}>{p.question}</label>
             <select
               id={`reflect-${p.kind}`}
               value={answers[p.kind].conceptId}
               onChange={(e) => setAnswer(p.kind, { conceptId: e.target.value })}
-              className='rounded-md border border-neutral-800 bg-neutral-950 p-2 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none'
+              className='fld'
             >
               <option value=''>— skip —</option>
               {session.items.map((item) => (
@@ -467,27 +453,25 @@ function ReflectionStep({
                 onChange={(e) => setAnswer(p.kind, { note: e.target.value })}
                 placeholder='Optional note…'
                 maxLength={2000}
-                className='rounded-md border border-neutral-800 bg-neutral-950 p-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none'
+                className='fld'
               />
             )}
           </div>
         ))}
 
-        <div className='flex flex-col gap-2'>
-          <button
-            type='button'
-            onClick={finish}
-            disabled={finishing}
-            className='self-start rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50'
-          >
-            {finishing ? 'Finishing…' : 'Finish'}
-          </button>
-          {error && (
-            <p className='text-sm text-red-400'>
-              Could not save that. Try finishing again.
-            </p>
-          )}
-        </div>
+        <button
+          type='button'
+          onClick={finish}
+          disabled={finishing}
+          className='btn-primary'
+        >
+          {finishing ? 'Finishing…' : 'Finish'} <span className='ar'>→</span>
+        </button>
+        {error && (
+          <p className='notice notice-error'>
+            Could not save that. Try finishing again.
+          </p>
+        )}
       </section>
     </div>
   )
@@ -503,22 +487,26 @@ function SessionComplete({
   const reviewed = session.items.length
 
   return (
-    <div className='flex flex-col gap-6'>
-      <div>
-        <h1 className='text-2xl font-semibold'>Session complete</h1>
+    <div className='screen'>
+      <div className='page-head'>
+        <div className='section-label'>§ Recall · Complete</div>
+        <h1>Session complete</h1>
       </div>
-      <section className='flex flex-col gap-4 rounded-lg border border-neutral-800 p-8 text-center'>
-        <p className='text-neutral-200'>
-          {reviewed} {reviewed === 1 ? 'concept' : 'concepts'} reviewed.
-        </p>
-        <p className='text-sm text-neutral-500'>
-          You rebuilt these from memory — that&apos;s the work that makes them
-          stick.
+      <section className='panel panel-raised center'>
+        <div className='stamp'>
+          {reviewed} {reviewed === 1 ? 'concept' : 'concepts'} reviewed
+        </div>
+        <p
+          className='block-sub'
+          style={{ maxWidth: 420, margin: '18px auto 0' }}
+        >
+          You rebuilt these from memory — that’s the work that makes them stick.
         </p>
         <Link
           href='/concepts'
           onClick={onLeave}
-          className='self-center rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200'
+          className='btn-ghost'
+          style={{ marginTop: 22, alignSelf: 'center' }}
         >
           Back to your concepts
         </Link>

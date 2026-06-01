@@ -72,30 +72,24 @@ export default function InboxPage() {
   const items = inboxQuery.data ?? []
 
   return (
-    <div className='flex flex-col gap-6'>
-      <div>
-        <h1 className='text-2xl font-semibold'>Inbox</h1>
-        <p className='text-sm text-neutral-400'>
+    <div className='screen'>
+      <div className='page-head'>
+        <div className='section-label'>§ Capture · Step 01</div>
+        <h1>Inbox</h1>
+        <p className='lede'>
           A waiting room, not a library. Capture quickly — nothing here is
           knowledge yet. You’ll earn it into a concept later.
         </p>
       </div>
 
-      <form
-        onSubmit={onSubmit}
-        className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'
-      >
-        <div className='flex gap-1'>
+      <form onSubmit={onSubmit} className='panel panel-raised capture'>
+        <div className='seg-row'>
           {MODES.map((m) => (
             <button
               key={m.key}
               type='button'
               onClick={() => setMode(m.key)}
-              className={`rounded-md px-3 py-1.5 text-sm transition ${
-                mode === m.key
-                  ? 'bg-neutral-100 text-black'
-                  : 'border border-neutral-700 text-neutral-300 hover:bg-neutral-900'
-              }`}
+              className={`seg${mode === m.key ? ' on' : ''}`}
             >
               {m.label}
             </button>
@@ -107,8 +101,9 @@ export default function InboxPage() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder='Paste a quote, transcript, or idea fragment…'
-            rows={5}
-            className='resize-y rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 outline-none focus:border-neutral-400'
+            rows={4}
+            className='fld'
+            style={{ marginTop: 14 }}
           />
         )}
 
@@ -118,22 +113,30 @@ export default function InboxPage() {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder='https://example.com/article'
-            className='rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 outline-none focus:border-neutral-400'
+            className='fld'
+            style={{ marginTop: 14 }}
           />
         )}
 
         {mode === 'pdf' && (
-          <input
-            ref={fileInputRef}
-            type='file'
-            accept='application/pdf'
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className='rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-300 outline-none file:mr-3 file:rounded file:border-0 file:bg-neutral-700 file:px-3 file:py-1 file:text-neutral-100'
-          />
+          <div className='file-drop' style={{ marginTop: 14 }}>
+            <input
+              ref={fileInputRef}
+              type='file'
+              accept='application/pdf'
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              style={{ display: 'none' }}
+              id='pdf-input'
+            />
+            <label htmlFor='pdf-input' style={{ cursor: 'pointer' }}>
+              {file ? file.name : 'Drop a PDF, or '}
+              {!file && <span className='u'>choose a file</span>}
+            </label>
+          </div>
         )}
 
         {capture.isError && (
-          <p className='text-sm text-red-400'>
+          <p className='notice notice-error' style={{ marginTop: 14 }}>
             {capture.error instanceof Error
               ? capture.error.message
               : 'Capture failed'}
@@ -143,30 +146,30 @@ export default function InboxPage() {
         <button
           type='submit'
           disabled={capture.isPending}
-          className='self-start rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50'
+          className='btn-primary'
+          style={{ marginTop: 18 }}
         >
-          {capture.isPending ? 'Capturing…' : 'Capture'}
+          {capture.isPending ? 'Capturing…' : 'Capture'}{' '}
+          <span className='ar'>→</span>
         </button>
       </form>
 
-      {inboxQuery.isLoading && (
-        <p className='text-neutral-400'>Loading inbox…</p>
-      )}
+      {inboxQuery.isLoading && <p className='notice'>Loading inbox…</p>}
       {inboxQuery.isError && (
-        <p className='text-red-400'>Could not load your inbox.</p>
+        <p className='notice notice-error'>Could not load your inbox.</p>
       )}
 
       {!inboxQuery.isLoading && items.length === 0 && (
-        <section className='rounded-lg border border-dashed border-neutral-800 p-8 text-center'>
-          <p className='text-neutral-400'>Your inbox is empty.</p>
-          <p className='mt-1 text-sm text-neutral-500'>
+        <div className='empty'>
+          Your inbox is empty.
+          <span>
             Captured items wait here until you compress them into concepts.
-          </p>
-        </section>
+          </span>
+        </div>
       )}
 
       {items.length > 0 && (
-        <ul className='flex flex-col gap-3'>
+        <ul className='rows'>
           {items.map((item) => (
             <InboxRow
               key={item.id}
@@ -191,15 +194,13 @@ function InboxRow({
   discarding: boolean
 }) {
   return (
-    // Deliberately distinct from earned concepts: dashed amber border + muted
-    // wash signal "unprocessed / not knowledge yet".
-    <li className='rounded-lg border border-dashed border-amber-700/50 bg-amber-950/10 p-4'>
-      <div className='flex items-center gap-2'>
-        <span className='rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300/90'>
-          Unprocessed
-        </span>
+    // Deliberately distinct from earned concepts: the ochre "Unprocessed" chip
+    // signals "not knowledge yet".
+    <li className='inbox-row'>
+      <div className='row-top'>
+        <span className='chip chip-pending'>Unprocessed</span>
         {item.captureSource && (
-          <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-400'>
+          <span className='chip chip-quiet'>
             {SOURCE_LABEL[item.captureSource]}
           </span>
         )}
@@ -207,16 +208,13 @@ function InboxRow({
           type='button'
           onClick={onDiscard}
           disabled={discarding}
-          className='ml-auto text-xs text-neutral-500 transition hover:text-red-400 disabled:opacity-50'
+          className='row-discard'
         >
           {discarding ? 'Discarding…' : 'Discard'}
         </button>
       </div>
 
-      <Link
-        href={`/inbox/${item.id}`}
-        className='mt-2 block font-medium text-neutral-100 hover:underline'
-      >
+      <Link href={`/inbox/${item.id}`} className='row-title'>
         {item.title}
       </Link>
 
@@ -225,26 +223,17 @@ function InboxRow({
           href={item.sourceUrl}
           target='_blank'
           rel='noopener noreferrer'
-          className='mt-0.5 block truncate text-xs text-amber-400/80 hover:underline'
+          className='row-url'
         >
           {item.sourceUrl}
         </a>
       )}
 
-      {item.excerpt && (
-        <p className='mt-1 line-clamp-3 text-sm text-neutral-400'>
-          {item.excerpt}
-        </p>
-      )}
+      {item.excerpt && <p className='row-excerpt'>{item.excerpt}</p>}
 
-      <div className='mt-2 flex items-center justify-between'>
-        <time className='text-xs text-neutral-600'>
-          Captured {new Date(item.createdAt).toLocaleString()}
-        </time>
-        <Link
-          href={`/inbox/${item.id}`}
-          className='text-sm font-medium text-amber-400/90 hover:underline'
-        >
+      <div className='row-foot'>
+        <time>Captured {new Date(item.createdAt).toLocaleString()}</time>
+        <Link href={`/inbox/${item.id}`} className='row-process'>
           Process →
         </Link>
       </div>

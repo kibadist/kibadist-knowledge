@@ -53,11 +53,9 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
 }
 
 function relationChipClass(kind: LinkRelation): string {
-  if (kind === 'CONTRADICTION')
-    return 'border-red-700/60 bg-red-950/30 text-red-300'
-  if (kind === 'REDUNDANT')
-    return 'border-amber-700/60 bg-amber-950/30 text-amber-300'
-  return 'border-neutral-700 text-neutral-400'
+  if (kind === 'CONTRADICTION') return 'chip-contested'
+  if (kind === 'REDUNDANT') return 'chip-pending'
+  return 'chip-quiet'
 }
 
 /**
@@ -233,26 +231,24 @@ export default function PromoteConceptPage() {
   const ready = articulateOk && connectOk && retrieveOk && validateOk
 
   return (
-    <div className='flex flex-col gap-6'>
-      <div>
-        <Link
-          href={`/inbox/${id}`}
-          className='text-sm text-neutral-400 hover:underline'
-        >
+    <div className='screen'>
+      <div className='page-head'>
+        <Link href={`/inbox/${id}`} className='back-link'>
           ← Back
         </Link>
-        <h1 className='mt-2 text-2xl font-semibold'>Earn this concept</h1>
-        <p className='text-sm text-neutral-400'>
+        <span className='section-label'>§ Proof of Learning</span>
+        <h1>Earn this concept</h1>
+        <p className='lede'>
           {promotion?.title ?? 'Loading…'} — nothing becomes permanent until
           you’ve understood it well enough to recall it. We ask; we don’t
           author.
         </p>
       </div>
 
-      {promotionQuery.isLoading && <p className='text-neutral-400'>Loading…</p>}
+      {promotionQuery.isLoading && <p className='notice'>Loading…</p>}
       {promotionQuery.isError && (
-        <div className='rounded-lg border border-amber-700/50 bg-amber-950/10 p-4'>
-          <p className='text-sm text-amber-300/90'>
+        <div className='callout-pending'>
+          <p className='notice notice-error'>
             {promotionQuery.error instanceof Error
               ? promotionQuery.error.message
               : 'Could not start promotion.'}
@@ -280,49 +276,41 @@ export default function PromoteConceptPage() {
           )}
 
           {/* Friction picker (DET-197) */}
-          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+          <section className='doc-section'>
             <div>
-              <h2 className='font-medium'>How rigorously to earn this</h2>
-              <p className='mt-1 text-sm text-neutral-500'>
+              <h2 className='panel-h'>How rigorously to earn this</h2>
+              <p className='block-sub'>
                 We suggest a level from how new and substantial this looks. You
                 choose — escalate or de-escalate in one click.
               </p>
             </div>
-            <div className='rounded-md border border-neutral-800 bg-neutral-950/40 p-3'>
-              <p className='text-sm'>
-                <span className='font-medium text-neutral-200'>
-                  Suggested: {promotion.frictionProposal.level}
+            <div className='callout'>
+              <span className='font-medium text-ink'>
+                Suggested: {promotion.frictionProposal.level}
+              </span>
+              {promotion.frictionProposal.reasons.length > 0 && (
+                <span className='text-ink-muted'>
+                  {' '}
+                  — {promotion.frictionProposal.reasons.join(' ')}
                 </span>
-                {promotion.frictionProposal.reasons.length > 0 && (
-                  <span className='text-neutral-500'>
-                    {' '}
-                    — {promotion.frictionProposal.reasons.join(' ')}
-                  </span>
-                )}
-              </p>
+              )}
             </div>
-            <div className='flex flex-wrap gap-2'>
+            <div className='seg-row'>
               {FRICTION_LEVELS.map((lvl) => (
                 <button
                   key={lvl}
                   type='button'
                   onClick={() => chooseLevel(lvl)}
-                  className={`rounded-md px-3 py-1.5 text-sm transition ${
-                    effectiveLevel === lvl
-                      ? 'bg-neutral-100 text-black'
-                      : 'border border-neutral-700 text-neutral-300 hover:bg-neutral-900'
-                  }`}
+                  className={`seg ${effectiveLevel === lvl ? 'on' : ''}`}
                 >
                   {lvl}
                   {promotion.frictionProposal.level === lvl && (
-                    <span className='ml-1.5 text-[10px] uppercase tracking-wide opacity-60'>
-                      suggested
-                    </span>
+                    <span className='ml-1.5'>suggested</span>
                   )}
                 </button>
               ))}
             </div>
-            <p className='text-xs text-neutral-500'>
+            <p className='block-sub'>
               {FRICTION_BLURB[effectiveLevel]}
               {requiredGates.connect &&
                 ' This level requires at least one real connection — a bare root isn’t allowed.'}
@@ -330,18 +318,18 @@ export default function PromoteConceptPage() {
           </section>
 
           {/* 1. Articulate */}
-          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+          <section className='doc-section'>
             <div>
-              <h2 className='font-medium'>
+              <h2 className='panel-h'>
                 {articulateOk ? '✓' : '○'} 1. Articulate
               </h2>
-              <p className='mt-1 text-sm text-neutral-500'>
+              <p className='block-sub'>
                 Explain it in your own words. Don’t quote the source — show that
                 you understand it.
               </p>
               {/* Compression facets (DET-190): what a strong own-words
                   articulation contains. Guidance only — we never write it for you. */}
-              <ul className='mt-2 flex flex-col gap-0.5 text-xs text-neutral-600'>
+              <ul className='mt-2 flex flex-col gap-0.5 text-xs text-ink-faint'>
                 <li>• State the central claim in 1–3 plain sentences.</li>
                 <li>• Explain it as if to a smart friend, not an expert.</li>
                 <li>• What would have to be true for this to be wrong?</li>
@@ -349,12 +337,12 @@ export default function PromoteConceptPage() {
               </ul>
             </div>
             {promotion.referenceQa.length > 0 && (
-              <details className='rounded-md border border-neutral-800 bg-neutral-950/40 p-3'>
-                <summary className='cursor-pointer text-xs uppercase tracking-wide text-neutral-500'>
+              <details className='item-card'>
+                <summary className='cursor-pointer u-mono text-xs uppercase text-ink-muted'>
                   Your reference Q&A ({promotion.referenceQa.length}) — scaffold
                   only
                 </summary>
-                <p className='mt-2 text-xs text-neutral-600'>
+                <p className='mt-2 text-xs text-ink-faint'>
                   What you explored while reading. For reference only — write
                   your own words above; we won’t fill this in for you.
                 </p>
@@ -362,10 +350,11 @@ export default function PromoteConceptPage() {
                   {promotion.referenceQa.map((qa, i) => (
                     <li
                       key={i}
-                      className='border-l border-neutral-700 pl-3 text-sm'
+                      className='pl-3 text-sm'
+                      style={{ borderLeft: '1px solid var(--rule-soft)' }}
                     >
-                      <p className='text-neutral-300'>{qa.questionText}</p>
-                      <p className='mt-0.5 text-neutral-500'>{qa.answerText}</p>
+                      <p className='text-ink-soft'>{qa.questionText}</p>
+                      <p className='mt-0.5 text-ink-muted'>{qa.answerText}</p>
                     </li>
                   ))}
                 </ul>
@@ -376,19 +365,19 @@ export default function PromoteConceptPage() {
                 they're earning. It is deliberately NOT written into the textarea
                 below — the articulation stays the user's own words (DET-190). */}
             {promotion.candidateContext && (
-              <div className='rounded-md border border-neutral-800 bg-neutral-950/40 p-3'>
-                <span className='inline-block rounded border border-amber-700/40 bg-amber-950/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300/80'>
+              <div className='item-card'>
+                <span className='chip chip-pending'>
                   From the article · reference only
                 </span>
-                <p className='mt-1.5 text-sm font-medium text-neutral-200'>
+                <p className='mt-1.5 text-sm font-medium text-ink'>
                   {promotion.candidateContext.label}
                 </p>
                 {promotion.candidateContext.definition && (
-                  <p className='mt-1 text-sm text-neutral-500'>
+                  <p className='mt-1 text-sm text-ink-muted'>
                     {promotion.candidateContext.definition}
                   </p>
                 )}
-                <p className='mt-1.5 text-xs text-neutral-600'>
+                <p className='mt-1.5 text-xs text-ink-faint'>
                   This is the source’s gloss, for reference. Write your own
                   understanding below — we won’t fill it in for you.
                 </p>
@@ -399,19 +388,19 @@ export default function PromoteConceptPage() {
               onChange={(e) => setArticulation(e.target.value)}
               placeholder='In your own words…'
               rows={4}
-              className='resize-y rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-neutral-400'
+              className='fld'
             />
             {/* Verbatim-copy nudge (DET-190): the saved articulation is too
                 close to the source. We flag, never rewrite — the gate stays
                 blocked until it's in the user's own words. */}
             {promotion.compression.verbatim &&
               promotion.compression.message && (
-                <p className='rounded-md border border-amber-700/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-300'>
+                <p className='callout-pending'>
                   {promotion.compression.message}
                 </p>
               )}
             {saveArticulation.isError && (
-              <p className='text-sm text-red-400'>
+              <p className='notice notice-error'>
                 {saveArticulation.error instanceof Error
                   ? saveArticulation.error.message
                   : 'Failed to save.'}
@@ -422,36 +411,37 @@ export default function PromoteConceptPage() {
                 type='button'
                 disabled={saveArticulation.isPending || !canSave}
                 onClick={() => saveArticulation.mutate()}
-                className='self-start rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50'
+                className='btn-primary'
               >
                 {saveArticulation.isPending ? 'Saving…' : 'Save articulation'}
+                <span className='ar'>→</span>
               </button>
               {saveArticulation.isSuccess && !saveArticulation.isPending && (
-                <span className='text-sm text-green-400'>Saved.</span>
+                <span className='notice notice-ok'>Saved.</span>
               )}
             </div>
           </section>
 
           {/* 2. Connect + 4. Validate */}
-          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+          <section className='doc-section'>
             <div>
-              <h2 className='font-medium'>
+              <h2 className='panel-h'>
                 {connectOk ? '✓' : '○'} 2. Connect
-                <span className='ml-2 text-neutral-500'>
+                <span className='ml-2 text-ink-muted'>
                   {validateOk ? '✓' : '○'} 4. Validate
                 </span>
               </h2>
-              <p className='mt-1 text-sm text-neutral-500'>
+              <p className='block-sub'>
                 Tie this to what you already know. We suggest neighbors — you
                 decide which are real.
               </p>
             </div>
 
             {suggestionsQuery.isLoading && (
-              <p className='text-sm text-neutral-400'>Finding neighbors…</p>
+              <p className='notice'>Finding neighbors…</p>
             )}
             {suggestionsQuery.isError && (
-              <p className='text-sm text-red-400'>
+              <p className='notice notice-error'>
                 {suggestionsQuery.error instanceof Error
                   ? suggestionsQuery.error.message
                   : 'Could not load suggestions.'}
@@ -460,7 +450,7 @@ export default function PromoteConceptPage() {
 
             {suggestionsQuery.data && suggestionsQuery.data.length === 0 && (
               <div className='flex flex-col gap-2'>
-                <p className='text-sm text-neutral-500'>
+                <p className='block-sub'>
                   No neighbors suggested.{' '}
                   {requiredGates.connect
                     ? 'This level needs a connection — drop to Minimal if this stands alone.'
@@ -478,7 +468,7 @@ export default function PromoteConceptPage() {
                     type='button'
                     onClick={() => chooseLevel('MINIMAL')}
                     disabled={setMutationFriction.isPending}
-                    className='self-start rounded-md border border-neutral-700 px-3 py-1.5 text-sm transition hover:bg-neutral-900 disabled:opacity-50'
+                    className='btn-ghost'
                   >
                     {setMutationFriction.isPending
                       ? 'Switching…'
@@ -502,10 +492,8 @@ export default function PromoteConceptPage() {
             )}
 
             <label
-              className={`flex items-center gap-2 text-sm ${
-                requiredGates.connect
-                  ? 'cursor-not-allowed text-neutral-600'
-                  : 'cursor-pointer text-neutral-300'
+              className={`check-row ${
+                requiredGates.connect ? 'cursor-not-allowed' : 'cursor-pointer'
               }`}
             >
               <input
@@ -516,14 +504,14 @@ export default function PromoteConceptPage() {
               />
               This is a new conceptual root.
               {requiredGates.connect && (
-                <span className='text-xs text-neutral-600'>
+                <span className='text-xs text-ink-faint'>
                   (not allowed at this level)
                 </span>
               )}
             </label>
 
             {markReviewed.isError && (
-              <p className='text-sm text-red-400'>
+              <p className='notice notice-error'>
                 {markReviewed.error instanceof Error
                   ? markReviewed.error.message
                   : 'Could not record your review.'}
@@ -533,7 +521,7 @@ export default function PromoteConceptPage() {
               type='button'
               onClick={() => markReviewed.mutate()}
               disabled={!connectOk || validateOk || markReviewed.isPending}
-              className='self-start rounded-md border border-neutral-700 px-3 py-1.5 text-sm transition hover:bg-neutral-900 disabled:opacity-50'
+              className='btn-ghost'
             >
               {validateOk
                 ? 'Connections reviewed ✓'
@@ -544,18 +532,16 @@ export default function PromoteConceptPage() {
           </section>
 
           {/* 3. Retrieve */}
-          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
+          <section className='doc-section'>
             <div>
-              <h2 className='font-medium'>
-                {retrieveOk ? '✓' : '○'} 3. Retrieve
-              </h2>
-              <p className='mt-1 text-sm text-neutral-500'>
+              <h2 className='panel-h'>{retrieveOk ? '✓' : '○'} 3. Retrieve</h2>
+              <p className='block-sub'>
                 Prove you can recall it from memory — without looking back.
               </p>
             </div>
 
             {generate.isError && (
-              <p className='text-sm text-red-400'>
+              <p className='notice notice-error'>
                 {generate.error instanceof Error
                   ? generate.error.message
                   : 'Could not generate a question.'}
@@ -563,7 +549,7 @@ export default function PromoteConceptPage() {
             )}
 
             {!articulateOk && (
-              <p className='text-sm text-neutral-500'>
+              <p className='block-sub'>
                 Save your articulation first — the question is drawn from it.
               </p>
             )}
@@ -571,7 +557,7 @@ export default function PromoteConceptPage() {
               type='button'
               onClick={() => generate.mutate()}
               disabled={generate.isPending || !articulateOk}
-              className='self-start rounded-md border border-neutral-700 px-3 py-1.5 text-sm transition hover:bg-neutral-900 disabled:opacity-50'
+              className='btn-ghost'
             >
               {generate.isPending
                 ? 'Thinking…'
@@ -582,16 +568,16 @@ export default function PromoteConceptPage() {
 
             {question && (
               <>
-                <p className='font-medium text-neutral-100'>{question}</p>
+                <p className='font-medium text-ink'>{question}</p>
                 <textarea
                   value={recall}
                   onChange={(e) => setRecall(e.target.value)}
                   placeholder='Answer from memory…'
                   rows={4}
-                  className='resize-y rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-neutral-400'
+                  className='fld'
                 />
                 {answer.isError && (
-                  <p className='text-sm text-red-400'>
+                  <p className='notice notice-error'>
                     {answer.error instanceof Error
                       ? answer.error.message
                       : 'Could not grade your answer.'}
@@ -601,17 +587,14 @@ export default function PromoteConceptPage() {
                   type='button'
                   onClick={() => answer.mutate()}
                   disabled={answer.isPending || !recall.trim()}
-                  className='self-start rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50'
+                  className='btn-primary'
                 >
                   {answer.isPending ? 'Grading…' : 'Submit answer'}
+                  <span className='ar'>→</span>
                 </button>
                 {grade && (
                   <div
-                    className={`rounded-md border p-3 text-sm ${
-                      grade.passed
-                        ? 'border-green-700/50 bg-green-950/10 text-green-300/90'
-                        : 'border-amber-700/50 bg-amber-950/10 text-amber-300/90'
-                    }`}
+                    className={grade.passed ? 'callout-ok' : 'callout-pending'}
                   >
                     <p className='font-medium'>
                       {grade.passed ? 'Passed' : 'Not yet'} — {grade.score}/5
@@ -624,13 +607,13 @@ export default function PromoteConceptPage() {
           </section>
 
           {/* Commit */}
-          <section className='flex flex-col gap-3 rounded-lg border border-neutral-800 p-4'>
-            <p className='text-sm text-neutral-400'>
+          <section className='doc-section'>
+            <p className='block-sub'>
               You can only save this once you’ve understood it well enough to
               recall it.
             </p>
             {commit.isError && (
-              <p className='text-sm text-red-400'>
+              <p className='notice notice-error'>
                 {commit.error instanceof Error
                   ? commit.error.message
                   : 'Could not commit.'}
@@ -640,9 +623,10 @@ export default function PromoteConceptPage() {
               type='button'
               onClick={() => commit.mutate()}
               disabled={!ready || commit.isPending}
-              className='self-start rounded-md bg-white px-4 py-2 font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50'
+              className='btn-primary'
             >
               {commit.isPending ? 'Committing…' : 'Commit as a concept'}
+              <span className='ar'>→</span>
             </button>
           </section>
         </>
@@ -669,14 +653,9 @@ function GateChecklist({
     { label: 'Validate', done: validate },
   ]
   return (
-    <ul className='flex flex-wrap gap-3 rounded-lg border border-neutral-800 bg-neutral-900 p-4'>
+    <ul className='gate-checklist'>
       {gates.map((g) => (
-        <li
-          key={g.label}
-          className={`flex items-center gap-2 text-sm ${
-            g.done ? 'text-green-400' : 'text-neutral-500'
-          }`}
-        >
+        <li key={g.label} className={`gate-item ${g.done ? 'done' : ''}`}>
           <span>{g.done ? '✓' : '○'}</span>
           {g.label}
         </li>
@@ -696,37 +675,32 @@ function SuggestionRow({
 }) {
   return (
     <li
-      className={`rounded-md border p-3 transition ${
+      className='item-card'
+      style={
         approved
-          ? 'border-green-700/50 bg-green-950/10'
-          : 'border-neutral-800 bg-neutral-950/50'
-      }`}
+          ? {
+              borderColor: 'rgba(91, 102, 56, 0.45)',
+              background: 'rgba(91, 102, 56, 0.1)',
+            }
+          : undefined
+      }
     >
-      <label className='flex cursor-pointer items-start gap-2'>
-        <input
-          type='checkbox'
-          checked={approved}
-          onChange={onToggle}
-          className='mt-1'
-        />
+      <label className='check-row cursor-pointer'>
+        <input type='checkbox' checked={approved} onChange={onToggle} />
         <span className='flex flex-col gap-1'>
           <span className='flex flex-wrap items-center gap-2'>
-            <span className='font-medium text-neutral-100'>
-              {suggestion.title}
-            </span>
+            <span className='font-medium text-ink'>{suggestion.title}</span>
             <span
-              className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${relationChipClass(
-                suggestion.relationKind,
-              )}`}
+              className={`chip ${relationChipClass(suggestion.relationKind)}`}
             >
               {RELATION_LABELS[suggestion.relationKind]}
             </span>
-            <span className='rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500'>
+            <span className='chip chip-quiet'>
               {Math.round(suggestion.similarity * 100)}%
             </span>
           </span>
           {suggestion.rationale && (
-            <span className='text-sm text-neutral-400'>
+            <span className='text-sm text-ink-muted'>
               {suggestion.rationale}
             </span>
           )}
