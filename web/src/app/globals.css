@@ -1211,3 +1211,276 @@ body {
     flex-wrap: wrap;
   }
 }
+
+/* ============================================================
+   Knowledge Organization — Tracks, Domains, Graph scopes
+   (DET-237 / DET-238 / DET-239). Editorial paper styling,
+   light-only; reuses the shared tokens + chip/btn/fld grammar.
+   ============================================================ */
+
+/* Small field + inline label helpers shared across the org-layer UIs. */
+.kbapp .fld-sm {
+  font-size: 13px;
+  padding: 6px 9px;
+  width: auto;
+  display: inline-block;
+}
+.kbapp .inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-muted);
+}
+.kbapp .btn-ghost-sm.danger,
+.kbapp .btn-ghost-xs.danger {
+  color: var(--accent-deep);
+}
+
+/* ---- Tracks list ---- */
+.kbapp .track-group {
+  margin-top: 30px;
+}
+.kbapp .track-group-head {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-muted);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 14px;
+}
+.kbapp .track-new-btn {
+  margin-bottom: 8px;
+}
+.kbapp .track-new-form {
+  border: 1px solid var(--rule);
+  background: var(--paper-hi);
+  border-radius: 3px;
+  padding: 16px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.kbapp .track-new-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 2fr;
+  gap: 12px;
+}
+.kbapp .track-new-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.kbapp .track-card {
+  list-style: none;
+  border: 1px solid var(--rule);
+  background: var(--paper-hi);
+  border-radius: 3px;
+  margin-bottom: 10px;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.kbapp .track-card:hover {
+  border-color: var(--ink-faint);
+  box-shadow: var(--shadow-sm);
+}
+.kbapp .track-card-main {
+  display: block;
+  padding: 16px 18px;
+  text-decoration: none;
+  color: inherit;
+}
+.kbapp .track-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kbapp .track-name {
+  font-family: var(--font-display), serif;
+  font-size: 19px;
+  color: var(--ink);
+}
+.kbapp .track-goal {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.kbapp .track-progress {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.kbapp .track-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.kbapp .track-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.kbapp .track-progress-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+/* ---- Track detail ---- */
+.kbapp .track-detail-controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.kbapp .track-section {
+  margin-top: 34px;
+}
+.kbapp .track-section-note {
+  font-size: 13px;
+  color: var(--ink-muted);
+  margin: 0 0 14px;
+}
+.kbapp .track-add-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.kbapp .track-add-row .fld {
+  flex: 1;
+}
+.kbapp .track-concept-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kbapp .track-concept-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule);
+  background: var(--paper-hi);
+  border-radius: 2px;
+}
+.kbapp .track-concept-row.met {
+  border-left-color: var(--accent);
+}
+.kbapp .track-concept-row.attention {
+  border-left-color: var(--accent-deep);
+}
+.kbapp .track-concept-order {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.kbapp .ord-btn {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-muted);
+  cursor: pointer;
+  border-radius: 2px;
+}
+.kbapp .ord-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.kbapp .ord-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.kbapp .track-concept-title {
+  font-family: var(--font-display), serif;
+  font-size: 16px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.kbapp .track-concept-title:hover {
+  color: var(--accent);
+}
+.kbapp .track-concept-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.kbapp .track-concept-statelabel {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+.kbapp .track-concept-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.kbapp .chip-depth {
+  color: var(--ink-muted);
+  border-color: var(--rule);
+  background: var(--paper-2);
+}
+.kbapp .chip-depth.is-met {
+  color: var(--accent-deep);
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+.kbapp .chip-warn {
+  color: var(--accent-deep);
+  border-color: var(--accent-deep);
+  background: var(--paper-2);
+}
+
+/* The embedded scoped-graph canvas (track / domain detail). The canvas itself is
+   position:absolute inset:0, so it fills this sized, relative frame. */
+.kbapp .track-graph-frame {
+  position: relative;
+  height: 460px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+@media (max-width: 720px) {
+  .kbapp .track-new-row {
+    grid-template-columns: 1fr;
+  }
+  .kbapp .track-concept-row {
+    grid-template-columns: auto 1fr;
+  }
+  .kbapp .track-concept-controls {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}

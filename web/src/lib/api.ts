@@ -755,6 +755,129 @@ export interface LivingConcept {
   updatedAt: string
 }
 
+// --- Knowledge Organization: Tracks (DET-235/237) ---
+// A Track is the goal-directed layer — the product's primary entry point. Mirrors
+// the server's TrackType/TrackStatus/etc. enums; keep in sync.
+export type TrackType =
+  | 'LEARNING'
+  | 'RESEARCH'
+  | 'PROJECT'
+  | 'CAREER'
+  | 'COURSE'
+  | 'PAPER_REVIEW'
+  | 'PRODUCT_BUILDING'
+export type TrackStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED'
+export type ImportanceLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+export type RequiredDepth = 'RECOGNIZE' | 'EXPLAIN' | 'APPLY' | 'TEACH'
+export type TrackConceptStatus =
+  | 'CANDIDATE'
+  | 'ACCEPTED'
+  | 'COMPLETED'
+  | 'SKIPPED'
+
+export interface Track {
+  id: string
+  workspaceId: string
+  name: string
+  description: string | null
+  type: TrackType
+  goal: string | null
+  status: TrackStatus
+  createdAt: string
+  updatedAt: string
+}
+
+// Derived per-track progress (DET-235): requiredDepth read against the concept's
+// live CognitiveState. Never a stored mastery value.
+export interface TrackConceptProgress {
+  requiredDepth: RequiredDepth
+  state: CognitiveState
+  met: boolean
+  ratio: number
+  needsAttention: boolean
+}
+
+// A concept's membership in a track, joined with the concept fields the UI needs
+// plus derived progress.
+export interface TrackConceptRow {
+  trackId: string
+  conceptId: string
+  orderIndex: number | null
+  importance: ImportanceLevel
+  requiredDepth: RequiredDepth
+  status: TrackConceptStatus
+  createdBy: Generator
+  createdAt: string
+  concept: {
+    id: string
+    title: string
+    cognitiveState: CognitiveState
+    status: ConceptStatus
+  }
+  progress: TrackConceptProgress
+}
+
+// --- Knowledge Organization: Domains (DET-234/238) ---
+// A Domain is a semantic region (not a folder); a concept can be in several.
+export interface Domain {
+  id: string
+  workspaceId: string
+  name: string
+  description: string | null
+  parentDomainId: string | null
+  color: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+// A concept's membership in a domain, joined with the domain. Provenance
+// (createdBy/userValidated) drives the suggested-vs-validated visual grammar.
+export interface ConceptDomainRow {
+  conceptId: string
+  domainId: string
+  confidence: number | null
+  createdBy: Generator
+  userValidated: boolean
+  createdAt: string
+  domain: Domain
+}
+
+// --- Knowledge Organization: Graph scopes & saved views (DET-236/239) ---
+export type GraphScope =
+  | 'ARTICLE'
+  | 'TRACK'
+  | 'DOMAIN'
+  | 'WORKSPACE'
+  | 'CONCEPT_NEIGHBORHOOD'
+  | 'MISCONCEPTION'
+  | 'REVIEW'
+
+// Parameters for a scoped graph read (DET-236). `scope` decides which target id
+// is required; the canvas just receives a different {nodes,edges} subset.
+export interface GraphScopeParams {
+  scope: GraphScope
+  trackId?: string
+  domainId?: string
+  sourceConceptId?: string
+  centerConceptId?: string
+  hops?: number
+}
+
+export interface GraphView {
+  id: string
+  workspaceId: string
+  name: string
+  scope: GraphScope
+  sourceConceptId: string | null
+  trackId: string | null
+  domainId: string | null
+  centerConceptId: string | null
+  filters: Record<string, unknown>
+  layout: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
 export const api = {
   register: (input: { email: string; password: string; name?: string }) =>
     request<AuthResponse>('/auth/register', {
@@ -1036,4 +1159,157 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ status: 'REJECTED' }),
     }),
+
+  // --- Tracks (DET-235/237): the goal-directed layer ---
+  listTracks: (status?: TrackStatus) =>
+    request<Track[]>(`/tracks${status ? `?status=${status}` : ''}`),
+  createTrack: (input: {
+    name: string
+    type: TrackType
+    description?: string
+    goal?: string
+  }) =>
+    request<Track>('/tracks', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateTrack: (
+    id: string,
+    input: {
+      name?: string
+      description?: string
+      type?: TrackType
+      goal?: string
+      status?: TrackStatus
+    },
+  ) =>
+    request<Track>(`/tracks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteTrack: (id: string) =>
+    request<void>(`/tracks/${id}`, { method: 'DELETE' }),
+  listTrackConcepts: (trackId: string) =>
+    request<TrackConceptRow[]>(`/tracks/${trackId}/concepts`),
+  addTrackConcept: (
+    trackId: string,
+    input: {
+      conceptId: string
+      importance?: ImportanceLevel
+      requiredDepth?: RequiredDepth
+      orderIndex?: number
+    },
+  ) =>
+    request<TrackConceptRow>(`/tracks/${trackId}/concepts`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateTrackConcept: (
+    trackId: string,
+    conceptId: string,
+    input: {
+      status?: TrackConceptStatus
+      importance?: ImportanceLevel
+      requiredDepth?: RequiredDepth
+      orderIndex?: number
+    },
+  ) =>
+    request<TrackConceptRow>(`/tracks/${trackId}/concepts/${conceptId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  removeTrackConcept: (trackId: string, conceptId: string) =>
+    request<void>(`/tracks/${trackId}/concepts/${conceptId}`, {
+      method: 'DELETE',
+    }),
+
+  // --- Domains (DET-234/238): semantic regions ---
+  listDomains: () => request<Domain[]>('/domains'),
+  createDomain: (input: {
+    name: string
+    description?: string
+    parentDomainId?: string
+    color?: string
+  }) =>
+    request<Domain>('/domains', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateDomain: (
+    id: string,
+    input: {
+      name?: string
+      description?: string
+      parentDomainId?: string | null
+      color?: string
+    },
+  ) =>
+    request<Domain>(`/domains/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteDomain: (id: string) =>
+    request<void>(`/domains/${id}`, { method: 'DELETE' }),
+  // Concept ⇄ domain membership. Tag/untag, validate an AI suggestion, or ask the
+  // AI to suggest domains for a concept (suggestions arrive userValidated:false).
+  listConceptDomains: (conceptId: string) =>
+    request<ConceptDomainRow[]>(`/concepts/${conceptId}/domains`),
+  tagConceptDomain: (
+    conceptId: string,
+    input: { domainId: string; confidence?: number },
+  ) =>
+    request<unknown>(`/concepts/${conceptId}/domains`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  suggestConceptDomains: (conceptId: string) =>
+    request<unknown[]>(`/concepts/${conceptId}/domains/suggest`, {
+      method: 'POST',
+    }),
+  validateConceptDomain: (conceptId: string, domainId: string) =>
+    request<unknown>(`/concepts/${conceptId}/domains/${domainId}/validate`, {
+      method: 'POST',
+    }),
+  untagConceptDomain: (conceptId: string, domainId: string) =>
+    request<void>(`/concepts/${conceptId}/domains/${domainId}`, {
+      method: 'DELETE',
+    }),
+
+  // --- Scoped graph + saved views (DET-236/239) ---
+  // GET /graph with optional scope params; no params = the WORKSPACE map (today's
+  // behavior). The canvas is unchanged — it just receives a different subset.
+  getScopedGraph: (params?: GraphScopeParams) => {
+    const query = new URLSearchParams()
+    if (params && params.scope !== 'WORKSPACE') {
+      query.set('scope', params.scope)
+      if (params.trackId) query.set('trackId', params.trackId)
+      if (params.domainId) query.set('domainId', params.domainId)
+      if (params.sourceConceptId)
+        query.set('sourceConceptId', params.sourceConceptId)
+      if (params.centerConceptId)
+        query.set('centerConceptId', params.centerConceptId)
+      if (params.hops != null) query.set('hops', String(params.hops))
+    }
+    const qs = query.toString()
+    return request<GraphData>(`/graph${qs ? `?${qs}` : ''}`)
+  },
+  listGraphViews: () => request<GraphView[]>('/graph-views'),
+  createGraphView: (input: {
+    name: string
+    scope: GraphScope
+    trackId?: string
+    domainId?: string
+    sourceConceptId?: string
+    centerConceptId?: string
+    filters?: Record<string, unknown>
+    layout?: Record<string, unknown>
+  }) =>
+    request<GraphView>('/graph-views', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  resolveGraphView: (id: string) =>
+    request<GraphData>(`/graph-views/${id}/resolve`),
+  deleteGraphView: (id: string) =>
+    request<void>(`/graph-views/${id}`, { method: 'DELETE' }),
 }

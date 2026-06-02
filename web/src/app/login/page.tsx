@@ -15,7 +15,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (!loading && user) router.replace('/dashboard')
+    if (!loading && user) router.replace('/tracks')
   }, [user, loading, router])
 
   async function onSubmit(e: FormEvent) {
@@ -24,7 +24,7 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       await login(email, password)
-      router.replace('/dashboard')
+      router.replace('/tracks')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {

@@ -8,6 +8,7 @@ import { useWorkspace } from '@/lib/workspace-context'
 import { WorkspaceSwitcher } from './workspace-switcher'
 
 const NAV_ITEMS = [
+  { href: '/tracks', label: 'Tracks' },
   { href: '/inbox', label: 'Inbox' },
   { href: '/concepts', label: 'Concepts' },
   { href: '/graph', label: 'Map' },
@@ -41,7 +42,7 @@ export function AppNav() {
     <header className='app-nav-wrap'>
       <nav className='app-nav'>
         <div className='app-nav-left'>
-          <Link href='/inbox' className='nav-brand'>
+          <Link href='/tracks' className='nav-brand'>
             Kibadist
           </Link>
           <WorkspaceSwitcher />
