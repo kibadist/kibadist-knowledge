@@ -60,6 +60,7 @@ model Workspace {
   owner    User      @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
   concepts Concept[]
   domains  Domain[]
+  tracks   Track[]
 
   @@index([ownerUserId])
   @@map("workspace")
@@ -122,6 +123,113 @@ model ConceptDomain {
   @@index([conceptId])
   @@index([domainId])
   @@map("concept_domain")
+}
+
+// A Track (DET-235): the GOAL-DIRECTED layer and the product's primary entry
+// point — "what am I trying to achieve with this knowledge" ("Understand React
+// State", "Prepare for the systems interview"). Owned by a Workspace. Its power
+// is per-track required depth: the SAME concept can be shallow in one track and
+// deep in another (see TrackConcept.requiredDepth). A track organizes concepts;
+// it never earns or promotes them — the Proof-of-Learning gate (DET-189) is
+// untouched.
+model Track {
+  id          String      @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  type        TrackType
+  // The user's own statement of the goal ("ship the feature", "pass the exam").
+  goal        String?
+  status      TrackStatus @default(ACTIVE)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  trackConcepts TrackConcept[]
+
+  @@index([workspaceId, status])
+  @@map("track")
+}
+
+// TrackConcept (DET-235): a concept's membership in a track, carrying the
+// track-LOCAL demand on it. The same concept in two tracks has two independent
+// rows — different `requiredDepth`, `importance`, `status`, and order. Progress
+// is NOT stored here: it's derived by reading `requiredDepth` against the
+// concept's live `CognitiveState` (DET-194), so there is no second source of
+// truth for mastery. `requiredDepth` is the track's DEMAND; it never changes the
+// concept's actual state. An AI-proposed membership is createdBy AI + status
+// CANDIDATE, awaiting the user's acceptance.
+model TrackConcept {
+  trackId       String
+  conceptId     String
+  // Manual ordering within the track (the user's study sequence); null = unsorted.
+  orderIndex    Int?
+  importance    ImportanceLevel    @default(MEDIUM)
+  // How deeply THIS track needs the concept understood (RECOGNIZE→TEACH). Demand
+  // only — compared against the concept's CognitiveState to derive progress.
+  requiredDepth RequiredDepth      @default(EXPLAIN)
+  status        TrackConceptStatus @default(CANDIDATE)
+  createdBy     Generator          @default(USER)
+  createdAt     DateTime           @default(now())
+
+  track   Track   @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@id([trackId, conceptId])
+  @@index([trackId])
+  @@index([conceptId])
+  @@index([trackId, orderIndex])
+  @@map("track_concept")
+}
+
+// The kind of goal a Track serves (DET-235). Advisory metadata that shapes how
+// the UI frames the track and how onboarding (DET-240) seeds it.
+enum TrackType {
+  LEARNING
+  RESEARCH
+  PROJECT
+  CAREER
+  COURSE
+  PAPER_REVIEW
+  PRODUCT_BUILDING
+}
+
+// A Track's lifecycle (DET-235): active → paused → completed → archived. Purely
+// organizational; unrelated to a concept's CognitiveState.
+enum TrackStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+// How much a concept matters WITHIN a track (DET-235). Track-local weighting the
+// user (or AI) assigns; never a property of the concept itself.
+enum ImportanceLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// The depth a track DEMANDS of a concept (DET-235), low→high. Compared against
+// the concept's live CognitiveState to derive per-track progress — it never
+// mutates that state. (RECOGNIZE≈PARSED, EXPLAIN≈EXPLAINED, APPLY≈RETRIEVED,
+// TEACH≈DEFENDED/INTERNALIZED; the exact ladder lives in tracks/track-progress.ts.)
+enum RequiredDepth {
+  RECOGNIZE
+  EXPLAIN
+  APPLY
+  TEACH
+}
+
+// A track-concept's membership status (DET-235). An AI suggestion lands as
+// CANDIDATE; the user ACCEPTS it into the plan, marks it COMPLETED, or SKIPS it.
+enum TrackConceptStatus {
+  CANDIDATE
+  ACCEPTED
+  COMPLETED
+  SKIPPED
 }
 
 model Note {
@@ -226,6 +334,7 @@ model Concept {
   graphPosition     GraphNodePosition?
   livingConcept     LivingConcept?
   conceptDomains    ConceptDomain[]
+  trackConcepts     TrackConcept[]
 
   @@index([userId])
   @@index([userId, status])
