@@ -930,9 +930,10 @@ export const api = {
 
   // --- Concept Graph (Map) ---
   getGraph: () => request<GraphData>('/graph'),
-  // Persist node positions after a drag. `locked` pins a node against re-layout.
+  // Persist node positions after a drag. (`locked` node-pinning is deferred — see
+  // DET-226 — so the write path only carries coordinates.)
   saveGraphPositions: (
-    positions: { conceptId: string; x: number; y: number; locked?: boolean }[],
+    positions: { conceptId: string; x: number; y: number }[],
   ) =>
     request<{ saved: number }>('/graph/positions', {
       method: 'PUT',

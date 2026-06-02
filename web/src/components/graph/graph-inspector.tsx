@@ -7,22 +7,7 @@ import {
   type LinkRelation,
   type LivingConceptStatus,
 } from '@/lib/api'
-
-// Typed-relationship labels, matching the concept detail view's vocabulary.
-const RELATION_LABELS: Record<LinkRelation, string> = {
-  ANALOGY: 'analogy',
-  CONTRADICTION: 'contradiction',
-  SUPPORTS: 'supports',
-  DEPENDS_ON: 'depends on',
-  REFINES: 'refines',
-  REDUNDANT: 'redundant',
-}
-
-function relationChipClass(kind: LinkRelation): string {
-  if (kind === 'CONTRADICTION') return 'chip-contested'
-  if (kind === 'REDUNDANT') return 'chip-pending'
-  return 'chip-quiet'
-}
+import { RELATION_LABELS, relationChipClass } from './relation-labels'
 
 function personaStatusChip(status: LivingConceptStatus): {
   className: string
@@ -107,9 +92,22 @@ function InspectorBody({
       void queryClient.invalidateQueries({ queryKey: ['living', conceptId] })
     },
   })
+  // Archiving retires a persona: it leaves the map (no "Living" chip) and this
+  // card, but the row survives so re-creating it revives it to DRAFT (DET-227).
+  const archivePersonaMutation = useMutation({
+    mutationFn: (id: string) =>
+      api.updateLivingConcept(id, { status: 'ARCHIVED' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['living', conceptId] })
+      void queryClient.invalidateQueries({ queryKey: ['graph'] })
+    },
+  })
 
   const concept = conceptQuery.data
   const living = livingQuery.data
+  // An ARCHIVED persona is treated as retired/absent: hidden from the card, with
+  // the Create control offered again (which revives it server-side) (DET-227).
+  const activePersona = living && living.status !== 'ARCHIVED' ? living : null
 
   const linkBusy = confirmMutation.isPending || rejectMutation.isPending
 
@@ -166,7 +164,7 @@ function InspectorBody({
             <div className='flex flex-wrap items-center gap-2'>
               <h3 className='panel-h'>Living Concept</h3>
               <span className='chip chip-ai'>
-                {living && living.createdBy === 'USER'
+                {activePersona && activePersona.createdBy === 'USER'
                   ? 'Scaffold'
                   : 'AI scaffold'}
               </span>
@@ -176,12 +174,12 @@ function InspectorBody({
               <p className='notice'>Loading persona…</p>
             )}
 
-            {!livingQuery.isLoading && !living && (
+            {!livingQuery.isLoading && !activePersona && (
               <>
                 <p className='block-sub'>
-                  No persona yet. A Living Concept gives this idea a voice and a
-                  core metaphor — an AI scaffold to think with, never earned
-                  knowledge.
+                  {living?.status === 'ARCHIVED'
+                    ? 'This Living Concept was archived. Re-creating it revives the persona as a fresh draft to think with — still a scaffold, never earned knowledge.'
+                    : 'No persona yet. A Living Concept gives this idea a voice and a core metaphor — an AI scaffold to think with, never earned knowledge.'}
                 </p>
                 <button
                   type='button'
@@ -190,8 +188,12 @@ function InspectorBody({
                   className='btn-ghost-xs'
                 >
                   {createPersonaMutation.isPending
-                    ? 'Creating…'
-                    : 'Create Living Concept'}
+                    ? living?.status === 'ARCHIVED'
+                      ? 'Reviving…'
+                      : 'Creating…'
+                    : living?.status === 'ARCHIVED'
+                      ? 'Revive Living Concept'
+                      : 'Create Living Concept'}
                 </button>
                 {createPersonaMutation.isError && (
                   <p className='notice notice-error'>
@@ -201,51 +203,77 @@ function InspectorBody({
               </>
             )}
 
-            {living && (
+            {activePersona && (
               <div className='living-card'>
                 <div className='flex flex-wrap items-center gap-2'>
-                  <span className='living-name'>{living.personaName}</span>
+                  <span className='living-name'>
+                    {activePersona.personaName}
+                  </span>
                   {(() => {
-                    const c = personaStatusChip(living.status)
+                    const c = personaStatusChip(activePersona.status)
                     return (
                       <span className={`chip ${c.className}`}>{c.label}</span>
                     )
                   })()}
                 </div>
-                <p className='block-sub'>{living.personaSummary}</p>
-                {living.voice && (
+                <p className='block-sub'>{activePersona.personaSummary}</p>
+                {activePersona.voice && (
                   <p className='living-field'>
                     <span className='mono-label'>Voice</span>
-                    {living.voice}
+                    {activePersona.voice}
                   </p>
                 )}
-                {living.coreMetaphor && (
+                {activePersona.coreMetaphor && (
                   <p className='living-field'>
                     <span className='mono-label'>Core metaphor</span>
-                    {living.coreMetaphor}
+                    {activePersona.coreMetaphor}
                   </p>
                 )}
-                {living.metaphorBreaks && (
+                {activePersona.metaphorBreaks && (
                   <p className='living-field'>
                     <span className='mono-label'>Where it breaks</span>
-                    {living.metaphorBreaks}
+                    {activePersona.metaphorBreaks}
                   </p>
                 )}
-                {living.status === 'DRAFT' && (
+                {/* Persona actions: validate a DRAFT, and archive (retire) any
+                    active persona. Archiving removes it from the map + this card;
+                    re-creating later revives it to DRAFT (DET-227). */}
+                <div className='flex flex-wrap gap-2'>
+                  {activePersona.status === 'DRAFT' && (
+                    <button
+                      type='button'
+                      onClick={() =>
+                        validatePersonaMutation.mutate(activePersona.id)
+                      }
+                      disabled={validatePersonaMutation.isPending}
+                      className='btn-ghost-xs'
+                    >
+                      {validatePersonaMutation.isPending
+                        ? 'Validating…'
+                        : 'Validate persona'}
+                    </button>
+                  )}
                   <button
                     type='button'
-                    onClick={() => validatePersonaMutation.mutate(living.id)}
-                    disabled={validatePersonaMutation.isPending}
+                    onClick={() =>
+                      archivePersonaMutation.mutate(activePersona.id)
+                    }
+                    disabled={archivePersonaMutation.isPending}
                     className='btn-ghost-xs'
                   >
-                    {validatePersonaMutation.isPending
-                      ? 'Validating…'
-                      : 'Validate persona'}
+                    {archivePersonaMutation.isPending
+                      ? 'Archiving…'
+                      : 'Archive'}
                   </button>
-                )}
+                </div>
                 {validatePersonaMutation.isError && (
                   <p className='notice notice-error'>
                     Could not validate. Try again.
+                  </p>
+                )}
+                {archivePersonaMutation.isError && (
+                  <p className='notice notice-error'>
+                    Could not archive. Try again.
                   </p>
                 )}
               </div>

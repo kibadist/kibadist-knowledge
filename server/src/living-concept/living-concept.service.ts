@@ -1,4 +1,8 @@
-import { Generator, type LivingConcept } from '@kibadist/prisma'
+import {
+  Generator,
+  type LivingConcept,
+  LivingConceptStatus,
+} from '@kibadist/prisma'
 import { Injectable, Logger, NotFoundException } from '@nestjs/common'
 
 import { AiService } from '../ai/ai.service'
@@ -45,11 +49,22 @@ export class LivingConceptService {
     // Proof-of-learning boundary: a persona can only attach to an earned concept.
     await this.concepts.assertOwnedNonInbox(userId, dto.conceptId)
 
-    // Idempotent: a persona already exists for this concept → return it.
+    // A persona already exists for this concept. Idempotent for a live persona
+    // (returned as-is). An ARCHIVED persona is retired, not gone: re-creating it
+    // REVIVES it to DRAFT rather than returning the dead row, so "Create Living
+    // Concept" on a concept with an archived persona is never a dead end (DET-227).
     const existing = await this.prisma.livingConcept.findUnique({
       where: { conceptId: dto.conceptId },
     })
-    if (existing) return existing
+    if (existing) {
+      if (existing.status === LivingConceptStatus.ARCHIVED) {
+        return this.prisma.livingConcept.update({
+          where: { id: existing.id },
+          data: { status: LivingConceptStatus.DRAFT },
+        })
+      }
+      return existing
+    }
 
     const concept = await this.prisma.concept.findFirst({
       where: { id: dto.conceptId, userId },
@@ -148,7 +163,10 @@ export class LivingConceptService {
       const result = await this.ai.complete({
         system,
         prompt,
-        temperature: 0.7,
+        // Low temperature keeps the persona sober and on-ethos; at 0.7 the model
+        // drifted into chirpy "Hi there! I'm your go-to guide" chatbot voice the
+        // product explicitly avoids (DET-228).
+        temperature: 0.3,
         maxTokens: 500,
       })
       const draft = parseLivingConceptDraft(result.text)

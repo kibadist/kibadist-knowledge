@@ -5,43 +5,88 @@
    glow, no gradients. Shadows are hard offset, matching the rest of the app.
    ============================================================================ */
 
-/* The Map breaks out of the narrow editorial reading column — a spatial overview
-   needs width. Falls back to the viewport on small screens. */
-.kbapp .graph-screen {
-  max-width: min(1440px, 95vw);
-}
-
-/* ---------------- layout shell ---------------- */
-.kbapp .graph-shell {
-  display: grid;
-  grid-template-columns: 1fr 360px;
-  gap: 0;
-  border: 1px solid var(--rule);
-  background: var(--paper);
-  min-height: 640px;
-  height: 72vh;
-}
-/* No selection → the inspector column collapses so the canvas gets the full
-   width (overview-first). The inspector is only mounted when a node is picked. */
-.kbapp .graph-shell.is-idle {
-  grid-template-columns: 1fr;
+/* ---------------- full-bleed stage ----------------
+   The page fills the immersive .workspace (fixed inset:0, set in globals). The
+   canvas sits underneath everything; the title, legend and inspector float over
+   it as fixed HUD panels — Figma-style, maximum room to pan. */
+.kbapp .graph-page {
+  position: absolute;
+  inset: 0;
 }
 .kbapp .graph-canvas {
-  position: relative;
-  border-right: 1px solid var(--rule);
-  min-width: 0;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
 }
 
-@media (max-width: 900px) {
-  .kbapp .graph-shell {
-    grid-template-columns: 1fr;
-    height: auto;
-  }
-  .kbapp .graph-canvas {
-    height: 60vh;
-    border-right: none;
-    border-bottom: 1px solid var(--rule);
-  }
+/* ---------------- floating HUD ----------------
+   Overlay layers sit above the canvas but stay out of the way: the wrapper is
+   click-through, and each panel re-enables pointer events for itself so the
+   canvas remains draggable in the gaps between panels. */
+.kbapp .graph-hud {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+}
+.kbapp .graph-hud > * {
+  pointer-events: auto;
+}
+.kbapp .graph-hud-left {
+  top: calc(var(--nav-h, 54px) + 16px);
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 300px;
+  max-height: calc(100dvh - var(--nav-h, 54px) - 32px);
+}
+
+/* Title card — a compact masthead for the map (the big page-head is dropped to
+   reclaim space). */
+.kbapp .graph-titlecard {
+  background: color-mix(in srgb, var(--paper-hi) 88%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--rule);
+  box-shadow: 4px 4px 0 var(--rule-soft);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kbapp .graph-title {
+  font-family: var(--font-display), serif;
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--ink);
+  font-variation-settings:
+    "SOFT" 40,
+    "opsz" 80;
+}
+.kbapp .graph-subtle {
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-muted);
+  margin: 0;
+}
+
+/* Centered overlay for loading / error / empty states. */
+.kbapp .graph-overlay {
+  position: absolute;
+  inset: var(--nav-h, 54px) 0 0 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  padding: 24px;
+}
+.kbapp .graph-overlay > * {
+  pointer-events: auto;
 }
 
 /* ---------------- react-flow surface ---------------- */
@@ -168,19 +213,60 @@
 }
 
 /* ---------------- legend ---------------- */
+/* A floating, collapsible card in the HUD column (no longer absolutely placed —
+   the .graph-hud-left flex column positions it). */
 .kbapp .graph-legend {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 5;
-  background: var(--paper-hi);
+  background: color-mix(in srgb, var(--paper-hi) 88%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--rule);
   box-shadow: 4px 4px 0 var(--rule-soft);
-  padding: 14px 16px;
-  max-width: 280px;
+  min-width: 0;
+  overflow: auto;
+}
+.kbapp .graph-legend-summary {
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-muted);
+  padding: 11px 16px;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+.kbapp .graph-legend-summary::-webkit-details-marker {
+  display: none;
+}
+/* A small disclosure caret that rotates when open. */
+.kbapp .graph-legend-summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid var(--ink-faint);
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  transition: transform 0.15s var(--ease, ease);
+}
+.kbapp .graph-legend[open] .graph-legend-summary::before {
+  transform: rotate(90deg);
+}
+.kbapp .graph-legend-summary:hover {
+  color: var(--ink);
+}
+.kbapp .graph-legend-body {
+  padding: 0 16px 14px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+/* An explicit display on a <details> child overrides the UA's closed-state
+   hiding, so re-hide the body when the legend is collapsed. */
+.kbapp .graph-legend:not([open]) .graph-legend-body {
+  display: none;
 }
 .kbapp .graph-legend-h {
   font-family: var(--font-mono), monospace;
@@ -222,15 +308,66 @@
 .kbapp .graph-legend-edge.is-contradiction {
   border-top: 2.5px solid var(--accent);
 }
+/* The Archived legend swatch reads dimmed, matching the faded retired nodes. */
+.kbapp .graph-legend-list .chip.is-faded {
+  opacity: 0.5;
+}
 
-/* ---------------- inspector ---------------- */
+/* ---------------- save-failure affordance (DET-221) ----------------
+   A quiet bottom-center pill shown when persisting a dragged layout fails. The
+   batch is re-queued; this lets the user retry instead of silently losing it. */
+.kbapp .graph-save-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: color-mix(in srgb, var(--paper-hi) 94%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--accent);
+  box-shadow: 4px 4px 0 var(--rule-soft);
+  padding: 8px 14px;
+  font-family: var(--font-body), serif;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+/* ---------------- inspector ----------------
+   A fixed right-hand panel that overlays the canvas (Figma's properties panel)
+   rather than compressing it — the canvas keeps its full width. Full height
+   below the floating nav, scrolls independently, slides in on select. */
 .kbapp .graph-inspector {
-  background: var(--paper-2);
+  position: absolute;
+  top: var(--nav-h, 54px);
+  right: 0;
+  bottom: 0;
+  width: min(384px, 92vw);
+  z-index: 30;
+  background: color-mix(in srgb, var(--paper-2) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-left: 1px solid var(--rule);
+  box-shadow: -10px 0 30px -18px rgba(26, 23, 20, 0.45);
   padding: 22px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 18px;
+  animation: graph-inspector-in 0.18s var(--ease, ease) both;
+}
+@keyframes graph-inspector-in {
+  from {
+    transform: translateX(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kbapp .graph-inspector {
+    animation: none;
+  }
 }
 .kbapp .graph-inspector-head {
   display: flex;

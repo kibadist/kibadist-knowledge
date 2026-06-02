@@ -41,10 +41,14 @@ function stateChip(state: CognitiveState): {
 export function ConceptNode({ data, selected }: NodeProps) {
   const node = data as ConceptNodeData
   const chip = stateChip(node.cognitiveState)
-  // Memory decay: a faded concept (activation below the floor) or a DORMANT one
-  // is dimmed so attention falls on what's alive.
+  // Memory decay: a faded concept (activation below the floor), a DORMANT one, or
+  // an ARCHIVED (retired) one is dimmed so attention falls on what's alive. For a
+  // tool whose point is "show what's alive," retired knowledge must not sit at full
+  // prominence next to live concepts (DET-224).
   const faded =
-    node.cognitiveState === 'DORMANT' || node.currentActivation < 0.5
+    node.cognitiveState === 'DORMANT' ||
+    node.cognitiveState === 'ARCHIVED' ||
+    node.currentActivation < 0.5
 
   return (
     <div

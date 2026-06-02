@@ -60,6 +60,16 @@ interface Graph {
  * Node activation is the SAME lazily-decayed value the concept list shows (DET-195),
  * computed via {@link currentActivation} so the graph fades idle nodes identically.
  */
+// Documented ceiling on the live graph read (DET-229). The write path is already
+// capped (SavePositionsDto @ArrayMaxSize 2000); this makes the read symmetric so a
+// heavy long-term user can't force an unbounded payload + O(N) client-side layout.
+// The newest concepts win (orderBy createdAt desc); a richer "filter by state"
+// path is the follow-up if anyone legitimately exceeds this.
+const MAX_GRAPH_NODES = 2000
+// Edges are bounded too — comfortably above MAX_GRAPH_NODES since a node can carry
+// several links, but still finite so one request can't serialize the whole table.
+const MAX_GRAPH_EDGES = 8000
+
 @Injectable()
 export class GraphService {
   constructor(private readonly prisma: PrismaService) {}
@@ -75,25 +85,33 @@ export class GraphService {
     const concepts = await this.prisma.concept.findMany({
       where: { userId, status: { not: 'INBOX' } },
       orderBy: { createdAt: 'desc' },
+      take: MAX_GRAPH_NODES,
       include: { livingConcept: { select: { id: true, status: true } } },
     })
 
-    const nodes: GraphNode[] = concepts.map((concept) => ({
-      id: concept.id,
-      title: concept.title,
-      summary: concept.summary,
-      cognitiveState: concept.cognitiveState,
-      status: concept.status,
-      certainty: concept.certainty,
-      currentActivation: currentActivation(
-        concept.activation,
-        concept.activationAt,
-        now,
-      ),
-      hasPersona: concept.livingConcept !== null,
-      personaStatus: concept.livingConcept?.status ?? null,
-      createdAt: concept.createdAt.toISOString(),
-    }))
+    const nodes: GraphNode[] = concepts.map((concept) => {
+      // An ARCHIVED (retired) persona is treated as absent on the map: it shows no
+      // "Living" chip and is hidden from the inspector's active card (DET-227), so
+      // hasPersona/personaStatus must ignore it.
+      const persona = concept.livingConcept
+      const personaActive = persona !== null && persona.status !== 'ARCHIVED'
+      return {
+        id: concept.id,
+        title: concept.title,
+        summary: concept.summary,
+        cognitiveState: concept.cognitiveState,
+        status: concept.status,
+        certainty: concept.certainty,
+        currentActivation: currentActivation(
+          concept.activation,
+          concept.activationAt,
+          now,
+        ),
+        hasPersona: personaActive,
+        personaStatus: personaActive ? persona.status : null,
+        createdAt: concept.createdAt.toISOString(),
+      }
+    })
 
     // The set of node ids, so edges that touch an INBOX/absent concept are dropped.
     const nodeIds = new Set(nodes.map((n) => n.id))
@@ -106,6 +124,7 @@ export class GraphService {
         status: { in: [LinkStatus.SUGGESTED, LinkStatus.CONFIRMED] },
       },
       orderBy: { createdAt: 'desc' },
+      take: MAX_GRAPH_EDGES,
     })
 
     const edges: GraphEdge[] = links
@@ -169,6 +188,8 @@ export class GraphService {
       throw new NotFoundException('One or more concepts not found')
     }
 
+    // `locked` is deferred (DET-226): we only ever write coordinates. The DB column
+    // keeps its default(false) on create and is left untouched on update.
     await this.prisma.$transaction(
       positions.map((position) =>
         this.prisma.graphNodePosition.upsert({
@@ -178,14 +199,10 @@ export class GraphService {
             userId,
             x: position.x,
             y: position.y,
-            locked: position.locked ?? false,
           },
           update: {
             x: position.x,
             y: position.y,
-            ...(position.locked === undefined
-              ? {}
-              : { locked: position.locked }),
           },
         }),
       ),

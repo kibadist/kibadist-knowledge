@@ -74,6 +74,13 @@ export function layoutNodes(
     const savedPos = saved.get(node.id)
     if (savedPos) {
       result.set(node.id, { x: savedPos.x, y: savedPos.y })
+      // Count a saved node against its cognitive-state column so a later UNSAVED
+      // node in the same column gets a fresh row below it instead of being dropped
+      // on top of an un-moved saved node sharing that column (DET-229).
+      columnFill.set(
+        node.cognitiveState,
+        (columnFill.get(node.cognitiveState) ?? 0) + 1,
+      )
       continue
     }
     const col = columnIndex.get(node.cognitiveState) ?? 0

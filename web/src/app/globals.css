@@ -295,6 +295,34 @@ body {
   color: var(--paper);
 }
 
+/* ---------------- immersive workspace (full-bleed canvas routes) ----------------
+   For map-like screens the canvas fills the whole viewport (Figma-style) and the
+   app chrome floats on top. The masthead strip is dropped; the nav becomes a slim
+   translucent bar; children render into a fixed, edge-to-edge .workspace. Only the
+   /graph route opts in (see (app)/layout.tsx), so every other screen is untouched. */
+.kbapp--immersive {
+  --nav-h: 54px;
+}
+.kbapp--immersive .app-nav-wrap {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 60;
+  /* Translucent paper so the dot-grid canvas reads faintly through the bar. */
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  backdrop-filter: blur(10px) saturate(1.08);
+  -webkit-backdrop-filter: blur(10px) saturate(1.08);
+}
+.kbapp--immersive .app-nav {
+  max-width: none;
+  height: var(--nav-h);
+  padding: 0 22px;
+}
+.kbapp--immersive .workspace {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
 /* ---------------- page frame ---------------- */
 .kbapp .page {
   max-width: 980px;
