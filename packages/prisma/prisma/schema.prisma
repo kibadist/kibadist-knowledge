@@ -57,13 +57,59 @@ model Workspace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner    User      @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  concepts Concept[]
-  domains  Domain[]
-  tracks   Track[]
+  owner      User        @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  concepts   Concept[]
+  domains    Domain[]
+  tracks     Track[]
+  graphViews GraphView[]
 
   @@index([ownerUserId])
   @@map("workspace")
+}
+
+// A GraphView (DET-236): a SAVED, SCOPED lens over the workspace's live
+// Concept/Link data — never a snapshot. It stores only WHAT to show (a scope +
+// its target id + filters) and view-level prefs (zoom, auto-layout choice); the
+// nodes/edges are always resolved live at read time, and per-concept (x, y)
+// positions still live in GraphNodePosition (DET-230), never here. Deleting a
+// view never deletes a concept, link, or position. The scope target fields are
+// plain ids (not FKs): a view that points at a deleted track/domain simply
+// resolves to an empty graph rather than cascading or erroring.
+model GraphView {
+  id              String     @id @default(cuid())
+  workspaceId     String
+  name            String
+  scope           GraphScope
+  // The scope's target, by kind — at most one is set for a given scope.
+  sourceConceptId String?
+  trackId         String?
+  domainId        String?
+  centerConceptId String?
+  // Opaque view filters (e.g. by cognitive state / certainty); stored + returned
+  // verbatim. Applied client-side for now — server-side filtering is a follow-up.
+  filters         Json       @default("{}")
+  // View-level layout prefs only (zoom, which auto-layout). NEVER a node snapshot.
+  layout          Json       @default("{}")
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("graph_view")
+}
+
+// The scope of a graph view / query (DET-236). WORKSPACE is the default (today's
+// whole-map behavior). MISCONCEPTION and REVIEW are defined for the data model
+// but OUT OF BUILD SCOPE for the MVP (DET-231) — the resolver rejects them.
+enum GraphScope {
+  ARTICLE
+  TRACK
+  DOMAIN
+  WORKSPACE
+  CONCEPT_NEIGHBORHOOD
+  MISCONCEPTION
+  REVIEW
 }
 
 // A Domain (DET-234): a SEMANTIC REGION of a workspace ("Distributed Systems",

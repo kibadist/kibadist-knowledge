@@ -2,16 +2,37 @@ import {
   type Certainty,
   type CognitiveState,
   type ConceptStatus,
+  GraphScope,
   type LinkRelation,
   LinkStatus,
   type LivingConceptStatus,
   type QuestionActor,
 } from '@kibadist/prisma'
-import { Injectable, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common'
 
 import { currentActivation } from '../decay/decay'
 import { PrismaService } from '../prisma/prisma.service'
 import type { SavePositionsDto } from './dto/save-positions.dto'
+
+/**
+ * A request to resolve a scoped slice of the graph (DET-236). `scope` decides
+ * which target field is required: TRACK→trackId, DOMAIN→domainId, ARTICLE→
+ * sourceConceptId, CONCEPT_NEIGHBORHOOD→centerConceptId (+ optional `hops` 1–2).
+ * WORKSPACE needs no target. The nodes/edges are always resolved LIVE — a scope
+ * is a query, never a stored subgraph.
+ */
+export interface GraphScopeSpec {
+  scope: GraphScope
+  sourceConceptId?: string
+  trackId?: string
+  domainId?: string
+  centerConceptId?: string
+  hops?: number
+}
 
 // The graph is always derived LIVE from Concept (nodes) + Link (edges); only the
 // (x, y) coordinates are persisted (DET-230). No snapshot of nodes/edges exists.
@@ -74,19 +95,51 @@ const MAX_GRAPH_EDGES = 8000
 export class GraphService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** The live graph: earned nodes, their confirmed/suggested edges, and saved
-   *  positions. Edges are filtered to the node set so the graph never references
-   *  a node it didn't return. */
-  async getGraph(userId: string, workspaceId: string): Promise<Graph> {
+  /**
+   * The live WORKSPACE graph (DET-230/236): earned nodes, their confirmed/
+   * suggested edges, and saved positions. Thin wrapper over {@link getScopedGraph}
+   * with the WORKSPACE scope, kept so existing callers (`GET /graph`) are
+   * unchanged.
+   */
+  getGraph(userId: string, workspaceId: string): Promise<Graph> {
+    return this.getScopedGraph(userId, workspaceId, {
+      scope: GraphScope.WORKSPACE,
+    })
+  }
+
+  /**
+   * The live graph for a given scope (DET-236). Resolves the scope to a concept-id
+   * set (null = the whole workspace), then assembles nodes/edges/positions over
+   * the SAME live Concept/Link data — no snapshot, ever. Edges are restricted to
+   * pairs where BOTH endpoints are in the returned node set, so a scoped view
+   * never references a node outside it.
+   */
+  async getScopedGraph(
+    userId: string,
+    workspaceId: string,
+    spec: GraphScopeSpec,
+  ): Promise<Graph> {
     const now = new Date()
 
-    // Nodes = all earned (non-INBOX) concepts in the active workspace (DET-232).
-    // Include the living-concept relation (id + status only) to compute
-    // hasPersona/personaStatus without leaking text. Edges/positions are scoped
-    // transitively: edges are filtered to this node set below, and a position only
-    // exists for a concept the user owns.
+    // Resolve the scope to its concept-id set. `null` means "the whole workspace"
+    // (the WORKSPACE scope), which keeps the original unfiltered, capped query.
+    const scopedIds = await this.resolveScopeConceptIds(
+      userId,
+      workspaceId,
+      spec,
+    )
+
+    // Nodes = earned (non-INBOX) concepts in the active workspace (DET-232),
+    // narrowed to the scope's id set when one was resolved. Include the
+    // living-concept relation (id + status only) to compute hasPersona/
+    // personaStatus without leaking text.
     const concepts = await this.prisma.concept.findMany({
-      where: { userId, workspaceId, status: { not: 'INBOX' } },
+      where: {
+        userId,
+        workspaceId,
+        status: { not: 'INBOX' },
+        ...(scopedIds === null ? {} : { id: { in: scopedIds } }),
+      },
       orderBy: { createdAt: 'desc' },
       take: MAX_GRAPH_NODES,
       include: { livingConcept: { select: { id: true, status: true } } },
@@ -160,6 +213,148 @@ export class GraphService {
     }))
 
     return { nodes, edges, positions }
+  }
+
+  /**
+   * Resolve a scope spec to the set of concept ids it covers (DET-236), or `null`
+   * for WORKSPACE (meaning "every earned concept", handled by the unfiltered
+   * node query). Every targeted scope re-checks ownership/workspace so a scope
+   * can't reach into another world. The returned ids are a superset filter — the
+   * node query still excludes INBOX and applies the node cap.
+   */
+  private async resolveScopeConceptIds(
+    userId: string,
+    workspaceId: string,
+    spec: GraphScopeSpec,
+  ): Promise<string[] | null> {
+    switch (spec.scope) {
+      case GraphScope.WORKSPACE:
+        return null
+
+      case GraphScope.TRACK: {
+        if (!spec.trackId) {
+          throw new BadRequestException('trackId is required for TRACK scope')
+        }
+        // The track must belong to a workspace this user owns.
+        const track = await this.prisma.track.findFirst({
+          where: {
+            id: spec.trackId,
+            workspaceId,
+            workspace: { ownerUserId: userId },
+          },
+          select: { id: true },
+        })
+        if (!track) throw new NotFoundException('Track not found')
+        const rows = await this.prisma.trackConcept.findMany({
+          where: { trackId: spec.trackId },
+          select: { conceptId: true },
+        })
+        return rows.map((r) => r.conceptId)
+      }
+
+      case GraphScope.DOMAIN: {
+        if (!spec.domainId) {
+          throw new BadRequestException('domainId is required for DOMAIN scope')
+        }
+        const domain = await this.prisma.domain.findFirst({
+          where: {
+            id: spec.domainId,
+            workspaceId,
+            workspace: { ownerUserId: userId },
+          },
+          select: { id: true },
+        })
+        if (!domain) throw new NotFoundException('Domain not found')
+        const rows = await this.prisma.conceptDomain.findMany({
+          where: { domainId: spec.domainId },
+          select: { conceptId: true },
+        })
+        return rows.map((r) => r.conceptId)
+      }
+
+      case GraphScope.ARTICLE: {
+        if (!spec.sourceConceptId) {
+          throw new BadRequestException(
+            'sourceConceptId is required for ARTICLE scope',
+          )
+        }
+        const source = await this.prisma.concept.findFirst({
+          where: { id: spec.sourceConceptId, userId, workspaceId },
+          select: { id: true, sourceUrl: true },
+        })
+        if (!source) throw new NotFoundException('Source concept not found')
+        // "Concepts from this article": the source concept itself plus any earned
+        // concept sharing its source origin (`sourceUrl`). NOTE: DET-211 does not
+        // persist a candidate→promoted-concept lineage, so shared source origin is
+        // the honest "same article" signal available; a dedicated lineage link is
+        // a future refinement if richer article grouping is needed.
+        const ids = new Set<string>([source.id])
+        if (source.sourceUrl) {
+          const sameSource = await this.prisma.concept.findMany({
+            where: {
+              userId,
+              workspaceId,
+              sourceUrl: source.sourceUrl,
+              status: { not: 'INBOX' },
+            },
+            select: { id: true },
+          })
+          for (const c of sameSource) ids.add(c.id)
+        }
+        return [...ids]
+      }
+
+      case GraphScope.CONCEPT_NEIGHBORHOOD: {
+        if (!spec.centerConceptId) {
+          throw new BadRequestException(
+            'centerConceptId is required for CONCEPT_NEIGHBORHOOD scope',
+          )
+        }
+        const center = await this.prisma.concept.findFirst({
+          where: { id: spec.centerConceptId, userId, workspaceId },
+          select: { id: true },
+        })
+        if (!center) throw new NotFoundException('Center concept not found')
+        // Breadth-first over SUGGESTED/CONFIRMED links, 1–2 hops (clamped). Each
+        // hop expands the frontier by the links touching it; INBOX/foreign ids
+        // that sneak in are dropped later by the node query's workspace/status
+        // filter, so this only needs to bound the id set.
+        const hops = Math.min(2, Math.max(1, spec.hops ?? 1))
+        const all = new Set<string>([center.id])
+        let frontier = new Set<string>([center.id])
+        for (let hop = 0; hop < hops && frontier.size > 0; hop++) {
+          const links = await this.prisma.link.findMany({
+            where: {
+              userId,
+              status: { in: [LinkStatus.SUGGESTED, LinkStatus.CONFIRMED] },
+              OR: [
+                { sourceConceptId: { in: [...frontier] } },
+                { targetConceptId: { in: [...frontier] } },
+              ],
+            },
+            select: { sourceConceptId: true, targetConceptId: true },
+          })
+          const next = new Set<string>()
+          for (const link of links) {
+            for (const id of [link.sourceConceptId, link.targetConceptId]) {
+              if (!all.has(id)) {
+                all.add(id)
+                next.add(id)
+              }
+            }
+          }
+          frontier = next
+        }
+        return [...all]
+      }
+
+      // Defined in the data model but out of build scope for the MVP (DET-231).
+      case GraphScope.MISCONCEPTION:
+      case GraphScope.REVIEW:
+        throw new BadRequestException(
+          `Graph scope ${spec.scope} is not available in the MVP`,
+        )
+    }
   }
 
   /**

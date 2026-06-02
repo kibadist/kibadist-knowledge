@@ -7,11 +7,16 @@ function makeService() {
   const prisma = {
     concept: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       count: jest.fn(),
     },
     link: {
       findMany: jest.fn(),
     },
+    track: { findFirst: jest.fn() },
+    domain: { findFirst: jest.fn() },
+    trackConcept: { findMany: jest.fn() },
+    conceptDomain: { findMany: jest.fn() },
     graphNodePosition: {
       findMany: jest.fn(),
       // Returns its args so the array handed to $transaction is inspectable.
@@ -121,6 +126,106 @@ describe('GraphService.getGraph', () => {
       hasPersona: false,
       personaStatus: null,
     })
+  })
+})
+
+describe('GraphService.getScopedGraph — scope resolution', () => {
+  it('WORKSPACE scope applies no id filter (whole workspace)', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findMany.mockResolvedValue([concept({ id: 'c1' })])
+    prisma.link.findMany.mockResolvedValue([])
+    prisma.graphNodePosition.findMany.mockResolvedValue([])
+
+    await service.getScopedGraph('u1', 'ws1', { scope: 'WORKSPACE' as never })
+
+    const where = prisma.concept.findMany.mock.calls[0][0].where
+    expect(where).not.toHaveProperty('id')
+    expect(where).toMatchObject({
+      workspaceId: 'ws1',
+      status: { not: 'INBOX' },
+    })
+  })
+
+  it('TRACK scope restricts nodes to the track’s concept ids', async () => {
+    const { service, prisma } = makeService()
+    prisma.track.findFirst.mockResolvedValue({ id: 't1' })
+    prisma.trackConcept.findMany.mockResolvedValue([
+      { conceptId: 'c1' },
+      { conceptId: 'c2' },
+    ])
+    prisma.concept.findMany.mockResolvedValue([concept({ id: 'c1' })])
+    prisma.link.findMany.mockResolvedValue([])
+    prisma.graphNodePosition.findMany.mockResolvedValue([])
+
+    await service.getScopedGraph('u1', 'ws1', {
+      scope: 'TRACK' as never,
+      trackId: 't1',
+    })
+
+    // Ownership of the track is checked through the workspace owner.
+    expect(prisma.track.findFirst).toHaveBeenCalledWith({
+      where: { id: 't1', workspaceId: 'ws1', workspace: { ownerUserId: 'u1' } },
+      select: { id: true },
+    })
+    expect(prisma.concept.findMany.mock.calls[0][0].where.id).toEqual({
+      in: ['c1', 'c2'],
+    })
+  })
+
+  it('DOMAIN scope restricts nodes to the domain’s concept ids', async () => {
+    const { service, prisma } = makeService()
+    prisma.domain.findFirst.mockResolvedValue({ id: 'd1' })
+    prisma.conceptDomain.findMany.mockResolvedValue([{ conceptId: 'c9' }])
+    prisma.concept.findMany.mockResolvedValue([concept({ id: 'c9' })])
+    prisma.link.findMany.mockResolvedValue([])
+    prisma.graphNodePosition.findMany.mockResolvedValue([])
+
+    await service.getScopedGraph('u1', 'ws1', {
+      scope: 'DOMAIN' as never,
+      domainId: 'd1',
+    })
+
+    expect(prisma.concept.findMany.mock.calls[0][0].where.id).toEqual({
+      in: ['c9'],
+    })
+  })
+
+  it('CONCEPT_NEIGHBORHOOD expands the center by its linked neighbors', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findFirst.mockResolvedValue({ id: 'center' })
+    // One hop: center links to n1 and n2.
+    prisma.link.findMany
+      .mockResolvedValueOnce([
+        { sourceConceptId: 'center', targetConceptId: 'n1' },
+        { sourceConceptId: 'n2', targetConceptId: 'center' },
+      ])
+      // The edge query inside graph assembly.
+      .mockResolvedValueOnce([])
+    prisma.concept.findMany.mockResolvedValue([concept({ id: 'center' })])
+    prisma.graphNodePosition.findMany.mockResolvedValue([])
+
+    await service.getScopedGraph('u1', 'ws1', {
+      scope: 'CONCEPT_NEIGHBORHOOD' as never,
+      centerConceptId: 'center',
+      hops: 1,
+    })
+
+    const idFilter = prisma.concept.findMany.mock.calls[0][0].where.id.in
+    expect(new Set(idFilter)).toEqual(new Set(['center', 'n1', 'n2']))
+  })
+
+  it('rejects a targeted scope missing its target', async () => {
+    const { service } = makeService()
+    await expect(
+      service.getScopedGraph('u1', 'ws1', { scope: 'TRACK' as never }),
+    ).rejects.toMatchObject({ status: 400 })
+  })
+
+  it('rejects MVP-out-of-scope scopes (MISCONCEPTION/REVIEW)', async () => {
+    const { service } = makeService()
+    await expect(
+      service.getScopedGraph('u1', 'ws1', { scope: 'REVIEW' as never }),
+    ).rejects.toMatchObject({ status: 400 })
   })
 })
 
