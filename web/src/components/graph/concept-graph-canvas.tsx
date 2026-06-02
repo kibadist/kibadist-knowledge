@@ -196,8 +196,13 @@ function Flow({
       // it — the user's layout work is never silently dropped. The optimistic cache
       // patch from flush() is intentionally KEPT on failure (the pending queue is the
       // source of truth), so the node doesn't visibly snap back while a retry is due.
+      // Only re-queue an id that isn't already pending: a re-drag of the same node
+      // during the failed save's round-trip has the newer position, which must NOT be
+      // clobbered by this stale batch (newer wins).
       for (const b of batch) {
-        pending.current.set(b.conceptId, { x: b.x, y: b.y })
+        if (!pending.current.has(b.conceptId)) {
+          pending.current.set(b.conceptId, { x: b.x, y: b.y })
+        }
       }
       setSaveFailed(true)
     },
@@ -215,14 +220,21 @@ function Flow({
 
   const onNodeDragStop = useCallback<OnNodeDrag>(
     (_event, node) => {
-      pending.current.set(node.id, {
+      const p = {
         x: Math.round(node.position.x),
         y: Math.round(node.position.y),
-      })
+      }
+      pending.current.set(node.id, p)
+      // Patch the cache NOW, not just at flush. The save is debounced 600ms; if a
+      // ['graph'] refetch lands inside that window (e.g. creating a persona
+      // invalidates ['graph']) it would otherwise overwrite the cache without this
+      // drag and snap the node back to its layout slot until the flush fires. The
+      // pending queue still drives the actual save (DET-221).
+      patchCachedPositions([{ conceptId: node.id, x: p.x, y: p.y }])
       if (timer.current) clearTimeout(timer.current)
       timer.current = setTimeout(flush, 600)
     },
-    [flush],
+    [flush, patchCachedPositions],
   )
 
   // Flush any pending positions on unmount so an in-flight debounce isn't lost.
