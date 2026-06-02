@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 
+import { WorkspacesModule } from '../workspaces/workspaces.module'
 import { GraphController } from './graph.controller'
 import { GraphService } from './graph.service'
 
@@ -10,6 +11,7 @@ import { GraphService } from './graph.service'
  * decay module, so no extra module wiring is needed.
  */
 @Module({
+  imports: [WorkspacesModule],
   controllers: [GraphController],
   providers: [GraphService],
 })

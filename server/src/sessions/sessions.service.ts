@@ -45,7 +45,7 @@ export class SessionsService {
    * single mastered concept as a CHALLENGE, else a DORMANT rediscovery, else a
    * zero-item session for a brand-new user.
    */
-  async start(userId: string, targetMinutes = 10) {
+  async start(userId: string, workspaceId: string, targetMinutes = 10) {
     const existing = await this.prisma.session.findFirst({
       where: { userId, status: SessionStatus.ACTIVE },
     })
@@ -67,7 +67,7 @@ export class SessionsService {
 
     const now = new Date()
     const concepts = await this.prisma.concept.findMany({
-      where: { userId, status: { not: ConceptStatus.INBOX } },
+      where: { userId, workspaceId, status: { not: ConceptStatus.INBOX } },
       select: { id: true, cognitiveState: true, nextReviewAt: true },
     })
 

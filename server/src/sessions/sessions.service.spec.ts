@@ -81,7 +81,7 @@ describe('SessionsService.start', () => {
         ],
       })
 
-    const result = await service.start('u1', 10)
+    const result = await service.start('u1', 'ws1', 10)
 
     const created = prisma.sessionItem.createMany.mock.calls[0][0].data
     expect(created).toEqual([
@@ -118,7 +118,7 @@ describe('SessionsService.start', () => {
       ],
     })
 
-    const result = await service.start('u1', 10)
+    const result = await service.start('u1', 'ws1', 10)
 
     expect(result?.items[0].cognitiveState).toBe('CONTESTED')
   })
@@ -137,7 +137,7 @@ describe('SessionsService.start', () => {
         items: [],
       })
 
-    const result = await service.start('u1', 10)
+    const result = await service.start('u1', 'ws1', 10)
 
     expect(prisma.session.create).not.toHaveBeenCalled()
     expect(result?.id).toBe('active')
@@ -173,7 +173,7 @@ describe('SessionsService.start', () => {
       ],
     })
 
-    await service.start('u1', 10)
+    await service.start('u1', 'ws1', 10)
 
     const created = prisma.sessionItem.createMany.mock.calls[0][0].data
     expect(created).toEqual([

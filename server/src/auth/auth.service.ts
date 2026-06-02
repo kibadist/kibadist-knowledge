@@ -7,6 +7,7 @@ import { JwtService } from '@nestjs/jwt'
 import * as bcrypt from 'bcrypt'
 
 import { UsersService } from '../users/users.service'
+import { WorkspacesService } from '../workspaces/workspaces.service'
 import type { AuthResponse, AuthUser, JwtPayload } from './auth.types'
 
 const BCRYPT_ROUNDS = 10
@@ -16,6 +17,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly workspacesService: WorkspacesService,
   ) {}
 
   /** Used by LocalStrategy to verify credentials on login. */
@@ -50,6 +52,10 @@ export class AuthService {
         name: input.name,
         passwordHash,
       })
+      // Auto-provision a default workspace so a new account is never
+      // workspace-less (DET-232): every concept it captures needs a workspace to
+      // be owned by, and the active-workspace resolver assumes one exists.
+      await this.workspacesService.ensureDefaultWorkspace(user.id)
       return this.buildAuthResponse(user.id, user.email, user.name)
     } catch (error) {
       // Unique-constraint race: a concurrent request registered the same email

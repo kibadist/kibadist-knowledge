@@ -73,7 +73,7 @@ describe('GraphService.getGraph', () => {
     ])
     prisma.graphNodePosition.findMany.mockResolvedValue([])
 
-    const graph = await service.getGraph('u1')
+    const graph = await service.getGraph('u1', 'ws1')
 
     expect(graph.edges.map((e) => e.id)).toEqual(['l1'])
   })
@@ -84,7 +84,7 @@ describe('GraphService.getGraph', () => {
     prisma.link.findMany.mockResolvedValue([])
     prisma.graphNodePosition.findMany.mockResolvedValue([])
 
-    await service.getGraph('u1')
+    await service.getGraph('u1', 'ws1')
 
     const where = prisma.link.findMany.mock.calls[0][0].where
     expect(where.status).toEqual({
@@ -105,7 +105,7 @@ describe('GraphService.getGraph', () => {
     prisma.link.findMany.mockResolvedValue([])
     prisma.graphNodePosition.findMany.mockResolvedValue([])
 
-    const graph = await service.getGraph('u1')
+    const graph = await service.getGraph('u1', 'ws1')
     const byId = new Map(graph.nodes.map((n) => [n.id, n]))
 
     expect(byId.get('draft')).toMatchObject({

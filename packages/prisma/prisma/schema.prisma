@@ -37,8 +37,31 @@ model User {
   conceptCandidates SourceConceptCandidate[]
   graphNodePositions GraphNodePosition[]
   livingConcepts   LivingConcept[]
+  workspaces       Workspace[]
 
   @@map("user")
+}
+
+// The largest organizational container (DET-231/232): the "world" a body of
+// knowledge belongs to (a career, a business, a research thread). Concepts are
+// OWNED by a Workspace — it is the tenancy boundary the Domain/Track/GraphView
+// layers organize within. For MVP a workspace has a single owner; multi-member
+// access, permissions, and billing are modeled-but-deferred (the Decision in
+// DET-241 governs whether knowledge ever crosses workspaces). A user always has
+// at least one (auto-provisioned at registration; the last one can't be deleted).
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  ownerUserId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner    User      @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  concepts Concept[]
+
+  @@index([ownerUserId])
+  @@map("workspace")
 }
 
 model Note {
@@ -118,10 +141,16 @@ model Concept {
   // of asserting everything as settled fact. Defaults to ASSERTED.
   certainty          Certainty @default(ASSERTED)
   userId       String
+  // The Workspace that OWNS this concept (DET-232). A concept lives in exactly
+  // one workspace (the tenancy boundary); Domains/Tracks organize it via join
+  // tables, never by re-parenting it. For MVP ownerUserId == the workspace owner,
+  // so userId is retained for the per-id ownership checks the app already does.
+  workspaceId  String
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   articulations   Articulation[]
   outgoingLinks   Link[]           @relation("LinkSource")
   incomingLinks   Link[]           @relation("LinkTarget")
@@ -141,6 +170,14 @@ model Concept {
   @@index([userId, status])
   @@index([userId, nextReviewAt])
   @@index([userId, cognitiveState])
+  // Workspace-leading composites (DET-232): the hot read is now "concepts in
+  // this workspace", optionally filtered by status/state/due. The [userId, *]
+  // composites above are kept for the per-user paths that aren't workspace-scoped
+  // yet (e.g. retrieval due-sweeps).
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, nextReviewAt])
+  @@index([workspaceId, cognitiveState])
   @@map("concept")
 }
 

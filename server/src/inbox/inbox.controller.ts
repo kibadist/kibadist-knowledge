@@ -14,6 +14,8 @@ import type { FastifyRequest } from 'fastify'
 
 import type { AuthUser } from '../auth/auth.types'
 import { CurrentUser } from '../auth/current-user.decorator'
+import { WorkspaceId } from '../workspaces/workspace-id.decorator'
+import { WorkspacesService } from '../workspaces/workspaces.service'
 import { CaptureTextDto } from './dto/capture-text.dto'
 import { CaptureUrlDto } from './dto/capture-url.dto'
 import { MAX_PDF_BYTES } from './inbox.constants'
@@ -21,11 +23,21 @@ import { InboxService } from './inbox.service'
 
 @Controller('inbox')
 export class InboxController {
-  constructor(private readonly inbox: InboxService) {}
+  constructor(
+    private readonly inbox: InboxService,
+    private readonly workspaces: WorkspacesService,
+  ) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.inbox.list(user.userId)
+  async list(
+    @CurrentUser() user: AuthUser,
+    @WorkspaceId() requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await this.workspaces.resolveActiveWorkspaceId(
+      user.userId,
+      requestedWorkspaceId,
+    )
+    return this.inbox.list(user.userId, workspaceId)
   }
 
   @Get(':id')
@@ -42,17 +54,41 @@ export class InboxController {
   }
 
   @Post('text')
-  captureText(@CurrentUser() user: AuthUser, @Body() dto: CaptureTextDto) {
-    return this.inbox.captureText(user.userId, dto)
+  async captureText(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CaptureTextDto,
+    @WorkspaceId() requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await this.workspaces.resolveActiveWorkspaceId(
+      user.userId,
+      requestedWorkspaceId,
+    )
+    return this.inbox.captureText(user.userId, workspaceId, dto)
   }
 
   @Post('url')
-  captureUrl(@CurrentUser() user: AuthUser, @Body() dto: CaptureUrlDto) {
-    return this.inbox.captureUrl(user.userId, dto)
+  async captureUrl(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CaptureUrlDto,
+    @WorkspaceId() requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await this.workspaces.resolveActiveWorkspaceId(
+      user.userId,
+      requestedWorkspaceId,
+    )
+    return this.inbox.captureUrl(user.userId, workspaceId, dto)
   }
 
   @Post('pdf')
-  async capturePdf(@CurrentUser() user: AuthUser, @Req() req: FastifyRequest) {
+  async capturePdf(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @WorkspaceId() requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await this.workspaces.resolveActiveWorkspaceId(
+      user.userId,
+      requestedWorkspaceId,
+    )
     const data = await req.file({ limits: { fileSize: MAX_PDF_BYTES } })
     if (!data) throw new BadRequestException('No file uploaded')
     if (data.mimetype !== 'application/pdf') {
@@ -63,7 +99,12 @@ export class InboxController {
     if (data.file.truncated) {
       throw new BadRequestException('PDF exceeds the 10MB limit')
     }
-    return this.inbox.capturePdf(user.userId, data.filename, buffer)
+    return this.inbox.capturePdf(
+      user.userId,
+      workspaceId,
+      data.filename,
+      buffer,
+    )
   }
 
   @Delete(':id')

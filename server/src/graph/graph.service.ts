@@ -77,13 +77,16 @@ export class GraphService {
   /** The live graph: earned nodes, their confirmed/suggested edges, and saved
    *  positions. Edges are filtered to the node set so the graph never references
    *  a node it didn't return. */
-  async getGraph(userId: string): Promise<Graph> {
+  async getGraph(userId: string, workspaceId: string): Promise<Graph> {
     const now = new Date()
 
-    // Nodes = all earned (non-INBOX) concepts. Include the living-concept relation
-    // (id + status only) to compute hasPersona/personaStatus without leaking text.
+    // Nodes = all earned (non-INBOX) concepts in the active workspace (DET-232).
+    // Include the living-concept relation (id + status only) to compute
+    // hasPersona/personaStatus without leaking text. Edges/positions are scoped
+    // transitively: edges are filtered to this node set below, and a position only
+    // exists for a concept the user owns.
     const concepts = await this.prisma.concept.findMany({
-      where: { userId, status: { not: 'INBOX' } },
+      where: { userId, workspaceId, status: { not: 'INBOX' } },
       orderBy: { createdAt: 'desc' },
       take: MAX_GRAPH_NODES,
       include: { livingConcept: { select: { id: true, status: true } } },

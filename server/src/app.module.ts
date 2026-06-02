@@ -31,6 +31,7 @@ import { SourceQaModule } from './source-qa/source-qa.module'
 import { UserThrottlerGuard } from './throttler/user-throttler.guard'
 import { TutorModule } from './tutor/tutor.module'
 import { UsersModule } from './users/users.module'
+import { WorkspacesModule } from './workspaces/workspaces.module'
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { UsersModule } from './users/users.module'
       },
     }),
     PrismaModule,
+    WorkspacesModule,
     AuthModule,
     UsersModule,
     NotesModule,

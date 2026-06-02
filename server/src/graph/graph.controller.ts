@@ -2,6 +2,8 @@ import { Body, Controller, Get, Put } from '@nestjs/common'
 
 import type { AuthUser } from '../auth/auth.types'
 import { CurrentUser } from '../auth/current-user.decorator'
+import { WorkspaceId } from '../workspaces/workspace-id.decorator'
+import { WorkspacesService } from '../workspaces/workspaces.service'
 import { SavePositionsDto } from './dto/save-positions.dto'
 import { GraphService } from './graph.service'
 
@@ -9,11 +11,21 @@ import { GraphService } from './graph.service'
 // concepts + links, plus the user's hand-placed node positions.
 @Controller('graph')
 export class GraphController {
-  constructor(private readonly graphService: GraphService) {}
+  constructor(
+    private readonly graphService: GraphService,
+    private readonly workspaces: WorkspacesService,
+  ) {}
 
   @Get()
-  getGraph(@CurrentUser() user: AuthUser) {
-    return this.graphService.getGraph(user.userId)
+  async getGraph(
+    @CurrentUser() user: AuthUser,
+    @WorkspaceId() requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await this.workspaces.resolveActiveWorkspaceId(
+      user.userId,
+      requestedWorkspaceId,
+    )
+    return this.graphService.getGraph(user.userId, workspaceId)
   }
 
   // Persist the user's manual node placements. Layout re-runs never destroy these.

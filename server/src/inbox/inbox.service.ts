@@ -50,9 +50,13 @@ export class InboxService {
     private readonly conceptState: ConceptStateService,
   ) {}
 
-  async captureText(userId: string, dto: CaptureTextDto): Promise<InboxItem> {
+  async captureText(
+    userId: string,
+    workspaceId: string,
+    dto: CaptureTextDto,
+  ): Promise<InboxItem> {
     const title = dto.title?.trim() || deriveTitle(dto.text)
-    return this.store(userId, {
+    return this.store(userId, workspaceId, {
       title,
       sourceText: dto.text,
       sourceDocument: extractTextDocument(dto.text),
@@ -60,7 +64,11 @@ export class InboxService {
     })
   }
 
-  async captureUrl(userId: string, dto: CaptureUrlDto): Promise<InboxItem> {
+  async captureUrl(
+    userId: string,
+    workspaceId: string,
+    dto: CaptureUrlDto,
+  ): Promise<InboxItem> {
     const page = await fetchReadable(dto.url)
     // Structured extraction (DET-210) preserves document hierarchy; the
     // block-derived flat text is cleaner (chrome-stripped), so prefer it for
@@ -70,7 +78,7 @@ export class InboxService {
     const { document, text } = await extractUrlDocument(dto.url, page.html)
     const title =
       document.title?.trim() || page.title?.trim() || hostPathLabel(dto.url)
-    return this.store(userId, {
+    return this.store(userId, workspaceId, {
       title,
       sourceText: text || page.text,
       sourceDocument: document,
@@ -81,6 +89,7 @@ export class InboxService {
 
   async capturePdf(
     userId: string,
+    workspaceId: string,
     filename: string,
     buffer: Buffer,
   ): Promise<InboxItem> {
@@ -90,7 +99,7 @@ export class InboxService {
         .replace(/\.pdf$/i, '')
         .trim()
         .slice(0, 200) || 'PDF'
-    return this.store(userId, {
+    return this.store(userId, workspaceId, {
       title,
       sourceText: text,
       sourceDocument: extractPdfDocument(text),
@@ -99,9 +108,9 @@ export class InboxService {
   }
 
   /** Lists only INBOX items (never earned concepts), newest first. */
-  async list(userId: string): Promise<InboxItem[]> {
+  async list(userId: string, workspaceId: string): Promise<InboxItem[]> {
     const rows = await this.prisma.concept.findMany({
-      where: { userId, status: ConceptStatus.INBOX },
+      where: { userId, workspaceId, status: ConceptStatus.INBOX },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -183,6 +192,7 @@ export class InboxService {
 
   private async store(
     userId: string,
+    workspaceId: string,
     data: {
       title: string
       sourceText: string
@@ -198,6 +208,7 @@ export class InboxService {
       const created = await tx.concept.create({
         data: {
           userId,
+          workspaceId,
           title: data.title,
           sourceText: data.sourceText,
           sourceDocument: data.sourceDocument

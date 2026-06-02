@@ -30,10 +30,11 @@ export class ConceptsService {
   // so the list can fade idle concepts without a write.
   async findAllForUser(
     userId: string,
+    workspaceId: string,
   ): Promise<(Concept & { currentActivation: number })[]> {
     const now = new Date()
     const concepts = await this.prisma.concept.findMany({
-      where: { userId, status: { not: ConceptStatus.INBOX } },
+      where: { userId, workspaceId, status: { not: ConceptStatus.INBOX } },
       orderBy: { createdAt: 'desc' },
     })
     return concepts.map((concept) => ({
@@ -105,7 +106,11 @@ export class ConceptsService {
   // permanent concept is gated and lives in PromotionService (DET-189).
   // The concept row defaults to SEEN; we write its opening `null → SEEN`
   // transition in the same commit so its cognitive history starts at capture.
-  async create(userId: string, dto: CreateConceptDto): Promise<Concept> {
+  async create(
+    userId: string,
+    workspaceId: string,
+    dto: CreateConceptDto,
+  ): Promise<Concept> {
     return this.prisma.$transaction(async (tx) => {
       const concept = await tx.concept.create({
         data: {
@@ -113,6 +118,7 @@ export class ConceptsService {
           summary: dto.summary,
           sourceText: dto.sourceText,
           userId,
+          workspaceId,
         },
       })
       await this.conceptState.recordCapture(concept.id, userId, tx)

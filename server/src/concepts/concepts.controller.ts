@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common'
 
 import type { AuthUser } from '../auth/auth.types'
 import { CurrentUser } from '../auth/current-user.decorator'
+import { WorkspaceId } from '../workspaces/workspace-id.decorator'
+import { WorkspacesService } from '../workspaces/workspaces.service'
 import { ConceptsService } from './concepts.service'
 import { CertaintyDto } from './dto/certainty.dto'
 import { CreateConceptDto } from './dto/create-concept.dto'
@@ -9,11 +11,21 @@ import { UpdateConceptDto } from './dto/update-concept.dto'
 
 @Controller('concepts')
 export class ConceptsController {
-  constructor(private readonly conceptsService: ConceptsService) {}
+  constructor(
+    private readonly conceptsService: ConceptsService,
+    private readonly workspaces: WorkspacesService,
+  ) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.conceptsService.findAllForUser(user.userId)
+  async list(
+    @CurrentUser() user: AuthUser,
+    @WorkspaceId() requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await this.workspaces.resolveActiveWorkspaceId(
+      user.userId,
+      requestedWorkspaceId,
+    )
+    return this.conceptsService.findAllForUser(user.userId, workspaceId)
   }
 
   @Get(':id')
@@ -22,8 +34,16 @@ export class ConceptsController {
   }
 
   @Post()
-  create(@CurrentUser() user: AuthUser, @Body() dto: CreateConceptDto) {
-    return this.conceptsService.create(user.userId, dto)
+  async create(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateConceptDto,
+    @WorkspaceId() requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await this.workspaces.resolveActiveWorkspaceId(
+      user.userId,
+      requestedWorkspaceId,
+    )
+    return this.conceptsService.create(user.userId, workspaceId, dto)
   }
 
   @Patch(':id')
