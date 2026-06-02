@@ -14,6 +14,7 @@ import { ConceptStateModule } from './concept-state/concept-state.module'
 import { ConceptsModule } from './concepts/concepts.module'
 import { ConnectorModule } from './connector/connector.module'
 import { DecayModule } from './decay/decay.module'
+import { DomainsModule } from './domains/domains.module'
 import { GraphModule } from './graph/graph.module'
 import { InboxModule } from './inbox/inbox.module'
 import { IntakeModule } from './intake/intake.module'
@@ -91,6 +92,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module'
     ConceptLibraryModule,
     ConnectorModule,
     DecayModule,
+    DomainsModule,
     GraphModule,
     InboxModule,
     IntakeModule,

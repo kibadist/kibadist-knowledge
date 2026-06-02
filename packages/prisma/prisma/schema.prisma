@@ -22,22 +22,22 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  notes           Note[]
-  concepts        Concept[]
-  articulations   Articulation[]
-  links           Link[]
-  retrievalEvents RetrievalEvent[]
-  intakeQuestions IntakeQuestion[]
-  promotionDrafts PromotionDraft[]
-  sourceQuestions SourceQuestion[]
-  stateTransitions ConceptStateTransition[]
-  sessions         Session[]
-  reflections      Reflection[]
-  sourceChunks     SourceChunk[]
-  conceptCandidates SourceConceptCandidate[]
+  notes              Note[]
+  concepts           Concept[]
+  articulations      Articulation[]
+  links              Link[]
+  retrievalEvents    RetrievalEvent[]
+  intakeQuestions    IntakeQuestion[]
+  promotionDrafts    PromotionDraft[]
+  sourceQuestions    SourceQuestion[]
+  stateTransitions   ConceptStateTransition[]
+  sessions           Session[]
+  reflections        Reflection[]
+  sourceChunks       SourceChunk[]
+  conceptCandidates  SourceConceptCandidate[]
   graphNodePositions GraphNodePosition[]
-  livingConcepts   LivingConcept[]
-  workspaces       Workspace[]
+  livingConcepts     LivingConcept[]
+  workspaces         Workspace[]
 
   @@map("user")
 }
@@ -59,9 +59,69 @@ model Workspace {
 
   owner    User      @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
   concepts Concept[]
+  domains  Domain[]
 
   @@index([ownerUserId])
   @@map("workspace")
+}
+
+// A Domain (DET-234): a SEMANTIC REGION of a workspace ("Distributed Systems",
+// "Stoicism"), NOT a folder. A concept can belong to several domains at once —
+// the ConceptDomain join is the whole point: knowledge isn't trapped in one
+// place. Domains may nest (a self-relation) but nesting is allowed, never
+// forced. Owned by a Workspace; deleting a domain orphans its memberships
+// (ConceptDomain rows) but NEVER the concepts. Purely organizational metadata:
+// a domain never earns a concept, never writes an Articulation, never touches
+// CognitiveState — the Proof-of-Learning gate (DET-189) is untouched.
+model Domain {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  name           String
+  description    String?
+  // Self-relation for optional nesting (sub-domains). Null = top-level.
+  parentDomainId String?
+  // Optional UI accent (hex), for the graph/scope chrome.
+  color          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // Deleting a parent domain un-nests its children (SetNull), never deletes them.
+  parent         Domain?         @relation("DomainNesting", fields: [parentDomainId], references: [id], onDelete: SetNull)
+  children       Domain[]        @relation("DomainNesting")
+  conceptDomains ConceptDomain[]
+
+  @@index([workspaceId])
+  @@index([parentDomainId])
+  @@map("domain")
+}
+
+// ConceptDomain (DET-234): the many-to-many membership of a Concept in a Domain.
+// THIS JOIN IS THE WHOLE POINT — it's why a concept isn't trapped in one folder.
+// Provenance is first-class: `createdBy` distinguishes an AI suggestion from a
+// user tag, and `userValidated` flips true only when the user vouches for it.
+// An AI suggestion (createdBy AI, userValidated false) is METADATA, NOT KNOWLEDGE
+// — exactly like a SUGGESTED Link: a proposal the user accepts or removes. It
+// never promotes a concept or writes an Articulation.
+model ConceptDomain {
+  conceptId     String
+  domainId      String
+  // The AI's confidence in a suggested membership (0..1); null for user tags.
+  confidence    Float?
+  // Who created this membership: USER (manual tag), AI (suggestion), or SYSTEM.
+  createdBy     Generator @default(USER)
+  // True once the user has vouched for this membership (always true for a manual
+  // tag; flipped from false when the user accepts an AI suggestion).
+  userValidated Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  domain  Domain  @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@id([conceptId, domainId])
+  @@index([conceptId])
+  @@index([domainId])
+  @@map("concept_domain")
 }
 
 model Note {
@@ -81,14 +141,14 @@ model Note {
 // A unit of knowledge moving through the core loop: captured in the inbox,
 // then articulated, then earned into the permanent layer.
 model Concept {
-  id           String        @id @default(cuid())
-  title        String
+  id                 String         @id @default(cuid())
+  title              String
   // Optional one-line canonical summary of the core claim.
-  summary      String?
+  summary            String?
   // Raw captured material from the low-friction inbox, before articulation.
   // Kept verbatim as the provenance/fallback/search surface even after the
   // structured `sourceDocument` is extracted (DET-210).
-  sourceText   String?
+  sourceText         String?
   // Structured article representation extracted at capture (DET-210): an ordered
   // list of typed SourceBlocks (headings/paragraphs/lists/quotes/code/images/
   // tables) with stable block ids. The Reader (DET-209) renders this, DET-208
@@ -96,14 +156,14 @@ model Concept {
   // context. Shape is the SourceDocument contract in
   // server/src/source-document/source-document.types.ts. Null for items captured
   // before DET-210 (the Reader falls back to `sourceText`).
-  sourceDocument Json?
+  sourceDocument     Json?
   // How the raw material entered the inbox (null for items created before the
   // capture inbox existed). Drives the inbox's "source" badge.
-  captureSource CaptureSource?
+  captureSource      CaptureSource?
   // Origin URL when captured from a link. Provenance that survives promotion
   // (feeds the attribution work in DET-199).
-  sourceUrl    String?
-  status       ConceptStatus @default(INBOX)
+  sourceUrl          String?
+  status             ConceptStatus  @default(INBOX)
   // The cognitive state machine (DET-194). ALWAYS set — every concept has a
   // state, never empty. A fresh capture is SEEN; the interrogator advances it to
   // PARSED; promotion lands it at EXPLAINED or LINKED; sessions/decay/contradiction
@@ -111,60 +171,61 @@ model Concept {
   // substrate the retrieval scheduler, decay, journal eligibility, and adaptive
   // friction read from. Allowed-transition rules live in
   // server/src/concept-state/transitions.ts.
-  cognitiveState CognitiveState @default(SEEN)
+  cognitiveState     CognitiveState @default(SEEN)
   // Which proof-of-learning gate mode earned this concept (provenance). Null
   // until promoted.
-  gateMode     GateMode?
+  gateMode           GateMode?
   // Spaced-retrieval schedule (DET-192), SM-2 style. nextReviewAt = when the
   // concept is next due (null = not yet scheduled). reviewEase is the SM-2
   // easiness factor (≥1.3), reviewIntervalDays the current gap, reviewReps the
   // count of consecutive successful recalls. A failed recall resets reps and
   // pulls the next review sooner; success drifts it further out. The schedule is
   // driven by recall success, never by frequency or streaks (anti-gamification).
-  nextReviewAt DateTime?
-  reviewEase         Float    @default(2.5)
-  reviewIntervalDays Int      @default(0)
-  reviewReps         Int      @default(0)
+  nextReviewAt       DateTime?
+  reviewEase         Float          @default(2.5)
+  reviewIntervalDays Int            @default(0)
+  reviewReps         Int            @default(0)
   // Set by a "challenge me on this next time" reflection (DET-196); makes the
   // concept Tutor-eligible (DET-193) until a Tutor response clears it.
-  tutorRequested     Boolean  @default(false)
+  tutorRequested     Boolean        @default(false)
   // Memory decay (DET-195): `activation` is the concept's prominence at the
   // moment `activationAt` was stamped; its CURRENT value decays exponentially
   // with elapsed time (computed lazily, no cron — see server/src/decay/decay.ts).
   // Retrieval, a new incoming link, a session review, or a Tutor defense refresh
   // it to 1.0. Below a threshold the concept fades; lower still it goes DORMANT.
-  activation         Float    @default(1)
-  activationAt       DateTime @default(now())
+  activation         Float          @default(1)
+  activationAt       DateTime       @default(now())
   // How sure the user is of this concept (DET-199). Understanding includes
   // knowing what you DON'T fully trust, so uncertainty is expressible rather
   // than flattened — the user can mark a concept TENTATIVE or UNCERTAIN instead
   // of asserting everything as settled fact. Defaults to ASSERTED.
-  certainty          Certainty @default(ASSERTED)
-  userId       String
+  certainty          Certainty      @default(ASSERTED)
+  userId             String
   // The Workspace that OWNS this concept (DET-232). A concept lives in exactly
   // one workspace (the tenancy boundary); Domains/Tracks organize it via join
   // tables, never by re-parenting it. For MVP ownerUserId == the workspace owner,
   // so userId is retained for the per-id ownership checks the app already does.
-  workspaceId  String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  workspaceId        String
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  articulations   Articulation[]
-  outgoingLinks   Link[]           @relation("LinkSource")
-  incomingLinks   Link[]           @relation("LinkTarget")
-  retrievalEvents RetrievalEvent[]
-  intakeQuestions IntakeQuestion[]
-  promotionDraft  PromotionDraft?
-  sourceQuestions SourceQuestion[]
-  stateTransitions ConceptStateTransition[]
-  sessionItems    SessionItem[]
-  reflections     Reflection[]
-  sourceChunks    SourceChunk[]
+  user              User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace         Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  articulations     Articulation[]
+  outgoingLinks     Link[]                   @relation("LinkSource")
+  incomingLinks     Link[]                   @relation("LinkTarget")
+  retrievalEvents   RetrievalEvent[]
+  intakeQuestions   IntakeQuestion[]
+  promotionDraft    PromotionDraft?
+  sourceQuestions   SourceQuestion[]
+  stateTransitions  ConceptStateTransition[]
+  sessionItems      SessionItem[]
+  reflections       Reflection[]
+  sourceChunks      SourceChunk[]
   conceptCandidates SourceConceptCandidate[]
-  graphPosition   GraphNodePosition?
-  livingConcept   LivingConcept?
+  graphPosition     GraphNodePosition?
+  livingConcept     LivingConcept?
+  conceptDomains    ConceptDomain[]
 
   @@index([userId])
   @@index([userId, status])
@@ -213,7 +274,7 @@ model Articulation {
 // The Connection step: a directed concept-to-concept edge stored in Postgres
 // (no separate graph DB). Surfaced by the system, then validated by the user.
 model Link {
-  id              String     @id @default(cuid())
+  id              String        @id @default(cuid())
   sourceConceptId String
   targetConceptId String
   userId          String
@@ -230,9 +291,9 @@ model Link {
   // Who proposed this edge: the Connector (AI) or the user. SUGGESTED + AI = a
   // pending proposal; a manual user link is created CONFIRMED + USER.
   proposedBy      QuestionActor @default(USER)
-  status          LinkStatus @default(SUGGESTED)
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  status          LinkStatus    @default(SUGGESTED)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   sourceConcept Concept @relation("LinkSource", fields: [sourceConceptId], references: [id], onDelete: Cascade)
   targetConcept Concept @relation("LinkTarget", fields: [targetConceptId], references: [id], onDelete: Cascade)
@@ -304,33 +365,33 @@ model IntakeQuestion {
 // self-certify a passing recall, so the generated question, the user's response,
 // and the AI grade are persisted here and re-checked at commit.
 model PromotionDraft {
-  id                String   @id @default(cuid())
-  conceptId         String   @unique
-  userId            String
+  id                  String        @id @default(cuid())
+  conceptId           String        @unique
+  userId              String
   // DERIVED / WRITE-ONLY (DET-197): the retrieval-pass tier is now derived from
   // `frictionLevel` via modeForLevel() everywhere it's needed; this column is
   // kept only so writes stay consistent and is NEVER read for gate decisions.
   // Do not branch on it — read `frictionLevel` instead.
-  mode              GateMode @default(QUICK)
+  mode                GateMode      @default(QUICK)
   // Adaptive Friction (DET-197): how much proof this item must earn, scaled to
   // its cognitive weight. The system proposes a level (novelty + importance);
   // the user may escalate/de-escalate. The level decides WHICH gates are
   // required — see server/src/promotion/friction.ts. `mode` is derived from it
   // for the retrieval pass threshold (DEEP/RIGOROUS demand the higher bar).
-  frictionLevel     FrictionLevel @default(DEEP)
+  frictionLevel       FrictionLevel @default(DEEP)
   // Gate 1 (Articulate): the user's own-words core claim, canonical-to-be.
-  articulation      String?
+  articulation        String?
   // Gate 4 (Validate): set true once the user has been shown the AI-proposed
   // connections and explicitly acknowledged reviewing them. Server-recorded so
   // the gate can't be self-certified by a client (the commit re-checks it).
-  connectionsReviewed Boolean @default(false)
+  connectionsReviewed Boolean       @default(false)
   // Gate 3 (Retrieve): server-generated question + the user's graded recall.
-  retrievalQuestion String?
-  retrievalResponse String?
-  retrievalScore    Int?
-  retrievalPassed   Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  retrievalQuestion   String?
+  retrievalResponse   String?
+  retrievalScore      Int?
+  retrievalPassed     Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -388,7 +449,7 @@ model SourceQuestion {
 // (e.g. "sustained retrieval success" needs the sequence, not just the latest
 // state). `from` is null only for the very first transition (capture → SEEN).
 model ConceptStateTransition {
-  id        String         @id @default(cuid())
+  id        String          @id @default(cuid())
   conceptId String
   userId    String
   from      CognitiveState?
@@ -397,7 +458,7 @@ model ConceptStateTransition {
   // Optional human-readable detail (e.g. the retrieval score, the contradicting
   // concept). Never AI-authored knowledge — purely operational metadata.
   note      String?
-  createdAt DateTime       @default(now())
+  createdAt DateTime        @default(now())
 
   concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -422,8 +483,8 @@ model Session {
   targetMinutes Int           @default(10)
   status        SessionStatus @default(ACTIVE)
 
-  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items SessionItem[]
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       SessionItem[]
   reflections Reflection[]
 
   @@index([userId, startedAt])
@@ -513,17 +574,17 @@ enum Certainty {
 // source. SCAFFOLD/source object — NEVER earned knowledge; promotion through the
 // Proof-of-Learning gate (DET-189) is the only path to a canonical Concept.
 model SourceChunk {
-  id         String        @id @default(cuid())
+  id         String          @id @default(cuid())
   conceptId  String
   userId     String
   title      String?
   // Optional AI scaffold summary — comprehension aid, never canonical knowledge.
   summary    String?
   blockIds   String[]
-  kind       ChunkKind     @default(OTHER)
+  kind       ChunkKind       @default(OTHER)
   importance ChunkImportance @default(SUPPORTING)
   position   Int
-  createdAt  DateTime      @default(now())
+  createdAt  DateTime        @default(now())
 
   concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -540,20 +601,20 @@ model SourceChunk {
 // source-grounded scaffold, shown as context but never prefilling the user's
 // canonical articulation (DET-190).
 model SourceConceptCandidate {
-  id            String                  @id @default(cuid())
-  conceptId     String
-  userId        String
-  chunkId       String?
-  label         String
-  definition    String?
-  aliases       String[]
-  sourceBlockIds String[]
-  kind          CandidateKind           @default(CONCEPT)
-  importance    CandidateImportance     @default(SUPPORTING)
-  generatedBy   Generator               @default(AI)
+  id              String                   @id @default(cuid())
+  conceptId       String
+  userId          String
+  chunkId         String?
+  label           String
+  definition      String?
+  aliases         String[]
+  sourceBlockIds  String[]
+  kind            CandidateKind            @default(CONCEPT)
+  importance      CandidateImportance      @default(SUPPORTING)
+  generatedBy     Generator                @default(AI)
   promotionStatus CandidatePromotionStatus @default(CANDIDATE)
-  createdAt     DateTime                @default(now())
-  updatedAt     DateTime                @updatedAt
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
 
   concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -703,18 +764,18 @@ enum CognitiveState {
 // transition so the concept's history reads as a causal log, not just a
 // sequence of states.
 enum StateTrigger {
-  CAPTURE           // concept captured → SEEN
-  INTAKE_PARSED     // interrogator surfaced structure → PARSED
-  PROMOTION         // proof-of-learning gate committed → EXPLAINED/LINKED
-  LINK_CONFIRMED    // a connection was confirmed → LINKED
+  CAPTURE // concept captured → SEEN
+  INTAKE_PARSED // interrogator surfaced structure → PARSED
+  PROMOTION // proof-of-learning gate committed → EXPLAINED/LINKED
+  LINK_CONFIRMED // a connection was confirmed → LINKED
   RETRIEVAL_SUCCESS // a spaced retrieval passed → RETRIEVED
-  TUTOR_DEFENDED    // survived a Socratic challenge → DEFENDED
-  INTERNALIZED      // sustained mastery threshold reached → INTERNALIZED
-  DECAYED           // inactivity decayed activation → DORMANT
-  REACTIVATED       // a dormant concept was retrieved again
-  CONTRADICTION     // an approved contradiction edge → CONTESTED
-  RESOLVED          // a contradiction was resolved
-  ARCHIVED          // the user explicitly retired the concept
+  TUTOR_DEFENDED // survived a Socratic challenge → DEFENDED
+  INTERNALIZED // sustained mastery threshold reached → INTERNALIZED
+  DECAYED // inactivity decayed activation → DORMANT
+  REACTIVATED // a dormant concept was retrieved again
+  CONTRADICTION // an approved contradiction edge → CONTESTED
+  RESOLVED // a contradiction was resolved
+  ARCHIVED // the user explicitly retired the concept
 }
 
 // Who produced a question or answer in Reference Q&A (DET-208). Provenance that
