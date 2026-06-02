@@ -180,9 +180,10 @@ export default function TrackDetailPage() {
           <div className='empty'>
             No concepts in this track yet.
             <span>
-              Add an earned concept above, or import a source to start this
-              track (capture it in your <Link href='/inbox'>inbox</Link>, then
-              promote it).
+              Add an earned concept above, or{' '}
+              <Link href={`/inbox?track=${trackId}`}>import a source</Link> into
+              this track — capture it, and when you promote it through the gate
+              it lands here as an earned concept.
             </span>
           </div>
         )}

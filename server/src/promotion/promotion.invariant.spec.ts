@@ -53,6 +53,14 @@ function makePromotionService() {
     proposeEphemeral: jest.fn().mockResolvedValue([]),
     proposeAndPersist: jest.fn().mockResolvedValue(undefined),
   }
+  // DET-240 post-commit hooks — return "no target track" so the invariant tests
+  // (which assert promotion's write boundary) aren't affected by enrollment.
+  const tracks = {
+    enrollPromotedConcept: jest.fn().mockResolvedValue(null),
+  }
+  const domainSuggestion = {
+    suggestForConcept: jest.fn().mockResolvedValue([]),
+  }
   const service = new PromotionService(
     prisma as never,
     concepts as never,
@@ -61,6 +69,8 @@ function makePromotionService() {
     sourceQa as never,
     conceptState as never,
     connector as never,
+    tracks as never,
+    domainSuggestion as never,
   )
   return { service, prisma, tx, concepts, sourceQa, conceptState, connector }
 }

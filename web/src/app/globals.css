@@ -1652,3 +1652,17 @@ body {
   color: var(--accent-deep);
   background: var(--accent-tint);
 }
+
+/* ---- Track-first capture routing (DET-240) ---- */
+.kbapp .capture-track {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kbapp .capture-track-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-muted);
+}

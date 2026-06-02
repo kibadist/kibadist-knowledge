@@ -12,13 +12,14 @@ import { DomainsService } from './domains.service'
  * Domains (DET-234): semantic regions of a workspace + the ConceptDomain join
  * and AI suggestion. Imports WorkspacesModule (active-workspace resolution),
  * ConceptsModule (ownership / non-inbox checks), and AiModule (the suggestion's
- * paid completion). PrismaModule is @Global. Exports DomainsService in case a
- * later organizational layer (Tracks/GraphViews) needs membership reads.
+ * paid completion). PrismaModule is @Global. Exports DomainsService for other
+ * organizational layers, and DomainSuggestionService so the track-first
+ * onboarding flow (DET-240) can auto-suggest domains for a newly-earned concept.
  */
 @Module({
   imports: [WorkspacesModule, ConceptsModule, AiModule],
   controllers: [DomainsController, ConceptDomainsController],
   providers: [DomainsService, DomainSuggestionService],
-  exports: [DomainsService],
+  exports: [DomainsService, DomainSuggestionService],
 })
 export class DomainsModule {}

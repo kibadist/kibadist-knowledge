@@ -360,6 +360,12 @@ model Concept {
   // tables, never by re-parenting it. For MVP ownerUserId == the workspace owner,
   // so userId is retained for the per-id ownership checks the app already does.
   workspaceId        String
+  // Track-first onboarding (DET-240): the Track a captured item was routed into,
+  // set at capture time. It's an INTENT marker, not a membership — when this
+  // concept is earned through the gate, promotion enrolls it into the track as an
+  // AI-proposed CANDIDATE (TrackConcept). A plain id (not an FK): if the track is
+  // deleted, enrollment simply finds nothing and skips. Null for normal captures.
+  targetTrackId      String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 

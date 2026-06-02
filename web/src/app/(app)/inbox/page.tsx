@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { type FormEvent, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 
 import { api, type CaptureSource, type InboxItem } from '@/lib/api'
 
@@ -32,9 +32,24 @@ export default function InboxPage() {
   const [text, setText] = useState('')
   const [url, setUrl] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  // Track-first onboarding (DET-240): the track this capture is routed into.
+  const [trackId, setTrackId] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const inboxQuery = useQuery({ queryKey: ['inbox'], queryFn: api.listInbox })
+  // Active tracks to route a capture into (DET-240). Reading the list client-side
+  // keeps the picker in sync with whatever world is active.
+  const tracksQuery = useQuery({
+    queryKey: ['tracks'],
+    queryFn: () => api.listTracks('ACTIVE'),
+  })
+
+  // Preselect a track when arriving from a track's "import a source" link
+  // (/inbox?track=<id>). Read from the URL on mount to avoid a Suspense boundary.
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get('track')
+    if (param) setTrackId(param)
+  }, [])
 
   function resetInputs() {
     setText('')
@@ -45,10 +60,11 @@ export default function InboxPage() {
 
   const capture = useMutation({
     mutationFn: async () => {
-      if (mode === 'text') return api.captureText({ text })
-      if (mode === 'url') return api.captureUrl({ url })
+      const track = trackId || undefined
+      if (mode === 'text') return api.captureText({ text, trackId: track })
+      if (mode === 'url') return api.captureUrl({ url, trackId: track })
       if (!file) throw new Error('Choose a PDF to capture')
-      return api.capturePdf(file)
+      return api.capturePdf(file, track)
     },
     onSuccess: () => {
       resetInputs()
@@ -133,6 +149,27 @@ export default function InboxPage() {
               {!file && <span className='u'>choose a file</span>}
             </label>
           </div>
+        )}
+
+        {/* Track-first onboarding (DET-240): optionally route this capture into a
+            track. When the earned concept is promoted, it auto-enrolls there as
+            an AI candidate with suggested domains. */}
+        {(tracksQuery.data?.length ?? 0) > 0 && (
+          <label className='capture-track' style={{ marginTop: 14 }}>
+            <span className='capture-track-label'>Add to track (optional)</span>
+            <select
+              className='fld'
+              value={trackId}
+              onChange={(e) => setTrackId(e.target.value)}
+            >
+              <option value=''>No track — just capture</option>
+              {tracksQuery.data?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
 
         {capture.isError && (

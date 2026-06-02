@@ -207,6 +207,50 @@ export class TracksService {
     await this.prisma.trackConcept.deleteMany({ where: { trackId, conceptId } })
   }
 
+  /**
+   * Track-first onboarding (DET-240): when a concept captured against a target
+   * track is earned through the gate, enroll the now-permanent concept into that
+   * track as an AI-proposed CANDIDATE. Reads the concept's `targetTrackId`; if it
+   * still points at a track in the same workspace, upserts a TrackConcept
+   * (createdBy AI, status CANDIDATE) WITHOUT clobbering any membership the user
+   * already created. Returns the trackId it enrolled into, or null if there was
+   * no target / the track is gone.
+   *
+   * This is ORGANIZATION, not promotion — the gate already earned the concept;
+   * this only proposes where it belongs. Caller invokes it best-effort post-commit.
+   */
+  async enrollPromotedConcept(
+    userId: string,
+    conceptId: string,
+  ): Promise<string | null> {
+    const concept = await this.prisma.concept.findFirst({
+      where: { id: conceptId, userId },
+      select: { targetTrackId: true, workspaceId: true },
+    })
+    if (!concept?.targetTrackId) return null
+    const track = await this.prisma.track.findFirst({
+      where: {
+        id: concept.targetTrackId,
+        workspaceId: concept.workspaceId,
+        workspace: { ownerUserId: userId },
+      },
+      select: { id: true },
+    })
+    if (!track) return null
+    await this.prisma.trackConcept.upsert({
+      where: { trackId_conceptId: { trackId: track.id, conceptId } },
+      create: {
+        trackId: track.id,
+        conceptId,
+        status: TrackConceptStatus.CANDIDATE,
+        createdBy: Generator.AI,
+      },
+      // Never overwrite an existing membership (e.g. one the user already added).
+      update: {},
+    })
+    return track.id
+  }
+
   // ---- Ownership helpers ---------------------------------------------------
 
   /**

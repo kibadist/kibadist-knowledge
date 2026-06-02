@@ -182,3 +182,60 @@ describe('TracksService.remove', () => {
     expect(prisma.track.delete).not.toHaveBeenCalled()
   })
 })
+
+describe('TracksService.enrollPromotedConcept (DET-240 track-first onboarding)', () => {
+  it('enrolls a concept with a valid targetTrackId as an AI CANDIDATE', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findFirst.mockResolvedValue({
+      targetTrackId: 't1',
+      workspaceId: 'ws1',
+    })
+    prisma.track.findFirst.mockResolvedValue({ id: 't1' })
+    prisma.trackConcept.upsert.mockResolvedValue({
+      trackId: 't1',
+      conceptId: 'c1',
+    })
+
+    const trackId = await service.enrollPromotedConcept('u1', 'c1')
+
+    expect(trackId).toBe('t1')
+    expect(prisma.trackConcept.upsert).toHaveBeenCalledWith({
+      where: { trackId_conceptId: { trackId: 't1', conceptId: 'c1' } },
+      create: {
+        trackId: 't1',
+        conceptId: 'c1',
+        status: TrackConceptStatus.CANDIDATE,
+        createdBy: Generator.AI,
+      },
+      // Never clobbers an existing membership.
+      update: {},
+    })
+  })
+
+  it('is a no-op when the concept has no target track', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findFirst.mockResolvedValue({
+      targetTrackId: null,
+      workspaceId: 'ws1',
+    })
+
+    const trackId = await service.enrollPromotedConcept('u1', 'c1')
+
+    expect(trackId).toBeNull()
+    expect(prisma.trackConcept.upsert).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op when the target track no longer exists / is cross-workspace', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findFirst.mockResolvedValue({
+      targetTrackId: 't-gone',
+      workspaceId: 'ws1',
+    })
+    prisma.track.findFirst.mockResolvedValue(null)
+
+    const trackId = await service.enrollPromotedConcept('u1', 'c1')
+
+    expect(trackId).toBeNull()
+    expect(prisma.trackConcept.upsert).not.toHaveBeenCalled()
+  })
+})

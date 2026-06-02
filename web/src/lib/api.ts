@@ -917,20 +917,23 @@ export const api = {
     }),
 
   // --- Capture inbox (DET-187) ---
+  // Track-first onboarding (DET-240): an optional `trackId` routes the capture
+  // into a track; on promotion the earned concept auto-enrolls as an AI candidate.
   listInbox: () => request<InboxItem[]>('/inbox'),
-  captureText: (input: { text: string; title?: string }) =>
+  captureText: (input: { text: string; title?: string; trackId?: string }) =>
     request<InboxItem>('/inbox/text', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  captureUrl: (input: { url: string }) =>
+  captureUrl: (input: { url: string; trackId?: string }) =>
     request<InboxItem>('/inbox/url', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  capturePdf: (file: File) => {
+  capturePdf: (file: File, trackId?: string) => {
     const form = new FormData()
     form.append('file', file)
+    if (trackId) form.append('trackId', trackId)
     return upload<InboxItem>('/inbox/pdf', form)
   },
   discardInboxItem: (id: string) =>

@@ -13,4 +13,11 @@ export class CaptureTextDto {
   @IsString()
   @MaxLength(200)
   title?: string
+
+  // Track-first onboarding (DET-240): route this capture into a track. The
+  // service validates it belongs to the active workspace; on promotion the
+  // earned concept auto-enrolls into the track as an AI-proposed CANDIDATE.
+  @IsOptional()
+  @IsString()
+  trackId?: string
 }

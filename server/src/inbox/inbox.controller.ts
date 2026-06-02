@@ -99,11 +99,15 @@ export class InboxController {
     if (data.file.truncated) {
       throw new BadRequestException('PDF exceeds the 10MB limit')
     }
+    // Track-first onboarding (DET-240): an optional `trackId` form field routes
+    // the capture into a track (read from the multipart fields alongside the file).
+    const trackId = readTextField(data.fields?.trackId)
     return this.inbox.capturePdf(
       user.userId,
       workspaceId,
       data.filename,
       buffer,
+      trackId,
     )
   }
 
@@ -112,4 +116,23 @@ export class InboxController {
   async discard(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     await this.inbox.discard(user.userId, id)
   }
+}
+
+/**
+ * Pull a single text value out of a @fastify/multipart fields entry (DET-240).
+ * A non-file field carries its string under `.value`; the entry may be an array
+ * when repeated. Returns undefined for anything that isn't a non-empty string.
+ */
+function readTextField(field: unknown): string | undefined {
+  const entry = Array.isArray(field) ? field[0] : field
+  if (
+    entry &&
+    typeof entry === 'object' &&
+    'value' in entry &&
+    typeof (entry as { value: unknown }).value === 'string'
+  ) {
+    const value = (entry as { value: string }).value.trim()
+    return value || undefined
+  }
+  return undefined
 }

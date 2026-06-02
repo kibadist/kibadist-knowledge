@@ -21,6 +21,7 @@ import { AiService } from '../ai/ai.service'
 import { ConceptStateService } from '../concept-state/concept-state.service'
 import { ConceptsService } from '../concepts/concepts.service'
 import { ConnectorService } from '../connector/connector.service'
+import { DomainSuggestionService } from '../domains/domain-suggestion.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { SearchService } from '../search/search.service'
 import {
@@ -31,6 +32,7 @@ import {
   type ReferenceQaContext,
   SourceQaService,
 } from '../source-qa/source-qa.service'
+import { TracksService } from '../tracks/tracks.service'
 import { assessCompression, type CompressionSignal } from './compression'
 import type { CommitPromotionDto } from './dto/commit-promotion.dto'
 import {
@@ -123,6 +125,10 @@ export class PromotionService {
     private readonly sourceQa: SourceQaService,
     private readonly conceptState: ConceptStateService,
     private readonly connector: ConnectorService,
+    // Track-first onboarding (DET-240): post-commit track enrollment + domain
+    // suggestion for a concept captured against a target track.
+    private readonly tracks: TracksService,
+    private readonly domainSuggestion: DomainSuggestionService,
   ) {}
 
   /** Current promotion state for an inbox item: draft + gate checklist + the
@@ -645,6 +651,35 @@ export class PromotionService {
             }`,
           )
         })
+    }
+
+    // Track-first onboarding (DET-240): if this concept was captured against a
+    // target track, enroll the now-earned concept into it (AI CANDIDATE) and,
+    // when enrolled, best-effort suggest domains for it. Both are post-commit and
+    // non-fatal — a failure here NEVER undoes a promotion that already succeeded,
+    // and neither creates knowledge: the gate did that, this only organizes.
+    try {
+      const enrolledTrackId = await this.tracks.enrollPromotedConcept(
+        userId,
+        conceptId,
+      )
+      if (enrolledTrackId) {
+        void this.domainSuggestion
+          .suggestForConcept(userId, conceptId)
+          .catch((error) => {
+            this.logger.warn(
+              `Domain suggestion after track enrollment failed for ${conceptId}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            )
+          })
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Track enrollment after promotion failed for ${conceptId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
     }
 
     return this.concepts.findOne(userId, conceptId)

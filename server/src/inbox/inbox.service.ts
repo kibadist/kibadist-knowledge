@@ -61,6 +61,7 @@ export class InboxService {
       sourceText: dto.text,
       sourceDocument: extractTextDocument(dto.text),
       captureSource: CaptureSource.PASTE,
+      trackId: dto.trackId,
     })
   }
 
@@ -84,6 +85,7 @@ export class InboxService {
       sourceDocument: document,
       sourceUrl: dto.url,
       captureSource: CaptureSource.URL,
+      trackId: dto.trackId,
     })
   }
 
@@ -92,6 +94,7 @@ export class InboxService {
     workspaceId: string,
     filename: string,
     buffer: Buffer,
+    trackId?: string,
   ): Promise<InboxItem> {
     const text = await extractPdfText(buffer)
     const title =
@@ -104,6 +107,7 @@ export class InboxService {
       sourceText: text,
       sourceDocument: extractPdfDocument(text),
       captureSource: CaptureSource.PDF,
+      trackId,
     })
   }
 
@@ -190,6 +194,26 @@ export class InboxService {
     if (count === 0) throw new NotFoundException('Inbox item not found')
   }
 
+  /**
+   * Validate an optional target-track id (DET-240): null when none was given, the
+   * id when it's a track in the active workspace, or NotFound when it isn't. The
+   * workspace check is the tenancy guard — a capture can only be routed into a
+   * track of the world it's being captured into.
+   */
+  private async resolveTargetTrack(
+    userId: string,
+    workspaceId: string,
+    trackId?: string,
+  ): Promise<string | null> {
+    if (!trackId) return null
+    const track = await this.prisma.track.findFirst({
+      where: { id: trackId, workspaceId, workspace: { ownerUserId: userId } },
+      select: { id: true },
+    })
+    if (!track) throw new NotFoundException('Track not found')
+    return track.id
+  }
+
   private async store(
     userId: string,
     workspaceId: string,
@@ -199,8 +223,19 @@ export class InboxService {
       sourceDocument?: SourceDocument
       captureSource: CaptureSource
       sourceUrl?: string
+      trackId?: string
     },
   ): Promise<InboxItem> {
+    // Track-first onboarding (DET-240): if a target track was given, it must be a
+    // track in THIS workspace — otherwise a capture could be routed into another
+    // world's track. Validated here so a bad id fails fast at capture rather than
+    // silently dropping the routing later, at promotion.
+    const targetTrackId = await this.resolveTargetTrack(
+      userId,
+      workspaceId,
+      data.trackId,
+    )
+
     // Create the inbox concept (defaults to SEEN) and write its opening
     // `null → SEEN` transition in one commit, so a captured item's cognitive
     // history starts at the moment of capture and never drifts from its row.
@@ -216,6 +251,7 @@ export class InboxService {
             : undefined,
           captureSource: data.captureSource,
           sourceUrl: data.sourceUrl ?? null,
+          targetTrackId,
           status: ConceptStatus.INBOX,
         },
         select: {
