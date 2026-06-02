@@ -3,12 +3,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { useState } from 'react'
 
 import { ArticleReader } from '@/components/reader/article-reader'
 import {
   api,
   type Certainty,
   type ConceptArticulation,
+  type ConceptDomainRow,
   type ConceptLinkEnd,
   type ConceptRetrievalEvent,
   type LinkRelation,
@@ -238,6 +240,8 @@ export default function ConceptViewPage() {
               )
             })()}
           </section>
+
+          <ConceptDomainsSection conceptId={id} />
 
           <section className='doc-section'>
             <div>
@@ -541,5 +545,169 @@ function RetrievalItem({
         </p>
       )}
     </li>
+  )
+}
+
+/**
+ * Domains a concept belongs to (DET-238). Validated memberships render as solid
+ * chips; AI suggestions (createdBy AI, not yet validated) render dashed/"suggested"
+ * with accept/dismiss — the SAME suggested-vs-validated grammar the map uses for
+ * AI link proposals. Tagging is organization metadata: accepting a suggestion
+ * flips `userValidated`, it never promotes the concept or touches its cognitive
+ * state / the gate (DET-189).
+ */
+function ConceptDomainsSection({ conceptId }: { conceptId: string }) {
+  const queryClient = useQueryClient()
+  const membershipsQuery = useQuery({
+    queryKey: ['concept-domains', conceptId],
+    queryFn: () => api.listConceptDomains(conceptId),
+  })
+  const domainsQuery = useQuery({
+    queryKey: ['domains'],
+    queryFn: api.listDomains,
+  })
+  const [adding, setAdding] = useState('')
+
+  // After any membership change, refresh this list AND any domain-scoped graph
+  // counts (the domains list shows live counts from the DOMAIN scope).
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['concept-domains', conceptId] })
+    queryClient.invalidateQueries({
+      predicate: (q) => q.queryKey[0] === 'graph' && q.queryKey[1] === 'domain',
+    })
+  }
+
+  const suggest = useMutation({
+    mutationFn: () => api.suggestConceptDomains(conceptId),
+    onSuccess: refresh,
+  })
+  const tag = useMutation({
+    mutationFn: (domainId: string) =>
+      api.tagConceptDomain(conceptId, { domainId }),
+    onSuccess: () => {
+      setAdding('')
+      refresh()
+    },
+  })
+  const validate = useMutation({
+    mutationFn: (domainId: string) =>
+      api.validateConceptDomain(conceptId, domainId),
+    onSuccess: refresh,
+  })
+  const untag = useMutation({
+    mutationFn: (domainId: string) =>
+      api.untagConceptDomain(conceptId, domainId),
+    onSuccess: refresh,
+  })
+
+  const memberships = membershipsQuery.data ?? []
+  const taggedIds = new Set(memberships.map((m) => m.domainId))
+  const available = (domainsQuery.data ?? []).filter(
+    (d) => !taggedIds.has(d.id),
+  )
+
+  const isSuggested = (m: ConceptDomainRow) =>
+    m.createdBy === 'AI' && !m.userValidated
+
+  return (
+    <section className='doc-section'>
+      <div className='flex flex-wrap items-center gap-2'>
+        <h2 className='panel-h'>Domains</h2>
+        <button
+          type='button'
+          className='btn-ghost-xs'
+          onClick={() => suggest.mutate()}
+          disabled={suggest.isPending}
+        >
+          {suggest.isPending ? 'Suggesting…' : 'Suggest with AI'}
+        </button>
+      </div>
+      <p className='block-sub mt-1'>
+        Semantic regions this concept belongs to. AI suggestions are dashed
+        until you accept them — organization, never a change to what you’ve
+        earned.
+      </p>
+
+      {memberships.length === 0 ? (
+        <p className='notice'>Not in any domain yet.</p>
+      ) : (
+        <ul className='domain-chip-row'>
+          {memberships.map((m) => {
+            const suggested = isSuggested(m)
+            return (
+              <li key={m.domainId}>
+                <span
+                  className={`domain-chip${suggested ? ' is-suggested' : ''}`}
+                >
+                  <span
+                    className='domain-chip-dot'
+                    style={{ background: m.domain.color ?? 'var(--rule-soft)' }}
+                    aria-hidden
+                  />
+                  {m.domain.name}
+                  {suggested && (
+                    <span className='domain-chip-tag'>suggested</span>
+                  )}
+                  {suggested ? (
+                    <>
+                      <button
+                        type='button'
+                        className='domain-chip-act accept'
+                        title='Accept this domain'
+                        onClick={() => validate.mutate(m.domainId)}
+                      >
+                        ✓
+                      </button>
+                      <button
+                        type='button'
+                        className='domain-chip-act dismiss'
+                        title='Dismiss this suggestion'
+                        onClick={() => untag.mutate(m.domainId)}
+                      >
+                        ✕
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type='button'
+                      className='domain-chip-act dismiss'
+                      title='Remove from this domain'
+                      onClick={() => untag.mutate(m.domainId)}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {available.length > 0 && (
+        <div className='track-add-row mt-3'>
+          <select
+            className='fld'
+            value={adding}
+            onChange={(e) => setAdding(e.target.value)}
+          >
+            <option value=''>Add to a domain…</option>
+            {available.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type='button'
+            className='btn-primary'
+            disabled={!adding || tag.isPending}
+            onClick={() => tag.mutate(adding)}
+          >
+            {tag.isPending ? 'Adding…' : 'Add'}
+          </button>
+        </div>
+      )}
+    </section>
   )
 }

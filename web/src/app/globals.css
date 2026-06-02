@@ -1285,7 +1285,9 @@ body {
   background: var(--paper-hi);
   border-radius: 3px;
   margin-bottom: 10px;
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 .kbapp .track-card:hover {
   border-color: var(--ink-faint);
@@ -1483,4 +1485,170 @@ body {
     grid-column: 1 / -1;
     justify-content: flex-start;
   }
+}
+
+/* ---- Domains list + detail (DET-238) ---- */
+.kbapp .domain-card {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--rule);
+  background: var(--paper-hi);
+  border-radius: 3px;
+  margin-bottom: 8px;
+}
+.kbapp .domain-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--rule);
+  flex: none;
+}
+.kbapp .domain-main {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex: 1;
+  text-decoration: none;
+  color: inherit;
+}
+.kbapp .domain-main:hover .domain-name {
+  color: var(--accent);
+}
+.kbapp .domain-name {
+  font-family: var(--font-display), serif;
+  font-size: 18px;
+  color: var(--ink);
+}
+.kbapp .domain-parent {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+}
+.kbapp .domain-count {
+  margin-left: auto;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+.kbapp .domain-actions {
+  display: flex;
+  gap: 6px;
+}
+.kbapp .domain-edit {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1;
+}
+.kbapp .domain-new-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.kbapp .domain-color {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+}
+.kbapp .domain-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.kbapp .domain-detail-title .domain-swatch {
+  width: 20px;
+  height: 20px;
+}
+.kbapp .domain-concept-row {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  margin-bottom: 6px;
+  background: var(--paper-hi);
+}
+.kbapp .domain-concept-row a {
+  font-family: var(--font-display), serif;
+  font-size: 15px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.kbapp .domain-concept-row a:hover {
+  color: var(--accent);
+}
+
+/* ---- Concept-page domain chips (suggested vs validated grammar) ---- */
+.kbapp .domain-chip-row {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.kbapp .domain-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 99px;
+  background: var(--paper-hi);
+  font-size: 13px;
+  color: var(--ink);
+}
+/* AI suggestion: dashed + tinted, mirroring how a SUGGESTED link reads on the
+   map — clearly a proposal, not yet earned/validated. */
+.kbapp .domain-chip.is-suggested {
+  border-style: dashed;
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+}
+.kbapp .domain-chip-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--rule);
+  flex: none;
+}
+.kbapp .domain-chip-tag {
+  font-family: var(--font-mono), monospace;
+  font-size: 8.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent-deep);
+}
+.kbapp .domain-chip-act {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 3px;
+  color: var(--ink-muted);
+}
+.kbapp .domain-chip-act.accept:hover {
+  color: var(--olive);
+  background: rgba(91, 102, 56, 0.12);
+}
+.kbapp .domain-chip-act.dismiss:hover {
+  color: var(--accent-deep);
+  background: var(--accent-tint);
 }
