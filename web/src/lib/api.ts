@@ -19,6 +19,26 @@ export function clearToken(): void {
   window.localStorage.removeItem(TOKEN_KEY)
 }
 
+// The active workspace (DET-233): which "world" scoped requests act in. Stored
+// next to the token so the fetch wrappers below can read it synchronously and
+// stamp every request with `X-Workspace-Id` — the server (DET-232) validates it
+// and falls back to the user's default workspace when it's absent, so an unset
+// value is safe (e.g. before the workspace context has resolved).
+const WORKSPACE_KEY = 'kibadist_workspace'
+
+export function getActiveWorkspaceId(): string | null {
+  if (typeof window === 'undefined') return null
+  return window.localStorage.getItem(WORKSPACE_KEY)
+}
+
+export function setActiveWorkspaceId(id: string): void {
+  window.localStorage.setItem(WORKSPACE_KEY, id)
+}
+
+export function clearActiveWorkspaceId(): void {
+  window.localStorage.removeItem(WORKSPACE_KEY)
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -51,6 +71,7 @@ async function parseResponse<T>(res: Response): Promise<T> {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
+  const workspaceId = getActiveWorkspaceId()
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
@@ -60,6 +81,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       // interrogation questions, retrieval prompts, marking connections reviewed).
       ...(options.body != null ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      // The active workspace (DET-233) — scopes the request server-side (DET-232).
+      ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
       ...options.headers,
     },
   })
@@ -70,9 +93,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 // multipart boundary itself.
 async function upload<T>(path: string, form: FormData): Promise<T> {
   const token = getToken()
+  const workspaceId = getActiveWorkspaceId()
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+    },
     body: form,
   })
   return parseResponse<T>(res)
@@ -92,6 +119,16 @@ export interface AuthResponse {
 
 export interface Profile extends AuthUser {
   createdAt: string
+}
+
+// A Workspace (DET-232/233): the "world" a body of knowledge belongs to — the
+// tenancy container that owns concepts. The active one scopes every request.
+export interface Workspace {
+  id: string
+  name: string
+  description: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Note {
@@ -730,6 +767,25 @@ export const api = {
       body: JSON.stringify(input),
     }),
   me: () => request<Profile>('/auth/me'),
+
+  // --- Workspaces (DET-232/233): the tenancy container that owns concepts ---
+  listWorkspaces: () => request<Workspace[]>('/workspaces'),
+  createWorkspace: (input: { name: string; description?: string }) =>
+    request<Workspace>('/workspaces', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateWorkspace: (
+    id: string,
+    input: { name?: string; description?: string },
+  ) =>
+    request<Workspace>(`/workspaces/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteWorkspace: (id: string) =>
+    request<void>(`/workspaces/${id}`, { method: 'DELETE' }),
+
   listNotes: () => request<Note[]>('/notes'),
   createNote: (input: { title: string; body?: string }) =>
     request<Note>('/notes', {

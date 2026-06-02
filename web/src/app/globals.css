@@ -295,6 +295,151 @@ body {
   color: var(--paper);
 }
 
+/* ---------------- workspace switcher (DET-233) ----------------
+   The "which world am I in" control at the top of the nav: the active workspace
+   name plus a dropdown to switch worlds or create a new one. Paper styling, no
+   dark mode; the menu floats above the immersive nav (z-index over its bar). */
+.kbapp .ws-switch {
+  position: relative;
+}
+.kbapp .ws-switch-btn {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--rule-soft);
+  cursor: pointer;
+  color: var(--ink);
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.kbapp .ws-switch-btn:hover {
+  border-color: var(--rule);
+  background: var(--paper-hi);
+}
+.kbapp .ws-switch-kicker {
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+}
+.kbapp .ws-switch-name {
+  font-family: var(--font-display), serif;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kbapp .ws-switch-caret {
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+.kbapp .ws-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 70;
+  min-width: 248px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  box-shadow: var(--shadow-sm);
+  padding: 6px;
+}
+.kbapp .ws-menu-head {
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ink-faint);
+  padding: 8px 10px 6px;
+}
+.kbapp .ws-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.kbapp .ws-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px 10px;
+  font-family: var(--font-body), serif;
+  font-size: 14px;
+  color: var(--ink-soft);
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.kbapp .ws-menu-item:hover {
+  background: var(--paper-hi);
+  color: var(--ink);
+}
+.kbapp .ws-menu-item.is-active {
+  color: var(--ink);
+}
+.kbapp .ws-menu-check {
+  width: 12px;
+  color: var(--accent);
+  font-size: 11px;
+}
+.kbapp .ws-menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kbapp .ws-menu-foot {
+  border-top: 1px solid var(--rule-soft);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+.kbapp .ws-menu-new {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px 10px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  transition: background 0.15s;
+}
+.kbapp .ws-menu-new:hover {
+  background: var(--accent-tint);
+}
+.kbapp .ws-create {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+}
+.kbapp .ws-create-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+@media (max-width: 720px) {
+  .kbapp .ws-switch-kicker {
+    display: none;
+  }
+}
+
 /* ---------------- immersive workspace (full-bleed canvas routes) ----------------
    For map-like screens the canvas fills the whole viewport (Figma-style) and the
    app chrome floats on top. The masthead strip is dropped; the nav becomes a slim

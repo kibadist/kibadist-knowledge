@@ -39,7 +39,15 @@ async function bootstrap() {
     origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    // X-Workspace-Id carries the active workspace (DET-232/233); without it here
+    // the browser's CORS preflight blocks every scoped request once a workspace
+    // is selected.
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'X-Workspace-Id',
+    ],
   })
 
   const fastify = app.getHttpAdapter().getInstance()

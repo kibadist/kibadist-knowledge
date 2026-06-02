@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import { useAuth } from '@/lib/auth-context'
+import { useWorkspace } from '@/lib/workspace-context'
+import { WorkspaceSwitcher } from './workspace-switcher'
 
 const NAV_ITEMS = [
   { href: '/inbox', label: 'Inbox' },
@@ -14,14 +16,15 @@ const NAV_ITEMS = [
 ] as const
 
 /**
- * The ISSN-style masthead strip that sits above the nav — a live workspace
- * marker, the sovereignty tagline, and a volume number. Pure brand chrome.
+ * The ISSN-style masthead strip that sits above the nav — a live marker for the
+ * active workspace (DET-233), the sovereignty tagline, and a volume number.
  */
 export function MastheadStrip() {
+  const { activeWorkspace } = useWorkspace()
   return (
     <div className='mh-strip'>
       <span className='mh-live'>
-        <span className='dot' /> Workspace · Lab Notebooks
+        <span className='dot' /> Workspace · {activeWorkspace?.name ?? '—'}
       </span>
       <span className='mh-mid'>Local-first · Logseq-based · Sovereign</span>
       <span>Vol I · № 014</span>
@@ -41,6 +44,7 @@ export function AppNav() {
           <Link href='/inbox' className='nav-brand'>
             Kibadist
           </Link>
+          <WorkspaceSwitcher />
           <div className='nav-items'>
             {NAV_ITEMS.map((item) => {
               const active =
