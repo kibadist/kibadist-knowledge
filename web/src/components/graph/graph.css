@@ -423,3 +423,105 @@
   color: var(--ink-soft);
   margin: 0;
 }
+
+/* ---------------- scope selector (DET-239) ----------------
+   A floating HUD panel under the title card: switch the rendered subset between
+   workspace / track / domain / concept-neighborhood. View-layer only. */
+.kbapp .graph-scope {
+  background: color-mix(in srgb, var(--paper-hi) 88%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--rule);
+  box-shadow: 4px 4px 0 var(--rule-soft);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kbapp .graph-scope-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.kbapp .graph-scope-btn {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 5px 9px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-muted);
+  cursor: pointer;
+  border-radius: 2px;
+}
+.kbapp .graph-scope-btn.is-active {
+  background: var(--ink);
+  color: var(--paper-hi);
+  border-color: var(--ink);
+}
+.kbapp .graph-scope-neighborhood {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kbapp .graph-scope-center {
+  font-family: var(--font-body), serif;
+  font-size: 13px;
+  color: var(--ink);
+}
+.kbapp .graph-scope-hops {
+  display: flex;
+  gap: 4px;
+}
+.kbapp .graph-scope-hopbtn {
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 4px 8px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-muted);
+  cursor: pointer;
+  border-radius: 2px;
+}
+.kbapp .graph-scope-hopbtn.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-tint);
+}
+.kbapp .graph-scope-focus,
+.kbapp .graph-scope-back,
+.kbapp .graph-scope-save {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 2px;
+  text-align: left;
+}
+.kbapp .graph-scope-focus:hover,
+.kbapp .graph-scope-save:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.kbapp .graph-scope-back {
+  color: var(--ink-muted);
+}
+.kbapp .graph-hud-saveview {
+  bottom: 22px;
+  left: 16px;
+  top: auto;
+}
+.kbapp .graph-scope-save {
+  background: color-mix(in srgb, var(--paper-hi) 88%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 4px 4px 0 var(--rule-soft);
+}
