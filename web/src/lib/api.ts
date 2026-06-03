@@ -880,6 +880,258 @@ export interface GraphView {
   updatedAt: string
 }
 
+// ============================================================================
+// Source-Preserving Article Transformer (DET-247…259)
+//
+// MIRROR of the FROZEN contract in server/src/transformer/transformer.types.ts
+// (committed in 644b5db). The SourcePreservingArticle/FidelityReport/CoverageReport
+// types below are byte-for-byte the same shape as that file — do NOT diverge.
+// The remaining DTO types mirror the M1 controller/service response shapes
+// (transformer.service.ts) + the prisma status enums. Keep in sync.
+// ============================================================================
+
+// --- Pipeline + article status enums (prisma) ---
+export type TransformerSourceType = 'TEXT' | 'URL' | 'PDF'
+export type TransformerSourceStatus =
+  | 'INGESTED'
+  | 'EXTRACTING'
+  | 'EXTRACTED'
+  | 'SEGMENTED'
+  | 'CLASSIFYING'
+  | 'READY'
+  | 'EXTRACTION_FAILED'
+  | 'FAILED'
+export type TransformerBlockType =
+  | 'HEADING'
+  | 'PARAGRAPH'
+  | 'LIST'
+  | 'QUOTE'
+  | 'TABLE'
+  | 'CODE'
+  | 'CAPTION'
+  | 'UNKNOWN'
+export type TransformerBlockClass =
+  | 'MAIN_ARGUMENT'
+  | 'DEFINITION'
+  | 'EXAMPLE'
+  | 'EVIDENCE'
+  | 'METHOD'
+  | 'BACKGROUND'
+  | 'SIDEBAR'
+  | 'CITATION'
+  | 'NAVIGATION_NOISE'
+  | 'ADVERTISEMENT'
+  | 'FOOTER'
+  | 'DUPLICATE'
+  | 'UNCERTAIN'
+export type TransformedArticleStatus =
+  | 'QUEUED'
+  | 'MODELING'
+  | 'PLANNING'
+  | 'GENERATING'
+  | 'CHECKING'
+  | 'FINAL'
+  | 'BLOCKED'
+  | 'FAILED'
+
+// --- FROZEN shared JSON contract (mirrors transformer.types.ts EXACTLY) ---
+export type TransformationType =
+  | 'verbatim'
+  | 'grammar_cleanup'
+  | 'light_reword'
+  | 'paragraph_split'
+  | 'paragraph_merge'
+  | 'formatting_only'
+
+export type FidelityRisk = 'low' | 'medium' | 'high'
+
+export type Severity = 'low' | 'medium' | 'high'
+
+export type HeadingSource = 'original' | 'light_reword' | 'inferred_from_source'
+
+export interface ArticleParagraph {
+  id: string
+  text: string
+  sourceBlockIds: string[]
+  transformationType: TransformationType
+  fidelityRisk: FidelityRisk
+}
+
+export interface ArticleSection {
+  id: string
+  heading: string
+  headingSource: HeadingSource
+  sourceBlockIds: string[]
+  paragraphs: ArticleParagraph[]
+}
+
+export interface SourcePreservingArticle {
+  mode: 'source_preserving_article'
+  title: { text: string; source: HeadingSource }
+  subtitle?: { text: string; source: HeadingSource; sourceBlockIds: string[] }
+  /** Source summary assembled only from source blocks. */
+  abstract: ArticleParagraph[]
+  sections: ArticleSection[]
+  keyTerms: { term: string; sourceBlockIds: string[] }[]
+  sourceExamples: { text: string; sourceBlockIds: string[] }[]
+  caveats: { text: string; sourceBlockIds: string[] }[]
+  /** Source outline reference. */
+  originalStructure: { blockId: string; blockType: string; preview: string }[]
+}
+
+export interface FidelityFinding {
+  severity: Severity
+  description: string
+  articleRef?: string
+  sourceBlockIds?: string[]
+}
+
+export interface FidelityReport {
+  fidelityScore: number
+  approved: boolean
+  addedInformation: FidelityFinding[]
+  lostInformation: FidelityFinding[]
+  meaningChanges: FidelityFinding[]
+  unsupportedHeadings: FidelityFinding[]
+  missingCaveats: FidelityFinding[]
+  unsupportedExamples: FidelityFinding[]
+}
+
+export interface CoverageReport {
+  totalBlocks: number
+  coveragePercent: number
+  representedBlockIds: string[]
+  removedBlocks: { blockId: string; reason: string }[]
+  uncertainBlockIds: string[]
+  unrepresentedBlockIds: string[]
+  paragraphMap: {
+    paragraphId: string
+    sourceBlockIds: string[]
+    transformationType: TransformationType
+    fidelityRisk: FidelityRisk
+  }[]
+}
+
+// --- Source DTOs (mirror transformer.service.ts) ---
+// Extraction/segmentation metadata persisted on the source. `truncated`/`degraded`
+// drive the warning chips the UI must surface (spec §Pipeline 2).
+export interface TransformerSourceMetadata {
+  title?: string
+  author?: string
+  publishedDate?: string
+  pageCount?: number
+  url?: string
+  fileName?: string
+  truncated?: boolean
+  degraded?: boolean
+  [key: string]: unknown
+}
+
+export interface TransformerSourceListItem {
+  id: string
+  type: TransformerSourceType
+  status: TransformerSourceStatus
+  title: string | null
+  url: string | null
+  fileName: string | null
+  createdAt: string
+  latestArticleId: string | null
+  latestArticleStatus: TransformedArticleStatus | null
+}
+
+export interface TransformerSourceDetail {
+  id: string
+  type: TransformerSourceType
+  status: TransformerSourceStatus
+  title: string | null
+  url: string | null
+  fileName: string | null
+  metadata: TransformerSourceMetadata | null
+  extractionError: string | null
+  blocksVersion: number
+  blockCount: number
+  createdAt: string
+  updatedAt: string
+  latestArticleId: string | null
+  latestArticleStatus: TransformedArticleStatus | null
+}
+
+// One block in the debug-inspectable blocks view (DET-250). Also indexed by id by
+// the article source inspector (DET-257) to resolve each paragraph's source.
+export interface TransformerBlockView {
+  id: string
+  orderIndex: number
+  blockType: string
+  text: string
+  pageNumber: number | null
+  charStart: number | null
+  charEnd: number | null
+  classification: string | null
+  classificationStatus: string
+  removable: boolean
+  noiseReason: string | null
+}
+
+// --- Article + optional layers (Wave B; mirrors GET /articles/:id) ---
+// AI-assisted illustration suggestion (DET-259). Suggestions only — never images.
+export type IllustrationApproval = 'pending' | 'approved' | 'rejected'
+export type IllustrationType =
+  | 'editorial_cover'
+  | 'decorative_section'
+  | 'source_based_diagram'
+
+export interface IllustrationSuggestion {
+  id: string
+  illustrationType: IllustrationType
+  purpose: string
+  visualDescription: string
+  caption: string
+  fidelityRisk: FidelityRisk
+  reason: string
+  sourceBlockIds: string[]
+  approval: IllustrationApproval
+}
+
+export interface IllustrationPlan {
+  suggestions: IllustrationSuggestion[]
+}
+
+// AI-assisted learning layer (DET-258). Stored ONLY here, never in articleJson.
+export type LearningValidationStatus = 'pending' | 'validated' | 'dismissed'
+
+export interface LearningConcept {
+  id: string
+  label: string
+  definition: string
+  sourceBlockIds: string[]
+  validationStatus: LearningValidationStatus
+}
+
+export interface LearningRetrievalPrompt {
+  id: string
+  prompt: string
+  sourceBlockIds: string[]
+}
+
+export interface LearningLayer {
+  concepts: LearningConcept[]
+  retrievalPrompts: LearningRetrievalPrompt[]
+}
+
+// GET /transformer/articles/:id — the article + fidelity + coverage + status.
+export interface TransformedArticle {
+  id: string
+  sourceId: string
+  status: TransformedArticleStatus
+  articleJson: SourcePreservingArticle | null
+  fidelityReport: FidelityReport | null
+  fidelityScore: number | null
+  coverageReport: CoverageReport | null
+  illustrationPlan: IllustrationPlan | null
+  learningLayer: LearningLayer | null
+  error: string | null
+}
+
 export const api = {
   register: (input: { email: string; password: string; name?: string }) =>
     request<AuthResponse>('/auth/register', {
@@ -1330,4 +1582,69 @@ export const api = {
     request<GraphData>(`/graph-views/${id}/resolve`),
   deleteGraphView: (id: string) =>
     request<void>(`/graph-views/${id}`, { method: 'DELETE' }),
+
+  // --- Source-Preserving Article Transformer (DET-247…259) ---
+  // Ingestion: text/url/pdf each create a source + fire the pipeline.
+  createTextSource: (input: { text: string; title?: string }) =>
+    request<TransformerSourceListItem>('/transformer/sources/text', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  createUrlSource: (input: { url: string }) =>
+    request<TransformerSourceListItem>('/transformer/sources/url', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  createPdfSource: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return upload<TransformerSourceListItem>('/transformer/sources/pdf', form)
+  },
+  // Source list/detail + the debug-inspectable blocks (DET-250).
+  listTransformerSources: () =>
+    request<TransformerSourceListItem[]>('/transformer/sources'),
+  getTransformerSource: (id: string) =>
+    request<TransformerSourceDetail>(`/transformer/sources/${id}`),
+  getTransformerSourceBlocks: (id: string) =>
+    request<TransformerBlockView[]>(`/transformer/sources/${id}/blocks`),
+  // Transform / re-run (409 if an article for the source is already in flight).
+  transformSource: (id: string) =>
+    request<TransformedArticle>(`/transformer/sources/${id}/transform`, {
+      method: 'POST',
+    }),
+  // The article + fidelity + coverage + status (poll while non-terminal).
+  getTransformedArticle: (id: string) =>
+    request<TransformedArticle>(`/transformer/articles/${id}`),
+
+  // Illustration suggestions (DET-259): suggestions only, never images.
+  generateIllustrations: (articleId: string) =>
+    request<IllustrationPlan>(
+      `/transformer/articles/${articleId}/illustrations`,
+      { method: 'POST' },
+    ),
+  setIllustrationApproval: (
+    articleId: string,
+    suggestionId: string,
+    approval: 'approved' | 'rejected',
+  ) =>
+    request<IllustrationSuggestion>(
+      `/transformer/articles/${articleId}/illustrations/${suggestionId}`,
+      { method: 'PATCH', body: JSON.stringify({ approval }) },
+    ),
+
+  // Learning layer (DET-258): AI-assisted, stored outside the article body.
+  generateLearningLayer: (articleId: string) =>
+    request<LearningLayer>(
+      `/transformer/articles/${articleId}/learning-layer`,
+      { method: 'POST' },
+    ),
+  setLearningItemValidation: (
+    articleId: string,
+    itemId: string,
+    validationStatus: 'validated' | 'dismissed',
+  ) =>
+    request<LearningConcept>(
+      `/transformer/articles/${articleId}/learning-layer/items/${itemId}`,
+      { method: 'PATCH', body: JSON.stringify({ validationStatus }) },
+    ),
 }

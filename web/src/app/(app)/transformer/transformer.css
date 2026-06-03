@@ -1,0 +1,816 @@
+/* ============================================================================
+   Source-Preserving Article Transformer (DET-256…259) — editorial styling.
+   Scoped under .kbapp; reuses the paper/ink/accent/rule tokens, the hard-offset
+   shadow system, and the existing type scale. Light-only, never a dark theme.
+   ============================================================================ */
+
+/* ---------------- source list rows ---------------- */
+.kbapp .tf-source-rows {
+  border-top: 1px solid var(--rule-soft);
+}
+.kbapp .tf-source-row {
+  border-bottom: 1px solid var(--rule-soft);
+  padding: 22px 4px;
+  transition: background 0.2s;
+}
+.kbapp .tf-source-row:hover {
+  background: var(--paper-2);
+}
+.kbapp .tf-type-mark {
+  font-family: var(--font-display), serif;
+  font-size: 18px;
+  color: var(--accent);
+  line-height: 1;
+}
+.kbapp .tf-row-when {
+  margin-left: auto;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+
+/* ---------------- pipeline step indicator ---------------- */
+.kbapp .tf-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  counter-reset: step;
+}
+.kbapp .tf-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 0;
+  min-width: 120px;
+  position: relative;
+  padding: 6px 0;
+}
+.kbapp .tf-step:not(:last-child)::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule-soft);
+  margin: 0 12px;
+}
+.kbapp .tf-step-dot {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--rule);
+  background: var(--paper-hi);
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.kbapp .tf-step.is-done .tf-step-dot {
+  background: var(--olive);
+  border-color: var(--olive);
+}
+.kbapp .tf-step.is-active .tf-step-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  animation: kbapp-blink 1.4s ease-in-out infinite;
+}
+.kbapp .tf-step.is-failed .tf-step-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  animation: none;
+}
+.kbapp .tf-step-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.kbapp .tf-step.is-done .tf-step-label,
+.kbapp .tf-step.is-active .tf-step-label {
+  color: var(--ink);
+}
+
+/* ---------------- source detail ---------------- */
+.kbapp .tf-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-error-panel {
+  border-color: var(--accent);
+  background: rgba(138, 42, 31, 0.06);
+}
+.kbapp .tf-error-text {
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  color: var(--accent-deep);
+  margin: 10px 0 0;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.kbapp .tf-article-card-head,
+.kbapp .tf-article-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-article-card-head {
+  margin-bottom: 10px;
+}
+.kbapp .tf-article-card-actions {
+  margin-top: 18px;
+}
+
+/* ---------------- blocks inspector ---------------- */
+.kbapp .tf-block-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--rule-soft);
+}
+.kbapp .tf-block {
+  border-bottom: 1px solid var(--rule-soft);
+  padding: 16px 0;
+}
+.kbapp .tf-block-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-block-index {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--ink-faint);
+  min-width: 22px;
+}
+.kbapp .tf-block-loc {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  margin-left: auto;
+}
+.kbapp .tf-block-text {
+  margin: 8px 0 0;
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  max-width: 70ch;
+}
+.kbapp .tf-block-reason {
+  margin: 6px 0 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+/* ============================================================================
+   The rich article body — the centerpiece. Magazine-level editorial typography.
+   ============================================================================ */
+.kbapp .tf-article-screen {
+  position: relative;
+}
+.kbapp .tf-article-badges {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.kbapp .tf-article {
+  max-width: 65ch;
+  margin: 0 auto;
+  width: 100%;
+}
+.kbapp .tf-article-head {
+  border-bottom: 2px solid var(--rule);
+  padding-bottom: 28px;
+  margin-bottom: 36px;
+}
+.kbapp .tf-article-title {
+  font-family: var(--font-display), serif;
+  font-weight: 400;
+  font-size: clamp(40px, 6vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  margin: 0;
+  font-variation-settings:
+    "SOFT" 30,
+    "opsz" 144;
+}
+.kbapp .tf-article-subtitle {
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 22px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  margin: 20px 0 0;
+}
+
+/* Abstract — the refined lede; first paragraph carries a drop cap. */
+.kbapp .tf-article-abstract {
+  margin-bottom: 40px;
+}
+.kbapp .tf-paragraph {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-body), serif;
+  font-size: 19px;
+  line-height: 1.65;
+  color: var(--ink);
+  margin: 0 0 22px;
+}
+.kbapp .tf-paragraph--clickable {
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  padding: 2px 0 2px 14px;
+  margin-left: -16px;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.kbapp .tf-paragraph--clickable:hover {
+  border-left-color: var(--accent);
+  background: var(--accent-tint);
+}
+.kbapp .tf-paragraph--lede::first-letter {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  float: left;
+  font-size: 3.6em;
+  line-height: 0.82;
+  padding: 6px 12px 0 0;
+  color: var(--accent);
+  font-variation-settings: "SOFT" 100;
+}
+.kbapp .tf-paragraph--missing {
+  border-left: 2px solid var(--accent);
+  padding-left: 14px;
+  background: rgba(138, 42, 31, 0.05);
+}
+.kbapp .tf-missing-chip {
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+.kbapp .tf-article-section {
+  margin-bottom: 36px;
+}
+.kbapp .tf-article-heading {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 28px;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  margin: 0 0 18px;
+  padding-top: 8px;
+}
+
+/* Auxiliary sections — key terms, examples, caveats, original structure. */
+.kbapp .tf-article-aux {
+  border-top: 1px solid var(--rule-soft);
+  padding-top: 26px;
+  margin-top: 26px;
+}
+.kbapp .tf-aux-h {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+  margin: 0 0 14px;
+}
+.kbapp .tf-terms {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.kbapp .tf-term {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.kbapp .tf-term-btn {
+  font-family: var(--font-body), serif;
+  font-size: 16px;
+  color: var(--ink);
+  background: var(--paper-hi);
+  border: 1px solid var(--rule-soft);
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.kbapp .tf-term-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.kbapp .tf-aux-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kbapp .tf-aux-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-body), serif;
+  font-size: 16.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  background: transparent;
+  border: none;
+  border-left: 2px solid var(--rule-soft);
+  padding: 4px 0 4px 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.kbapp .tf-aux-item:hover {
+  border-left-color: var(--accent);
+  color: var(--ink);
+}
+.kbapp .tf-caveats .tf-aux-item {
+  border-left-color: var(--ochre);
+}
+
+.kbapp .tf-original-structure {
+  opacity: 0.92;
+}
+.kbapp .tf-outline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: outline;
+}
+.kbapp .tf-outline li {
+  display: flex;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px dotted var(--rule-soft);
+  align-items: baseline;
+}
+.kbapp .tf-outline-type {
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  min-width: 90px;
+  flex-shrink: 0;
+}
+.kbapp .tf-outline-preview {
+  font-family: var(--font-body), serif;
+  font-size: 14.5px;
+  color: var(--ink-muted);
+  line-height: 1.45;
+}
+
+/* ---------------- in-progress article ---------------- */
+.kbapp .tf-progress-label {
+  font-family: var(--font-display), serif;
+  font-size: 22px;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+.kbapp .tf-progress-track {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.kbapp .tf-progress-seg {
+  flex: 1;
+  height: 6px;
+  background: var(--rule-soft);
+  transition: background 0.4s var(--ease);
+}
+.kbapp .tf-progress-seg.is-on {
+  background: var(--accent);
+}
+
+/* ---------------- blocked banner ---------------- */
+.kbapp .tf-blocked-banner {
+  border-color: var(--accent);
+  background: rgba(138, 42, 31, 0.06);
+  box-shadow: 8px 8px 0 var(--accent);
+}
+.kbapp .tf-blocked-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.kbapp .tf-blocked-findings {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.kbapp .tf-finding-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kbapp .tf-finding {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.kbapp .tf-finding-text {
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* ---------------- coverage panel ---------------- */
+.kbapp .tf-coverage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-coverage-pct {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.kbapp .tf-coverage-num {
+  font-family: var(--font-display), serif;
+  font-size: 34px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.kbapp .tf-coverage-of {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+}
+.kbapp .tf-coverage-bar {
+  height: 8px;
+  background: var(--rule-soft);
+  margin: 16px 0 22px;
+}
+.kbapp .tf-coverage-fill {
+  height: 100%;
+  background: var(--olive);
+  transition: width 0.5s var(--ease);
+}
+.kbapp .tf-cov-group {
+  border-top: 1px solid var(--rule-soft);
+}
+.kbapp .tf-cov-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.kbapp .tf-cov-toggle:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.kbapp .tf-cov-count {
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  color: var(--ink);
+}
+.kbapp .tf-cov-caret {
+  margin-left: auto;
+  font-family: var(--font-mono), monospace;
+  color: var(--ink-muted);
+}
+.kbapp .tf-cov-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kbapp .tf-cov-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 14px;
+  border-left: 2px solid var(--rule-soft);
+}
+.kbapp .tf-cov-text {
+  font-family: var(--font-body), serif;
+  font-size: 14.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+.kbapp .tf-cov-reason {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+/* ============================================================================
+   AI-assisted layers (learning tools + illustrations) — clearly OUTSIDE the
+   article body. Indigo provenance chip (.chip-ai), a dashed separating frame.
+   ============================================================================ */
+.kbapp .tf-ai-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.kbapp .tf-ai-panel {
+  border-style: dashed;
+  border-color: var(--rule-soft);
+}
+.kbapp .tf-ai-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.kbapp .tf-ai-disclaimer {
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-muted);
+  margin: 0 0 18px;
+  line-height: 1.45;
+}
+.kbapp .tf-ai-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.kbapp .tf-concept-grid,
+.kbapp .tf-illus-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.kbapp .tf-concept-card,
+.kbapp .tf-illus-card {
+  border: 1px solid var(--rule-soft);
+  background: var(--paper-hi);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kbapp .tf-concept-card.is-dismissed {
+  opacity: 0.55;
+}
+.kbapp .tf-illus-card.is-approved {
+  border-color: var(--olive);
+}
+.kbapp .tf-illus-card.is-high-risk {
+  border-color: var(--accent);
+  background: rgba(138, 42, 31, 0.05);
+}
+.kbapp .tf-concept-top,
+.kbapp .tf-illus-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.kbapp .tf-illus-top {
+  justify-content: flex-start;
+}
+.kbapp .tf-concept-label {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--ink);
+}
+.kbapp .tf-concept-def,
+.kbapp .tf-illus-desc {
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin: 0;
+}
+.kbapp .tf-illus-purpose {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--ink);
+  margin: 0;
+}
+.kbapp .tf-illus-caption {
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-muted);
+  margin: 0;
+}
+.kbapp .tf-illus-reason {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--accent);
+  margin: 0;
+  line-height: 1.45;
+}
+.kbapp .tf-concept-foot,
+.kbapp .tf-illus-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.kbapp .tf-concept-actions,
+.kbapp .tf-illus-actions {
+  display: flex;
+  gap: 8px;
+}
+.kbapp .tf-ref-btn {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--indigo);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid currentColor;
+  padding: 0 0 1px;
+  cursor: pointer;
+}
+.kbapp .tf-ref-btn:hover {
+  color: var(--accent);
+}
+.kbapp .tf-prompts {
+  margin-top: 22px;
+  border-top: 1px solid var(--rule-soft);
+  padding-top: 18px;
+}
+.kbapp .tf-prompt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kbapp .tf-prompt {
+  font-family: var(--font-body), serif;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  padding-left: 16px;
+  border-left: 2px solid var(--indigo);
+}
+
+/* ============================================================================
+   Source inspector side panel (DET-257) — slide-in right rail.
+   ============================================================================ */
+.kbapp .tf-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(26, 23, 20, 0.28);
+  border: none;
+  cursor: pointer;
+}
+.kbapp .tf-inspector {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(460px, 92vw);
+  z-index: 91;
+  background: var(--paper);
+  border-left: 1px solid var(--rule);
+  box-shadow: -10px 0 0 var(--rule);
+  padding: 26px;
+  overflow-y: auto;
+  animation: tf-slide-in 0.25s var(--ease);
+}
+@keyframes tf-slide-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.kbapp .tf-inspector-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--rule-soft);
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+}
+.kbapp .tf-inspector-close {
+  background: transparent;
+  border: 1px solid var(--rule-soft);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  color: var(--ink-muted);
+  transition: all 0.15s;
+}
+.kbapp .tf-inspector-close:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.kbapp .tf-inspector-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.kbapp .tf-inspector-block {
+  margin-bottom: 22px;
+}
+.kbapp .tf-inspector-h {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ink-muted);
+  margin: 0 0 10px;
+}
+.kbapp .tf-inspector-transformed {
+  font-family: var(--font-body), serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 0;
+  padding: 14px;
+  background: var(--paper-hi);
+  border: 1px solid var(--rule-soft);
+}
+.kbapp .tf-source-quote {
+  margin: 0 0 16px;
+  border-left: 3px solid var(--accent);
+  padding: 4px 0 4px 16px;
+}
+.kbapp .tf-source-quote blockquote {
+  margin: 0;
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.kbapp .tf-source-quote figcaption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.kbapp .tf-source-loc {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.kbapp .tf-source-link {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ochre);
+  text-decoration: none;
+}
+.kbapp .tf-source-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+  .kbapp .tf-concept-grid,
+  .kbapp .tf-illus-grid {
+    grid-template-columns: 1fr;
+  }
+}

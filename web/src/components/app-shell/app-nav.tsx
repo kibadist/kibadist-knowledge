@@ -12,6 +12,7 @@ import { WorkspaceSwitcher } from './workspace-switcher'
 const NAV_ITEMS = [
   { href: '/tracks', label: 'Tracks' },
   { href: '/inbox', label: 'Inbox' },
+  { href: '/transformer', label: 'Transformer' },
   { href: '/concepts', label: 'Concepts' },
   { href: '/domains', label: 'Domains' },
   { href: '/graph', label: 'Map' },
