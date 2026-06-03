@@ -1,5 +1,9 @@
 import { CaptureSource, ConceptStatus, type Prisma } from '@kibadist/prisma'
-import { Injectable, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common'
 
 import { ConceptStateService } from '../concept-state/concept-state.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -26,6 +30,9 @@ export interface InboxItem {
   captureSource: CaptureSource | null
   sourceUrl: string | null
   excerpt: string
+  /** Word count of the raw material — a triage signal ("how long is this?").
+   *  Derived from sourceText at read time; not persisted. */
+  wordCount: number
   createdAt: Date
 }
 
@@ -111,10 +118,17 @@ export class InboxService {
     })
   }
 
-  /** Lists only INBOX items (never earned concepts), newest first. */
+  /** Lists only INBOX items (never earned concepts), newest first. Snoozed
+   *  items (DET-241) are hidden until their time passes — null or past = visible,
+   *  so snoozes "expire" lazily on read without a cron. */
   async list(userId: string, workspaceId: string): Promise<InboxItem[]> {
     const rows = await this.prisma.concept.findMany({
-      where: { userId, workspaceId, status: ConceptStatus.INBOX },
+      where: {
+        userId,
+        workspaceId,
+        status: ConceptStatus.INBOX,
+        OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: new Date() } }],
+      },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -131,6 +145,7 @@ export class InboxService {
       captureSource: r.captureSource,
       sourceUrl: r.sourceUrl,
       excerpt: excerpt(r.sourceText),
+      wordCount: countWords(r.sourceText),
       createdAt: r.createdAt,
     }))
   }
@@ -158,6 +173,7 @@ export class InboxService {
       sourceText: row.sourceText,
       sourceDocument: asSourceDocument(row.sourceDocument),
       excerpt: excerpt(row.sourceText),
+      wordCount: countWords(row.sourceText),
       createdAt: row.createdAt,
     }
   }
@@ -192,6 +208,112 @@ export class InboxService {
       where: { id, userId, status: ConceptStatus.INBOX },
     })
     if (count === 0) throw new NotFoundException('Inbox item not found')
+  }
+
+  /**
+   * Snooze a captured item out of the inbox until `until` (DET-241). It stays an
+   * INBOX item — snooze only hides it from the list/badge until the time passes,
+   * at which point the read filter surfaces it again. Scoped to the owner.
+   */
+  async snooze(userId: string, id: string, until: Date): Promise<void> {
+    const { count } = await this.prisma.concept.updateMany({
+      where: { id, userId, status: ConceptStatus.INBOX },
+      data: { snoozedUntil: until },
+    })
+    if (count === 0) throw new NotFoundException('Inbox item not found')
+  }
+
+  /**
+   * Forge several captured fragments into a single inbox item (DET-241). The merge
+   * composes their raw material — with a provenance header per fragment — into one
+   * new INBOX concept, then CONSUMES the originals (their text lives on inside the
+   * merged item, so nothing is lost). The result is a fresh capture ready for the
+   * normal interrogation/promotion flow: promotion becomes synthesis of several
+   * sources rather than one-fragment-at-a-time. Still no knowledge here — it's raw
+   * material until earned through the gate.
+   */
+  async forge(
+    userId: string,
+    workspaceId: string,
+    ids: string[],
+  ): Promise<InboxItem> {
+    // De-dupe while preserving the caller's order (the order fragments appear in
+    // the merged text).
+    const orderedIds = [...new Set(ids)]
+    const rows = await this.prisma.concept.findMany({
+      where: {
+        id: { in: orderedIds },
+        userId,
+        workspaceId,
+        status: ConceptStatus.INBOX,
+      },
+      select: { id: true, title: true, sourceText: true, sourceUrl: true },
+    })
+    if (rows.length < 2) {
+      throw new BadRequestException(
+        'Forge needs at least two of your inbox items',
+      )
+    }
+    const byId = new Map(rows.map((r) => [r.id, r]))
+    const fragments = orderedIds
+      .map((id) => byId.get(id))
+      .filter((r): r is (typeof rows)[number] => Boolean(r))
+
+    // Compose the merged source: each fragment under a provenance header, joined
+    // by a horizontal rule so the boundaries survive into the Reader/extractor.
+    const mergedText = fragments
+      .map((r) => {
+        const header = r.sourceUrl ? `${r.title}\n${r.sourceUrl}` : r.title
+        return `${header}\n\n${r.sourceText ?? ''}`.trim()
+      })
+      .join('\n\n———\n\n')
+    const title = forgeTitle(fragments.map((r) => r.title))
+
+    const concept = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.concept.create({
+        data: {
+          userId,
+          workspaceId,
+          title,
+          sourceText: mergedText,
+          sourceDocument: extractTextDocument(
+            mergedText,
+          ) as unknown as Prisma.InputJsonValue,
+          // A forged item is composed text, not a single-source capture.
+          captureSource: CaptureSource.PASTE,
+          status: ConceptStatus.INBOX,
+        },
+        select: {
+          id: true,
+          title: true,
+          sourceText: true,
+          captureSource: true,
+          sourceUrl: true,
+          createdAt: true,
+        },
+      })
+      await this.conceptState.recordCapture(created.id, userId, tx)
+      // Consume the originals — atomic with the create, scoped to the owner's
+      // still-INBOX rows so a concurrent promotion/discard can't be clobbered.
+      await tx.concept.deleteMany({
+        where: {
+          id: { in: fragments.map((r) => r.id) },
+          userId,
+          status: ConceptStatus.INBOX,
+        },
+      })
+      return created
+    })
+
+    return {
+      id: concept.id,
+      title: concept.title,
+      captureSource: concept.captureSource,
+      sourceUrl: concept.sourceUrl,
+      excerpt: excerpt(concept.sourceText),
+      wordCount: countWords(concept.sourceText),
+      createdAt: concept.createdAt,
+    }
   }
 
   /**
@@ -272,6 +394,7 @@ export class InboxService {
       captureSource: concept.captureSource,
       sourceUrl: concept.sourceUrl,
       excerpt: excerpt(concept.sourceText),
+      wordCount: countWords(concept.sourceText),
       createdAt: concept.createdAt,
     }
   }
@@ -283,6 +406,21 @@ function excerpt(text: string | null): string {
   return trimmed.length > EXCERPT_CHARS
     ? `${trimmed.slice(0, EXCERPT_CHARS)}…`
     : trimmed
+}
+
+/** Rough word count over the raw material — feeds the inbox's read-time signal. */
+function countWords(text: string | null): number {
+  if (!text) return 0
+  const matches = text.trim().match(/\S+/g)
+  return matches ? matches.length : 0
+}
+
+/** Title for a forged item: the first fragment's title, plus "+ N more". The
+ *  first title is capped so the "+ N more" suffix always survives. */
+function forgeTitle(titles: string[]): string {
+  const rest = titles.length - 1
+  const first = (titles[0]?.trim() || 'Untitled').slice(0, 80)
+  return rest > 0 ? `${first} + ${rest} more` : first.slice(0, 120)
 }
 
 function deriveTitle(text: string): string {

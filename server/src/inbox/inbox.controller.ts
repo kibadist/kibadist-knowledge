@@ -18,6 +18,8 @@ import { WorkspaceId } from '../workspaces/workspace-id.decorator'
 import { WorkspacesService } from '../workspaces/workspaces.service'
 import { CaptureTextDto } from './dto/capture-text.dto'
 import { CaptureUrlDto } from './dto/capture-url.dto'
+import { ForgeDto } from './dto/forge.dto'
+import { SnoozeDto } from './dto/snooze.dto'
 import { MAX_PDF_BYTES } from './inbox.constants'
 import { InboxService } from './inbox.service'
 
@@ -109,6 +111,29 @@ export class InboxController {
       buffer,
       trackId,
     )
+  }
+
+  @Post('forge')
+  async forge(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ForgeDto,
+    @WorkspaceId() requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await this.workspaces.resolveActiveWorkspaceId(
+      user.userId,
+      requestedWorkspaceId,
+    )
+    return this.inbox.forge(user.userId, workspaceId, dto.ids)
+  }
+
+  @Post(':id/snooze')
+  @HttpCode(204)
+  async snooze(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SnoozeDto,
+  ) {
+    await this.inbox.snooze(user.userId, id, new Date(dto.until))
   }
 
   @Delete(':id')

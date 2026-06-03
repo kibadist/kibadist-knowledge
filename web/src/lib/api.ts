@@ -183,6 +183,8 @@ export interface InboxItem {
   captureSource: CaptureSource | null
   sourceUrl: string | null
   excerpt: string
+  /** Word count of the raw material — drives the row's read-time signal. */
+  wordCount: number
   createdAt: string
 }
 
@@ -938,6 +940,19 @@ export const api = {
   },
   discardInboxItem: (id: string) =>
     request<void>(`/inbox/${id}`, { method: 'DELETE' }),
+  // Snooze a captured item out of the inbox until `until` (ISO datetime, DET-241).
+  snoozeInboxItem: (id: string, until: string) =>
+    request<void>(`/inbox/${id}/snooze`, {
+      method: 'POST',
+      body: JSON.stringify({ until }),
+    }),
+  // Forge several captured fragments into one merged inbox item (DET-241).
+  // Consumes the originals; returns the new merged item.
+  forgeInbox: (ids: string[]) =>
+    request<InboxItem>('/inbox/forge', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
   getInboxItem: (id: string) => request<InboxItemDetail>(`/inbox/${id}`),
 
   // --- Semantic Chunking + Concept Library (DET-211) ---

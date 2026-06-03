@@ -1,8 +1,10 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useWorkspace } from '@/lib/workspace-context'
 import { WorkspaceSwitcher } from './workspace-switcher'
@@ -38,6 +40,11 @@ export function MastheadStrip() {
 export function AppNav() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
+  // Inbox "debt" badge (DET-241): a gentle count on §INBOX so unprocessed
+  // captures stay visible across the app. Shares the ['inbox'] cache with the
+  // inbox page, so it updates the moment an item is processed or discarded.
+  const inboxQuery = useQuery({ queryKey: ['inbox'], queryFn: api.listInbox })
+  const inboxCount = inboxQuery.data?.length ?? 0
 
   return (
     <header className='app-nav-wrap'>
@@ -59,6 +66,9 @@ export function AppNav() {
                   className={`nav-item${active ? ' is-active' : ''}`}
                 >
                   {item.label}
+                  {item.href === '/inbox' && inboxCount > 0 && (
+                    <span className='nav-badge'>{inboxCount}</span>
+                  )}
                 </Link>
               )
             })}
