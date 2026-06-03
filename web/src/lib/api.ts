@@ -1080,6 +1080,14 @@ export type IllustrationType =
   | 'decorative_section'
   | 'source_based_diagram'
 
+export interface IllustrationImageMeta {
+  width: number
+  height: number
+  provider: string
+  model: string
+  generatedAt: string
+}
+
 export interface IllustrationSuggestion {
   id: string
   illustrationType: IllustrationType
@@ -1090,6 +1098,10 @@ export interface IllustrationSuggestion {
   reason: string
   sourceBlockIds: string[]
   approval: IllustrationApproval
+  // DET-261: present once the approved suggestion has been rendered into an
+  // image. Absent/null = not yet rendered. The PNG bytes are fetched separately
+  // (authenticated blob), never embedded in this JSON.
+  image?: IllustrationImageMeta | null
 }
 
 export interface IllustrationPlan {
@@ -1636,6 +1648,46 @@ export const api = {
       `/transformer/articles/${articleId}/illustrations/${suggestionId}`,
       { method: 'PATCH', body: JSON.stringify({ approval }) },
     ),
+
+  // Illustration rendering (DET-261): render an APPROVED suggestion into an
+  // image. High-risk suggestions require confirmHighRisk (server returns 409
+  // otherwise). Returns the updated plan with `suggestion.image` populated.
+  renderIllustration: (
+    articleId: string,
+    suggestionId: string,
+    confirmHighRisk?: boolean,
+  ) =>
+    request<IllustrationPlan>(
+      `/transformer/articles/${articleId}/illustrations/${suggestionId}/render`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ confirmHighRisk: !!confirmHighRisk }),
+      },
+    ),
+  deleteIllustrationImage: (articleId: string, suggestionId: string) =>
+    request<IllustrationPlan>(
+      `/transformer/articles/${articleId}/illustrations/${suggestionId}/image`,
+      { method: 'DELETE' },
+    ),
+  // Raw authenticated PNG fetch — an <img src> cannot send the bearer token, so
+  // the panel fetches the bytes here and builds an object URL.
+  getIllustrationImageBlob: async (articleId: string, suggestionId: string) => {
+    const token = getToken()
+    const workspaceId = getActiveWorkspaceId()
+    const res = await fetch(
+      `${API_URL}/transformer/articles/${articleId}/illustrations/${suggestionId}/image`,
+      {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+        },
+      },
+    )
+    if (!res.ok) {
+      throw new ApiError(res.status, res.statusText || 'Could not load image.')
+    }
+    return res.blob()
+  },
 
   // Learning layer (DET-258): AI-assisted, stored outside the article body.
   generateLearningLayer: (articleId: string) =>

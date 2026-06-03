@@ -808,6 +808,87 @@
   text-decoration: underline;
 }
 
+/* ---- Illustration rendering (DET-261) ---- */
+.kbapp .tf-illus-image {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 10px;
+  border: 1px dashed var(--rule-soft);
+  background: var(--paper);
+}
+.kbapp .tf-illus-figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kbapp .tf-illus-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--rule-soft);
+  box-shadow: 4px 4px 0 var(--rule-soft);
+}
+.kbapp .tf-illus-thumb-loading,
+.kbapp .tf-illus-thumb-fallback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  min-height: 96px;
+  border: 1px solid var(--rule-soft);
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+.kbapp .tf-illus-meta {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.kbapp .tf-illus-img-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-illus-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kbapp .tf-illus-confirm-text {
+  margin: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--accent);
+}
+.kbapp .tf-illus-notice {
+  margin: 0;
+}
+.kbapp .tf-illus-spinning {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.kbapp .tf-spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--rule-soft);
+  border-top-color: var(--indigo);
+  border-radius: 50%;
+  animation: tf-spin 0.7s linear infinite;
+}
+@keyframes tf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 720px) {
   .kbapp .tf-concept-grid,
   .kbapp .tf-illus-grid {
