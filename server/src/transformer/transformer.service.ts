@@ -66,7 +66,7 @@ export interface TransformerArticleDetail {
   sourceId: string
   status: TransformedArticleStatus
   blocksVersion: number
-  article: SourcePreservingArticle | null
+  articleJson: SourcePreservingArticle | null
   fidelityReport: FidelityReport | null
   fidelityScore: number | null
   coverageReport: CoverageReport | null
@@ -309,7 +309,7 @@ export class TransformerService {
       sourceId: article.sourceId,
       status: article.status,
       blocksVersion: article.blocksVersion,
-      article: article.articleJson as SourcePreservingArticle | null,
+      articleJson: article.articleJson as SourcePreservingArticle | null,
       fidelityReport: article.fidelityReport as FidelityReport | null,
       fidelityScore: article.fidelityScore,
       coverageReport: article.coverageReport as CoverageReport | null,

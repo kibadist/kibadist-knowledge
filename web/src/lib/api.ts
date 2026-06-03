@@ -1609,7 +1609,7 @@ export const api = {
     request<TransformerBlockView[]>(`/transformer/sources/${id}/blocks`),
   // Transform / re-run (409 if an article for the source is already in flight).
   transformSource: (id: string) =>
-    request<TransformedArticle>(`/transformer/sources/${id}/transform`, {
+    request<{ id: string }>(`/transformer/sources/${id}/transform`, {
       method: 'POST',
     }),
   // The article + fidelity + coverage + status (poll while non-terminal).
@@ -1627,7 +1627,7 @@ export const api = {
     suggestionId: string,
     approval: 'approved' | 'rejected',
   ) =>
-    request<IllustrationSuggestion>(
+    request<IllustrationPlan>(
       `/transformer/articles/${articleId}/illustrations/${suggestionId}`,
       { method: 'PATCH', body: JSON.stringify({ approval }) },
     ),
@@ -1643,7 +1643,7 @@ export const api = {
     itemId: string,
     validationStatus: 'validated' | 'dismissed',
   ) =>
-    request<LearningConcept>(
+    request<LearningLayer>(
       `/transformer/articles/${articleId}/learning-layer/items/${itemId}`,
       { method: 'PATCH', body: JSON.stringify({ validationStatus }) },
     ),
