@@ -911,6 +911,507 @@ body {
   color: var(--ink-faint);
 }
 
+/* ---------------- inbox queue (DET-241) ---------------- */
+/* "N waiting" count beside the Inbox headline — turns the queue into something
+   with a visible size (and an end state) rather than an endless list. */
+.kbapp .head-count {
+  align-self: flex-start;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ochre);
+  background: rgba(138, 90, 31, 0.1);
+  border: 1px solid rgba(138, 90, 31, 0.4);
+  border-radius: 2px;
+  padding: 5px 11px;
+  margin-top: -2px;
+  white-space: nowrap;
+}
+/* "Earned" count for the Concepts list — olive (the cleared/positive tone). */
+.kbapp .head-count.earned {
+  color: var(--olive);
+  background: rgba(91, 102, 56, 0.1);
+  border-color: rgba(91, 102, 56, 0.4);
+}
+/* "Regions" count for the Domains list — indigo (the organization tone). */
+.kbapp .head-count.region {
+  color: var(--indigo);
+  background: rgba(31, 58, 77, 0.1);
+  border-color: rgba(31, 58, 77, 0.4);
+}
+/* "Tracks" count — accent (the primary intent layer). */
+.kbapp .head-count.intent {
+  color: var(--accent);
+  background: rgba(138, 42, 31, 0.08);
+  border-color: rgba(138, 42, 31, 0.35);
+}
+
+/* Concepts list meta (DET-241): humanized cognitive state + certainty + gate,
+   color-coded so contested/uncertain/dormant read at a glance. */
+.kbapp .concept-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kbapp .cstate {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+.kbapp .cstate-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--olive);
+  flex: none;
+}
+.kbapp .cstate-contested {
+  color: var(--accent);
+}
+.kbapp .cstate-contested .cstate-dot {
+  background: var(--accent);
+}
+.kbapp .cstate-dormant {
+  color: var(--ink-faint);
+}
+.kbapp .cstate-dormant .cstate-dot {
+  background: var(--ink-faint);
+}
+.kbapp .ccert,
+.kbapp .cgate {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.kbapp .ccert::before,
+.kbapp .cgate::before {
+  content: "·";
+  margin-right: 8px;
+  color: var(--rule);
+}
+.kbapp .ccert-tentative {
+  color: var(--ochre);
+}
+.kbapp .ccert-uncertain {
+  color: var(--accent);
+}
+.kbapp .queue {
+  margin-top: 8px;
+}
+.kbapp .queue-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 4px 4px 10px;
+}
+/* Entry into focus mode (the processing session). */
+.kbapp .process-all {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  text-decoration: none;
+  border: 1px solid var(--rule);
+  padding: 8px 16px;
+  transition: all 0.15s;
+}
+.kbapp .process-all:hover {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.kbapp .process-all .ar {
+  display: inline-block;
+  transition: transform 0.15s;
+}
+.kbapp .process-all:hover .ar {
+  transform: translateX(3px);
+}
+.kbapp .queue-hint {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.kbapp .queue-hint kbd {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--paper-2);
+  color: var(--ink-soft);
+}
+.kbapp .queue-group {
+  margin-top: 14px;
+}
+.kbapp .group-head {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ink-faint);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 2px;
+}
+.kbapp .group-head span {
+  color: var(--accent);
+}
+.kbapp .group-head::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule-soft);
+}
+
+/* Per-row source + read-time signal — replaces the redundant "Unprocessed"
+   chip with metadata you can actually triage by. */
+.kbapp .row-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kbapp .src-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  flex: none;
+}
+.kbapp .src-dot.is-link {
+  background: var(--ochre);
+}
+.kbapp .row-len,
+.kbapp .row-when {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.kbapp .row-len::before,
+.kbapp .row-when::before {
+  content: "·";
+  margin-right: 8px;
+  color: var(--rule);
+}
+
+/* Keyboard / hover focus cursor for j-k triage. */
+.kbapp .inbox-row {
+  border-left: 2px solid transparent;
+  padding-left: 12px;
+  margin-left: -14px;
+}
+.kbapp .inbox-row.is-focused {
+  background: var(--paper-2);
+  border-left-color: var(--accent);
+}
+/* Forge selection (DET-241) — ochre, distinct from the accent focus cursor. */
+.kbapp .inbox-row.is-selected {
+  background: rgba(138, 90, 31, 0.06);
+  border-left-color: var(--ochre);
+}
+.kbapp .row-select {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--paper);
+  font-size: 10px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.kbapp .row-select:hover {
+  border-color: var(--ochre);
+}
+.kbapp .row-select.is-on {
+  background: var(--ochre);
+  border-color: var(--ochre);
+}
+.kbapp .inbox-row .row-foot {
+  justify-content: flex-start;
+}
+
+/* The Forge action bar — replaces the queue bar while a selection is active. */
+.kbapp .forge-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 6px;
+  background: rgba(138, 90, 31, 0.07);
+  border: 1px solid rgba(138, 90, 31, 0.4);
+}
+.kbapp .forge-count {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ochre);
+}
+.kbapp .forge-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.kbapp .forge-clear {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  background: none;
+  border: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.kbapp .forge-clear:hover {
+  color: var(--accent);
+}
+.kbapp .forge-go {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 9px 18px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.kbapp .forge-go:hover:not(:disabled) {
+  background: var(--ochre);
+  border-color: var(--ochre);
+}
+.kbapp .forge-go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.kbapp .forge-go .ar {
+  display: inline-block;
+  transition: transform 0.15s;
+}
+.kbapp .forge-go:hover:not(:disabled) .ar {
+  transform: translateX(3px);
+}
+.kbapp .inbox-row .row-process .ar {
+  transition: transform 0.15s;
+  display: inline-block;
+}
+.kbapp .inbox-row.is-focused .row-process .ar,
+.kbapp .row-process:hover .ar {
+  transform: translateX(3px);
+}
+
+/* §INBOX count badge in the app masthead. */
+.kbapp .nav-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--paper);
+  vertical-align: middle;
+}
+
+/* ---------------- inbox focus mode / processing session (DET-241) ---------- */
+.kbapp .session-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 18px;
+}
+.kbapp .session-progress {
+  font-family: var(--font-mono), monospace;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+.kbapp .session-progress span {
+  color: var(--ink-faint);
+}
+.kbapp .session-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 40px;
+}
+.kbapp .session-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kbapp .session-title {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 36px);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0;
+}
+.kbapp .session-excerpt {
+  font-family: var(--font-body), serif;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin: 4px 0 0;
+}
+.kbapp .session-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+.kbapp .session-btn {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 11px 20px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.kbapp .session-btn:hover {
+  background: var(--paper-hi);
+}
+.kbapp .session-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.kbapp .session-btn-danger:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+}
+.kbapp .session-btn-primary {
+  margin-left: auto;
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.kbapp .session-btn-primary:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.kbapp .session-btn-primary .ar {
+  display: inline-block;
+  transition: transform 0.15s;
+}
+.kbapp .session-btn-primary:hover .ar {
+  transform: translateX(3px);
+}
+/* Snooze preset popover (DET-241). */
+.kbapp .session-snooze {
+  position: relative;
+  display: inline-flex;
+}
+.kbapp .snooze-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 168px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  box-shadow: 4px 4px 0 var(--rule);
+}
+.kbapp .snooze-opt {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-align: left;
+  padding: 11px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule-soft);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.kbapp .snooze-opt:last-child {
+  border-bottom: none;
+}
+.kbapp .snooze-opt:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.kbapp .session-hint {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 26px;
+}
+.kbapp .session-hint kbd {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--paper-2);
+  color: var(--ink-soft);
+}
+.kbapp .session-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 64px 0;
+}
+.kbapp .session-done-mark {
+  font-size: 72px;
+  line-height: 1;
+  color: var(--olive);
+}
+
 /* status / inline notices */
 .kbapp .notice {
   font-family: var(--font-body), serif;
@@ -1011,6 +1512,64 @@ body {
   letter-spacing: 0.08em;
   color: var(--ink-faint);
   margin: 10px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.kbapp .rate-hint kbd {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 5px;
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--paper-2);
+  color: var(--ink-soft);
+}
+/* Rate scale (DET-241): a recall score reads as a gradient — poor (accent) →
+   partial (ochre) → strong (olive). */
+.kbapp .rate-low {
+  border-color: rgba(138, 42, 31, 0.5);
+  color: var(--accent);
+}
+.kbapp .rate-low:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
+}
+.kbapp .rate-mid {
+  border-color: rgba(138, 90, 31, 0.5);
+  color: var(--ochre);
+}
+.kbapp .rate-mid:hover {
+  background: var(--ochre);
+  border-color: var(--ochre);
+  color: var(--paper);
+}
+.kbapp .rate-high {
+  border-color: rgba(91, 102, 56, 0.5);
+  color: var(--olive);
+}
+.kbapp .rate-high:hover {
+  background: var(--olive);
+  border-color: var(--olive);
+  color: var(--paper);
+}
+/* Session queue progress — a finishing cue for the daily loop. */
+.kbapp .session-progressbar {
+  height: 4px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+.kbapp .session-progressbar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
 }
 .kbapp .reflect {
   display: flex;
@@ -1254,6 +1813,12 @@ body {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--rule);
   margin-bottom: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.kbapp .track-group-head span {
+  color: var(--accent);
 }
 .kbapp .track-new-btn {
   margin-bottom: 8px;
@@ -1334,6 +1899,10 @@ body {
   height: 100%;
   background: var(--accent);
   transition: width 0.3s ease;
+}
+/* A track fully at depth reads as cleared — olive, like an earned concept. */
+.kbapp .track-progress-fill.is-complete {
+  background: var(--olive);
 }
 .kbapp .track-progress-label {
   font-family: var(--font-mono), monospace;
