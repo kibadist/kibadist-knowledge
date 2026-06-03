@@ -7,6 +7,8 @@ import {
   type CompletionResult,
   type EmbeddingRequest,
   type EmbeddingResult,
+  type ImageRequest,
+  type ImageResult,
 } from './ai-provider.interface'
 
 /**
@@ -27,5 +29,9 @@ export class AiService {
 
   embed(request: EmbeddingRequest): Promise<EmbeddingResult> {
     return this.provider.embed(request)
+  }
+
+  image(request: ImageRequest): Promise<ImageResult> {
+    return this.provider.image(request)
   }
 }

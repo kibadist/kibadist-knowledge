@@ -1303,7 +1303,33 @@ model TransformedArticle {
   source    TransformerSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  illustrationImages TransformerIllustrationImage[]
+
   @@index([sourceId])
   @@index([workspaceId])
   @@map("transformed_articles")
+}
+
+// A rendered illustration image (DET-261). Created only AFTER a suggestion is
+// approved, from the approved suggestion's own text — never the source blocks.
+// Stored as Postgres Bytes (mirrors the PDF rawFile pattern; no object store in
+// repo) and served via an authenticated endpoint the frontend fetches as a blob.
+// One current image per suggestion: a re-render upserts on (articleId, suggestionId).
+model TransformerIllustrationImage {
+  id           String            @id @default(cuid())
+  articleId    String
+  article      TransformedArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  suggestionId String // the illustrationPlan suggestion.id
+  data         Bytes
+  mediaType    String
+  width        Int
+  height       Int
+  provider     String
+  model        String
+  prompt       String // the exact prompt sent (audit)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([articleId, suggestionId])
+  @@map("transformer_illustration_images")
 }

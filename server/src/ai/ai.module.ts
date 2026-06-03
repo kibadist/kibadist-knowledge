@@ -25,6 +25,8 @@ import { OpenAiProvider } from './providers/openai.provider'
               embedModel:
                 config.get<string>('OPENAI_EMBED_MODEL') ??
                 'text-embedding-3-small',
+              imageModel:
+                config.get<string>('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1',
             })
           case 'ollama':
             // Seam: drop in an `OllamaProvider implements AiProvider` and return it here.

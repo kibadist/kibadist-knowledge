@@ -11,12 +11,15 @@ import type {
   CompletionResult,
   EmbeddingRequest,
   EmbeddingResult,
+  ImageRequest,
+  ImageResult,
 } from '../ai-provider.interface'
 
 export interface OpenAiProviderConfig {
   apiKey?: string
   chatModel: string
   embedModel: string
+  imageModel: string
 }
 
 export class OpenAiProvider implements AiProvider {
@@ -24,10 +27,12 @@ export class OpenAiProvider implements AiProvider {
   private readonly client: OpenAI | null
   private readonly chatModel: string
   private readonly embedModel: string
+  private readonly imageModel: string
 
   constructor(config: OpenAiProviderConfig) {
     this.chatModel = config.chatModel
     this.embedModel = config.embedModel
+    this.imageModel = config.imageModel
     // Constructed without a key so the app still boots; calls fail clearly.
     this.client = config.apiKey ? new OpenAI({ apiKey: config.apiKey }) : null
   }
@@ -67,6 +72,33 @@ export class OpenAiProvider implements AiProvider {
         embeddings,
         model: response.model,
         dimensions: embeddings[0]?.length ?? 0,
+      }
+    } catch (error) {
+      throw this.translateError(error)
+    }
+  }
+
+  async image(request: ImageRequest): Promise<ImageResult> {
+    const client = this.requireClient()
+    const size = request.size ?? '1024x1024'
+    const [width, height] = size.split('x').map(Number)
+    try {
+      const response = await client.images.generate({
+        model: this.imageModel,
+        prompt: request.prompt,
+        size,
+        n: 1,
+      })
+      const base64 = response.data?.[0]?.b64_json
+      if (!base64) {
+        throw new BadGatewayException('OpenAI returned no image data')
+      }
+      return {
+        base64,
+        mediaType: 'image/png',
+        width,
+        height,
+        model: this.imageModel,
       }
     } catch (error) {
       throw this.translateError(error)

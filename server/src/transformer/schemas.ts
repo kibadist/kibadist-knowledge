@@ -220,6 +220,19 @@ const illustrationSuggestion = z.object({
   reason: z.string().min(1),
   sourceBlockIds,
   approval,
+  // Rendered-image metadata (DET-261). Absent/null until the approved suggestion
+  // is rendered; never set by the LLM (the LLM schema below has no `image`). The
+  // bytes live in TransformerIllustrationImage; the frontend derives the fetch
+  // path from (articleId, suggestionId) — no URL is stored here.
+  image: z
+    .object({
+      width: z.number(),
+      height: z.number(),
+      provider: z.string(),
+      model: z.string(),
+      generatedAt: z.string(), // ISO timestamp
+    })
+    .nullish(),
 })
 
 export type IllustrationSuggestion = z.infer<typeof illustrationSuggestion>

@@ -11,6 +11,7 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 
+import { AiService } from '../ai/ai.service'
 import { fetchReadable } from '../inbox/url-fetch.util'
 import { PrismaService } from '../prisma/prisma.service'
 import { ArticlePipelineService } from './article-pipeline.service'
@@ -111,6 +112,7 @@ export class TransformerService {
     private readonly prisma: PrismaService,
     private readonly pipeline: PipelineService,
     private readonly articlePipeline: ArticlePipelineService,
+    private readonly ai: AiService,
   ) {}
 
   async createTextSource(
@@ -374,6 +376,148 @@ export class TransformerService {
     const updated: IllustrationPlan = {
       suggestions: plan.suggestions.map((s) =>
         s.id === suggestionId ? { ...s, approval } : s,
+      ),
+    }
+    await this.prisma.transformedArticle.update({
+      where: { id: article.id },
+      data: { illustrationPlan: updated as unknown as Prisma.InputJsonValue },
+    })
+    return updated
+  }
+
+  /**
+   * Render an approved illustration suggestion into a real image (DET-261).
+   *
+   * Every guard is enforced in CODE, never trusted from the client, in order:
+   *   1. ownership (findOwnedArticle)
+   *   2. the suggestion exists in the illustrationPlan → else 404
+   *   3. suggestion.approval === 'approved' → else 409
+   *   4. high fidelityRisk requires confirmHighRisk → else 409
+   * The prompt is built ONLY from the approved suggestion text (visualDescription
+   * + caption); the renderer never consults the source blocks. The bytes are
+   * upserted into TransformerIllustrationImage on (articleId, suggestionId) and
+   * the suggestion's `image` metadata is patched into the illustrationPlan JSON
+   * (never into the article body). Returns the updated IllustrationPlan.
+   */
+  async renderIllustration(
+    userId: string,
+    articleId: string,
+    suggestionId: string,
+    confirmHighRisk: boolean,
+  ): Promise<IllustrationPlan> {
+    const article = await this.findOwnedArticle(userId, articleId)
+    const plan = article.illustrationPlan as IllustrationPlan | null
+    if (!plan) throw new NotFoundException('No illustration plan')
+    const suggestion = plan.suggestions.find((s) => s.id === suggestionId)
+    if (!suggestion) throw new NotFoundException('Suggestion not found')
+    if (suggestion.approval !== 'approved') {
+      throw new ConflictException('Only approved suggestions can be rendered')
+    }
+    if (suggestion.fidelityRisk === 'high' && !confirmHighRisk) {
+      throw new ConflictException(
+        'High-risk suggestions require explicit confirmation',
+      )
+    }
+
+    // Prompt uses ONLY the approved suggestion text — never the source blocks.
+    const prompt = `${suggestion.visualDescription}\n\nCaption: ${suggestion.caption}`
+    const result = await this.ai.image({ prompt })
+    const generatedAt = new Date().toISOString()
+
+    await this.prisma.transformerIllustrationImage.upsert({
+      where: {
+        articleId_suggestionId: { articleId: article.id, suggestionId },
+      },
+      create: {
+        articleId: article.id,
+        suggestionId,
+        // Prisma `Bytes` expects a Uint8Array (see createPdfSource note).
+        data: new Uint8Array(Buffer.from(result.base64, 'base64')),
+        mediaType: result.mediaType,
+        width: result.width,
+        height: result.height,
+        provider: this.ai.providerName,
+        model: result.model,
+        prompt,
+      },
+      update: {
+        data: new Uint8Array(Buffer.from(result.base64, 'base64')),
+        mediaType: result.mediaType,
+        width: result.width,
+        height: result.height,
+        provider: this.ai.providerName,
+        model: result.model,
+        prompt,
+      },
+    })
+
+    const updated: IllustrationPlan = {
+      suggestions: plan.suggestions.map((s) =>
+        s.id === suggestionId
+          ? {
+              ...s,
+              image: {
+                width: result.width,
+                height: result.height,
+                provider: this.ai.providerName,
+                model: result.model,
+                generatedAt,
+              },
+            }
+          : s,
+      ),
+    }
+    await this.prisma.transformedArticle.update({
+      where: { id: article.id },
+      data: { illustrationPlan: updated as unknown as Prisma.InputJsonValue },
+    })
+    return updated
+  }
+
+  /**
+   * The stored bytes for a rendered illustration (DET-261), ownership-scoped.
+   * 404 if the suggestion was never rendered. The controller streams these with
+   * the stored Content-Type.
+   */
+  async getIllustrationImage(
+    userId: string,
+    articleId: string,
+    suggestionId: string,
+  ): Promise<{ data: Buffer; mediaType: string }> {
+    const article = await this.findOwnedArticle(userId, articleId)
+    const image = await this.prisma.transformerIllustrationImage.findUnique({
+      where: {
+        articleId_suggestionId: { articleId: article.id, suggestionId },
+      },
+      select: { data: true, mediaType: true },
+    })
+    if (!image) throw new NotFoundException('No image for this suggestion')
+    return { data: Buffer.from(image.data), mediaType: image.mediaType }
+  }
+
+  /**
+   * Remove a rendered illustration (DET-261): delete the row and clear the
+   * suggestion's `image` metadata from the illustrationPlan. Ownership-scoped.
+   * Returns the updated IllustrationPlan.
+   */
+  async deleteIllustrationImage(
+    userId: string,
+    articleId: string,
+    suggestionId: string,
+  ): Promise<IllustrationPlan> {
+    const article = await this.findOwnedArticle(userId, articleId)
+    const plan = article.illustrationPlan as IllustrationPlan | null
+    if (!plan) throw new NotFoundException('No illustration plan')
+    const suggestion = plan.suggestions.find((s) => s.id === suggestionId)
+    if (!suggestion) throw new NotFoundException('Suggestion not found')
+
+    await this.prisma.transformerIllustrationImage.deleteMany({
+      where: { articleId: article.id, suggestionId },
+    })
+
+    const updated: IllustrationPlan = {
+      suggestions: plan.suggestions.map((s) =>
+        s.id === suggestionId ? { ...s, image: null } : s,
       ),
     }
     await this.prisma.transformedArticle.update({

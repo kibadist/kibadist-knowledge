@@ -31,6 +31,21 @@ export interface EmbeddingResult {
   dimensions: number
 }
 
+export interface ImageRequest {
+  prompt: string
+  /** Square or rectangular; provider maps it to output dimensions. */
+  size?: '1024x1024' | '1536x1024' | '1024x1536'
+}
+
+export interface ImageResult {
+  /** Raw PNG bytes, base64-encoded (no data: prefix). */
+  base64: string
+  mediaType: string
+  width: number
+  height: number
+  model: string
+}
+
 /**
  * Vendor-neutral AI surface. Business logic depends on this (via AiService),
  * never on a provider SDK, so swapping providers is a DI/config change.
@@ -39,6 +54,7 @@ export interface AiProvider {
   readonly name: string
   complete(request: CompletionRequest): Promise<CompletionResult>
   embed(request: EmbeddingRequest): Promise<EmbeddingResult>
+  image(request: ImageRequest): Promise<ImageResult>
 }
 
 /** DI token for the configured AiProvider implementation. */

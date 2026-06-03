@@ -3,14 +3,16 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
   Post,
   Req,
+  Res,
 } from '@nestjs/common'
 import { Throttle } from '@nestjs/throttler'
-import type { FastifyRequest } from 'fastify'
+import type { FastifyReply, FastifyRequest } from 'fastify'
 
 import type { AuthUser } from '../auth/auth.types'
 import { CurrentUser } from '../auth/current-user.decorator'
@@ -20,6 +22,7 @@ import { WorkspaceId } from '../workspaces/workspace-id.decorator'
 import { WorkspacesService } from '../workspaces/workspaces.service'
 import { CreateTextSourceDto } from './dto/create-text-source.dto'
 import { CreateUrlSourceDto } from './dto/create-url-source.dto'
+import { RenderIllustrationDto } from './dto/render-illustration.dto'
 import { UpdateIllustrationDto } from './dto/update-illustration.dto'
 import { UpdateLearningItemDto } from './dto/update-learning-item.dto'
 import { TransformerService } from './transformer.service'
@@ -162,6 +165,64 @@ export class TransformerController {
       id,
       suggestionId,
       dto.approval,
+    )
+  }
+
+  /**
+   * Render an APPROVED illustration suggestion into a real image (DET-261).
+   * AI-throttled. Every guard (ownership, approval, high-risk confirmation) is
+   * enforced in the service; the client is never trusted.
+   */
+  @Throttle(AI_THROTTLE)
+  @Post('articles/:id/illustrations/:suggestionId/render')
+  renderIllustration(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('suggestionId') suggestionId: string,
+    @Body() dto: RenderIllustrationDto,
+  ) {
+    return this.transformer.renderIllustration(
+      user.userId,
+      id,
+      suggestionId,
+      dto.confirmHighRisk ?? false,
+    )
+  }
+
+  /**
+   * Stream a rendered illustration's stored bytes (DET-261). Ownership-scoped,
+   * NOT AI-throttled (it's a read). The frontend fetches this with its bearer
+   * token and turns the bytes into an object URL (an `<img src>` can't send
+   * Authorization). 404 if the suggestion was never rendered.
+   */
+  @Get('articles/:id/illustrations/:suggestionId/image')
+  async getIllustrationImage(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('suggestionId') suggestionId: string,
+    @Res() reply: FastifyReply,
+  ) {
+    const image = await this.transformer.getIllustrationImage(
+      user.userId,
+      id,
+      suggestionId,
+    )
+    // Raw bytes with the stored content-type; @Res() takes over the response so
+    // Fastify sends the Buffer as-is (no JSON serialization).
+    await reply.type(image.mediaType).send(image.data)
+  }
+
+  /** Remove a rendered illustration (DET-261); clears suggestion.image. */
+  @Delete('articles/:id/illustrations/:suggestionId/image')
+  deleteIllustrationImage(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('suggestionId') suggestionId: string,
+  ) {
+    return this.transformer.deleteIllustrationImage(
+      user.userId,
+      id,
+      suggestionId,
     )
   }
 
