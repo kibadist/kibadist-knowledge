@@ -31,6 +31,7 @@ import { SessionsModule } from './sessions/sessions.module'
 import { SourceQaModule } from './source-qa/source-qa.module'
 import { UserThrottlerGuard } from './throttler/user-throttler.guard'
 import { TracksModule } from './tracks/tracks.module'
+import { TransformerModule } from './transformer/transformer.module'
 import { TutorModule } from './tutor/tutor.module'
 import { UsersModule } from './users/users.module'
 import { WorkspacesModule } from './workspaces/workspaces.module'
@@ -95,6 +96,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module'
     DecayModule,
     DomainsModule,
     TracksModule,
+    TransformerModule,
     GraphModule,
     InboxModule,
     IntakeModule,

@@ -39,6 +39,7 @@ model User {
   livingConcepts        LivingConcept[]
   workspaces            Workspace[]
   articleLearningEvents ArticleLearningEvent[]
+  transformerSources    TransformerSource[]
 
   @@map("user")
 }
@@ -58,11 +59,13 @@ model Workspace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner      User        @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  concepts   Concept[]
-  domains    Domain[]
-  tracks     Track[]
-  graphViews GraphView[]
+  owner              User                 @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  concepts           Concept[]
+  domains            Domain[]
+  tracks             Track[]
+  graphViews         GraphView[]
+  transformerSources TransformerSource[]
+  transformedArticles TransformedArticle[]
 
   @@index([ownerUserId])
   @@map("workspace")
@@ -1119,4 +1122,188 @@ enum SourceConfidence {
   user_authored_unsourced
   unsupported_or_invented
   needs_review
+}
+
+// ============================================================================
+// Source-Preserving Article Transformer (DET-247…259)
+//
+// A separate `/transformer` area (NOT the inbox/concepts flow): ingest pasted
+// text / a URL / a PDF, extract + segment into versioned, ordered, located
+// blocks, classify noise vs. signal, then (Wave B) generate a magazine-quality
+// article whose every sentence is traceable to source blocks. The data model
+// here encodes the core invariant: blocks referenced by an article are NEVER
+// mutated — re-extraction bumps `blocksVersion` and writes a NEW block version
+// (old rows retained), and each article PINS the `blocksVersion` it cites, so
+// re-running extraction can never silently break an article's references.
+// ============================================================================
+
+enum TransformerSourceType {
+  TEXT
+  URL
+  PDF
+}
+
+// The ingestion → extraction → segmentation → classification pipeline status,
+// persisted per step (no job queue; the pipeline runs in-process async). READY
+// is the terminal success of the M1 pipeline; EXTRACTION_FAILED / FAILED carry
+// a human-readable error. Non-terminal rows orphaned by a restart are swept to
+// FAILED on bootstrap (spec §Pipeline robustness).
+enum TransformerSourceStatus {
+  INGESTED
+  EXTRACTING
+  EXTRACTED
+  SEGMENTED
+  CLASSIFYING
+  READY
+  EXTRACTION_FAILED
+  FAILED
+}
+
+// The structural type of a source block, mapped deterministically from the
+// extracted SourceDocument (spec §Pipeline 3). UNKNOWN is the catch-all.
+enum TransformerBlockType {
+  HEADING
+  PARAGRAPH
+  LIST
+  QUOTE
+  TABLE
+  CODE
+  CAPTION
+  UNKNOWN
+}
+
+// A block's editorial classification. The heuristic pre-pass + one batched LLM
+// call assign these; code guards (NOT prompt trust) enforce that UNCERTAIN and
+// the substance classes (MAIN_ARGUMENT/DEFINITION/EXAMPLE/EVIDENCE) are never
+// removable, and that anything removable carries a noiseReason.
+enum TransformerBlockClass {
+  MAIN_ARGUMENT
+  DEFINITION
+  EXAMPLE
+  EVIDENCE
+  METHOD
+  BACKGROUND
+  SIDEBAR
+  CITATION
+  NAVIGATION_NOISE
+  ADVERTISEMENT
+  FOOTER
+  DUPLICATE
+  UNCERTAIN
+}
+
+// A TransformedArticle's lifecycle (Wave B). QUEUED→MODELING→PLANNING→
+// GENERATING→CHECKING then FINAL (passed the fidelity gate) or BLOCKED (gate
+// rejected) ; FAILED = could not produce schema-valid artifacts (loud failure).
+enum TransformedArticleStatus {
+  QUEUED
+  MODELING
+  PLANNING
+  GENERATING
+  CHECKING
+  FINAL
+  BLOCKED
+  FAILED
+}
+
+// An ingested source: pasted text, a fetched URL, or an uploaded PDF. Holds the
+// raw material (rawContent for text/HTML, rawFile for PDF bytes — bounded by
+// MAX_PDF_BYTES), the extraction output (`extractedText`, the canonical flat
+// text the blocks join to), and pipeline status/error. `blocksVersion` is
+// bumped on every (re)segmentation; blocks are versioned so an article's
+// references are never silently broken.
+model TransformerSource {
+  id              String                  @id @default(cuid())
+  workspaceId     String
+  userId          String
+  type            TransformerSourceType
+  status          TransformerSourceStatus @default(INGESTED)
+  title           String?
+  url             String?
+  fileName        String?
+  // Pasted text or fetched raw HTML. PDF bytes live in `rawFile` instead.
+  rawContent      String?
+  // Uploaded PDF bytes (bounded by MAX_PDF_BYTES at the controller).
+  rawFile         Bytes?
+  // { title?, author?, publishedDate?, pageCount?, truncated?, degraded? }
+  metadata        Json?
+  // Canonical flat text built by joining the final block texts with "\n\n";
+  // charStart/charEnd offsets on blocks index into this string.
+  extractedText   String?
+  extractionError String?
+  extractorVersion String?
+  // Bumped on every (re)segmentation. Blocks are written with this version; old
+  // versions are retained so articles that pinned them stay valid.
+  blocksVersion   Int                     @default(0)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  workspace Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  blocks    TransformerSourceBlock[]
+  articles  TransformedArticle[]
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([workspaceId, status])
+  @@map("transformer_sources")
+}
+
+// One ordered, located, classified block of a source, at a specific
+// `blocksVersion`. The (sourceId, version, orderIndex) tuple is unique: a block
+// has a stable position within its version. Re-extraction creates a NEW version
+// (new rows); old rows are never mutated, so an article pinning an old version
+// keeps referencing exactly the blocks it cited.
+model TransformerSourceBlock {
+  id                   String                 @id @default(cuid())
+  sourceId             String
+  version              Int
+  orderIndex           Int
+  blockType            TransformerBlockType
+  text                 String
+  pageNumber           Int?
+  charStart            Int?
+  charEnd              Int?
+  classification       TransformerBlockClass?
+  classificationStatus String                 @default("pending")
+  removable            Boolean                @default(false)
+  noiseReason          String?
+
+  source TransformerSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, version, orderIndex])
+  @@index([sourceId, version])
+  @@map("transformer_source_blocks")
+}
+
+// The generated article for a source (Wave B). Pins the `blocksVersion` it
+// references so re-extraction can't break it. The JSON columns hold the
+// intermediate + final artifacts (structure model, reshaping plan, article,
+// fidelity/coverage reports, optional illustration/learning layers). `error`
+// carries the failure/blocked reason.
+model TransformedArticle {
+  id              String                   @id @default(cuid())
+  sourceId        String
+  workspaceId     String
+  // Pins which block version this article's references resolve against.
+  blocksVersion   Int
+  status          TransformedArticleStatus @default(QUEUED)
+  structureModel  Json?
+  reshapingPlan   Json?
+  articleJson     Json?
+  fidelityReport  Json?
+  fidelityScore   Int?
+  coverageReport  Json?
+  illustrationPlan Json?
+  learningLayer   Json?
+  error           String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  source    TransformerSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+  @@index([workspaceId])
+  @@map("transformed_articles")
 }
