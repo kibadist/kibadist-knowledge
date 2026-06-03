@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import {
   api,
@@ -211,6 +211,19 @@ function RunningSession({ session }: { session: Session }) {
         </p>
       </div>
 
+      {/* Position in the queue — a finishing cue for the daily loop (DET-241). */}
+      <div
+        className='session-progressbar'
+        role='progressbar'
+        aria-valuenow={index}
+        aria-valuemax={session.items.length}
+      >
+        <span
+          className='session-progressbar-fill'
+          style={{ width: `${(index / session.items.length) * 100}%` }}
+        />
+      </div>
+
       <SessionCard
         key={current.id}
         item={current}
@@ -260,6 +273,21 @@ function SessionCard({
       api.reviewSessionItem(sessionId, item.conceptId, score),
     onSuccess: onRated,
   })
+
+  // Keyboard rating (DET-241): once revealed, 0–5 rate the recall — the
+  // repetitive action in the daily loop — without reaching for the mouse.
+  useEffect(() => {
+    if (!revealed) return
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.key >= '0' && e.key <= '5' && !review.isPending) {
+        review.mutate(Number(e.key))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [revealed, review])
 
   const prompt = cardsQuery.data?.[0]?.prompt
   const articulation = conceptQuery.data?.articulations[0]?.body
@@ -331,19 +359,24 @@ function SessionCard({
               How well did you recall it?
             </p>
             <div className='rate-row'>
-              {RATINGS.map((score) => (
-                <button
-                  key={score}
-                  type='button'
-                  onClick={() => review.mutate(score)}
-                  disabled={review.isPending}
-                  className='rate-btn'
-                >
-                  {score}
-                </button>
-              ))}
+              {RATINGS.map((score) => {
+                const tone = score <= 1 ? 'low' : score <= 3 ? 'mid' : 'high'
+                return (
+                  <button
+                    key={score}
+                    type='button'
+                    onClick={() => review.mutate(score)}
+                    disabled={review.isPending}
+                    className={`rate-btn rate-${tone}`}
+                  >
+                    {score}
+                  </button>
+                )
+              })}
             </div>
-            <p className='rate-hint'>0 = blank · 5 = effortless</p>
+            <p className='rate-hint'>
+              0 = blank · 5 = effortless · press <kbd>0</kbd>–<kbd>5</kbd>
+            </p>
             {review.isError && (
               <p className='notice notice-error' style={{ marginTop: 10 }}>
                 Could not record that. Try again.
