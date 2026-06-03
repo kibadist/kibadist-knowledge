@@ -54,8 +54,9 @@ describe('buildCoverageReport', () => {
     expect(report.representedBlockIds.sort()).toEqual(['b1', 'b2'])
     expect(report.removedBlocks).toEqual([{ blockId: 'b4', reason: 'footer' }])
     expect(report.uncertainBlockIds).toEqual(['b3'])
-    // b3 is unrepresented (uncertain but not removed, not represented).
-    expect(report.unrepresentedBlockIds).toEqual(['b3'])
+    // Buckets are disjoint: b3 lives in the uncertain bucket only (it still
+    // counts against coveragePercent — uncited uncertain IS a coverage miss).
+    expect(report.unrepresentedBlockIds).toEqual([])
   })
 
   it('paragraphMap covers abstract + all section paragraphs in order', () => {

@@ -9,11 +9,13 @@ import {
   Post,
   Req,
 } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import type { FastifyRequest } from 'fastify'
 
 import type { AuthUser } from '../auth/auth.types'
 import { CurrentUser } from '../auth/current-user.decorator'
 import { MAX_PDF_BYTES } from '../inbox/inbox.constants'
+import { AI_THROTTLE } from '../throttler/ai-throttle.constant'
 import { WorkspaceId } from '../workspaces/workspace-id.decorator'
 import { WorkspacesService } from '../workspaces/workspaces.service'
 import { CreateTextSourceDto } from './dto/create-text-source.dto'
@@ -38,6 +40,7 @@ export class TransformerController {
     private readonly workspaces: WorkspacesService,
   ) {}
 
+  @Throttle(AI_THROTTLE)
   @Post('sources/text')
   async createText(
     @CurrentUser() user: AuthUser,
@@ -51,6 +54,7 @@ export class TransformerController {
     return this.transformer.createTextSource(user.userId, workspaceId, dto)
   }
 
+  @Throttle(AI_THROTTLE)
   @Post('sources/url')
   async createUrl(
     @CurrentUser() user: AuthUser,
@@ -64,6 +68,7 @@ export class TransformerController {
     return this.transformer.createUrlSource(user.userId, workspaceId, dto)
   }
 
+  @Throttle(AI_THROTTLE)
   @Post('sources/pdf')
   async createPdf(
     @CurrentUser() user: AuthUser,
@@ -115,6 +120,7 @@ export class TransformerController {
     return this.transformer.blocks(user.userId, id)
   }
 
+  @Throttle(AI_THROTTLE)
   @Post('sources/:id/transform')
   transform(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.transformer.transform(user.userId, id)
@@ -125,6 +131,17 @@ export class TransformerController {
     return this.transformer.getArticle(user.userId, id)
   }
 
+  /**
+   * Blocks at the article's PINNED blocksVersion (DET-249/257): the inspector
+   * must resolve sourceBlockIds against the version the article was generated
+   * from, not the source's current version (which a re-extraction may bump).
+   */
+  @Get('articles/:id/blocks')
+  articleBlocks(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.transformer.articleBlocks(user.userId, id)
+  }
+
+  @Throttle(AI_THROTTLE)
   @Post('articles/:id/illustrations')
   generateIllustrations(
     @CurrentUser() user: AuthUser,
@@ -148,6 +165,7 @@ export class TransformerController {
     )
   }
 
+  @Throttle(AI_THROTTLE)
   @Post('articles/:id/learning-layer')
   generateLearningLayer(
     @CurrentUser() user: AuthUser,

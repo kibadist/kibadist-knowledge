@@ -51,16 +51,17 @@ export default function ArticlePage() {
 
   const article = articleQuery.data
 
-  // Resolve the source's blocks for the inspector (DET-257) + coverage previews.
-  // Only fetch once we know the source id and the article has a body to audit.
+  // Resolve blocks for the inspector (DET-257) + coverage previews at the
+  // article's PINNED blocksVersion — never the source's current version, which
+  // a later re-extraction may bump (that would orphan every reference here).
   const sourceQuery = useQuery({
     queryKey: ['transformer-source', article?.sourceId],
     queryFn: () => api.getTransformerSource(article?.sourceId ?? ''),
     enabled: Boolean(article?.sourceId),
   })
   const blocksQuery = useQuery({
-    queryKey: ['transformer-source-blocks', article?.sourceId],
-    queryFn: () => api.getTransformerSourceBlocks(article?.sourceId ?? ''),
+    queryKey: ['transformer-article-blocks', articleId],
+    queryFn: () => api.getTransformedArticleBlocks(articleId),
     enabled: Boolean(article?.sourceId),
   })
 

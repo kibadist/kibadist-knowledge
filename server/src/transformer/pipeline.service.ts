@@ -172,10 +172,14 @@ export class PipelineService implements OnApplicationBootstrap {
     await this.setStatus(sourceId, TransformerSourceStatus.EXTRACTING)
     let segmented: SegmentedSource
     let degraded = false
+    let pageCount: number | undefined
+    let clipped = false
     try {
       const extraction = await this.extract(source)
       segmented = extraction.segmented
       degraded = extraction.degraded
+      pageCount = extraction.pageCount
+      clipped = extraction.clipped ?? false
     } catch (error) {
       await this.failSource(
         sourceId,
@@ -194,8 +198,14 @@ export class PipelineService implements OnApplicationBootstrap {
     // are retained so any article pinning them stays valid (DET-249).
     const nextVersion = source.blocksVersion + 1
     const truncated =
-      segmented.blocks.length >= 600 || segmented.extractedText.length >= 50_000
-    const metadata = mergeMetadata(source.metadata, { truncated, degraded })
+      clipped ||
+      segmented.blocks.length >= 600 ||
+      segmented.extractedText.length >= 50_000
+    const metadata = mergeMetadata(source.metadata, {
+      truncated,
+      degraded,
+      ...(pageCount !== undefined ? { pageCount } : {}),
+    })
 
     await this.prisma.$transaction([
       this.prisma.transformerSource.update({
@@ -270,7 +280,12 @@ export class PipelineService implements OnApplicationBootstrap {
     rawContent: string | null
     rawFile: Uint8Array | null
     url: string | null
-  }): Promise<{ segmented: SegmentedSource; degraded: boolean }> {
+  }): Promise<{
+    segmented: SegmentedSource
+    degraded: boolean
+    pageCount?: number
+    clipped?: boolean
+  }> {
     switch (source.type) {
       case TransformerSourceType.TEXT: {
         const doc = extractTextDocument(source.rawContent ?? '')
@@ -288,12 +303,19 @@ export class PipelineService implements OnApplicationBootstrap {
       }
       case TransformerSourceType.PDF: {
         if (!source.rawFile) throw new Error('PDF source has no file bytes')
-        const { pages } = await extractPdfPages(Buffer.from(source.rawFile))
+        const { pages, pageCount, clipped } = await extractPdfPages(
+          Buffer.from(source.rawFile),
+        )
         if (pages.length === 0) {
           throw new Error('No extractable text found in PDF')
         }
         // PDF structure is largely unrecoverable — always degraded.
-        return { segmented: segmentPdfPages(pages), degraded: true }
+        return {
+          segmented: segmentPdfPages(pages),
+          degraded: true,
+          pageCount,
+          clipped,
+        }
       }
       default:
         throw new Error(`Unsupported source type: ${source.type}`)

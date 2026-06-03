@@ -252,8 +252,29 @@ export class TransformerService {
       select: { id: true, blocksVersion: true },
     })
     if (!source) throw new NotFoundException('Source not found')
+    return this.blocksForVersion(source.id, source.blocksVersion)
+  }
+
+  /**
+   * Blocks at the article's PINNED blocksVersion (DET-249/257). The source
+   * inspector must resolve an article's sourceBlockIds against the version the
+   * article was generated from — a later re-extraction bumps the source's
+   * current version and would orphan every reference.
+   */
+  async articleBlocks(
+    userId: string,
+    articleId: string,
+  ): Promise<TransformerBlockView[]> {
+    const article = await this.findOwnedArticle(userId, articleId)
+    return this.blocksForVersion(article.sourceId, article.blocksVersion)
+  }
+
+  private async blocksForVersion(
+    sourceId: string,
+    version: number,
+  ): Promise<TransformerBlockView[]> {
     const rows = await this.prisma.transformerSourceBlock.findMany({
-      where: { sourceId: source.id, version: source.blocksVersion },
+      where: { sourceId, version },
       orderBy: { orderIndex: 'asc' },
     })
     return rows.map((b) => ({

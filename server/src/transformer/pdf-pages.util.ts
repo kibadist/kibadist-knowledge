@@ -30,7 +30,19 @@ export interface PdfExtraction {
   /** Total pages reported by the PDF (may exceed `pages.length` if a page had
    *  no extractable text). */
   pageCount: number
+  /** True when extraction stopped early because the char budget was exhausted. */
+  clipped: boolean
 }
+
+/**
+ * Resource bounds (security review): a 10MB compressed PDF can decompress to
+ * tens of thousands of pages / hundreds of MB of text, and extraction runs
+ * synchronously in the API process. Reject page bombs outright and stop
+ * accumulating text once the budget is spent (surfaced as `clipped` →
+ * `metadata.truncated`).
+ */
+export const MAX_PDF_PAGES = 500
+export const MAX_PDF_TEXT_CHARS = 2_000_000
 
 export async function extractPdfPages(buffer: Buffer): Promise<PdfExtraction> {
   // Lazy import: the (sizeable) pdf.js bundle only loads when a PDF is actually
@@ -41,17 +53,31 @@ export async function extractPdfPages(buffer: Buffer): Promise<PdfExtraction> {
   const { text, totalPages } = await extractText(pdf, { mergePages: false })
   const pageTexts: string[] = Array.isArray(text) ? text : [text]
 
+  const pageCount = totalPages ?? pageTexts.length
+  if (pageCount > MAX_PDF_PAGES) {
+    throw new Error(
+      `PDF has too many pages (${pageCount} > ${MAX_PDF_PAGES} limit)`,
+    )
+  }
+
   const pages: PdfPageBlocks[] = []
+  let budget = MAX_PDF_TEXT_CHARS
+  let clipped = false
   for (let i = 0; i < pageTexts.length; i++) {
+    if (budget <= 0) {
+      clipped = true
+      break
+    }
     const normalized = normalizePageText(pageTexts[i] ?? '')
     if (!normalized) continue
+    budget -= normalized.length
     // Reuse the established PDF paragraph segmenter (markdown disabled inside).
     const doc = extractPdfDocument(normalized)
     if (doc.blocks.length === 0) continue
     pages.push({ pageNumber: i + 1, blocks: doc.blocks })
   }
 
-  return { pages, pageCount: totalPages ?? pageTexts.length }
+  return { pages, pageCount, clipped }
 }
 
 /**

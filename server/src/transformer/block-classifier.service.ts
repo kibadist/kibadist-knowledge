@@ -144,6 +144,13 @@ export class BlockClassifierService {
     // Exact-duplicate text (a verbatim repeat of an earlier block) → DUPLICATE.
     // Only meaningfully-long text, so a repeated short heading like "Notes"
     // isn't culled; short repeats go to the LLM.
+    //
+    // DESIGN DECISION (reviewed): coalescing a verbatim repeat cannot lose
+    // substance because the FIRST occurrence is always kept and is what article
+    // paragraphs cite — only the redundant copy is marked removable ("remove
+    // duplicate text" is an explicitly allowed transformation, DET-252). A
+    // restated thesis loses its rhetorical position, but that is form, not
+    // substance, which is the trade the transformer is allowed to make.
     if (normalized.length >= 24) {
       if (seenText.has(normalized)) {
         return {

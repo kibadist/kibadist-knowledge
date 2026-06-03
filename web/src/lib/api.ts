@@ -1615,6 +1615,11 @@ export const api = {
   // The article + fidelity + coverage + status (poll while non-terminal).
   getTransformedArticle: (id: string) =>
     request<TransformedArticle>(`/transformer/articles/${id}`),
+  // Blocks at the article's PINNED blocksVersion — the inspector must resolve
+  // sourceBlockIds against the version the article was generated from, not the
+  // source's current version (a re-extraction bumps it).
+  getTransformedArticleBlocks: (id: string) =>
+    request<TransformerBlockView[]>(`/transformer/articles/${id}/blocks`),
 
   // Illustration suggestions (DET-259): suggestions only, never images.
   generateIllustrations: (articleId: string) =>

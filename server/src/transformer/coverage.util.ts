@@ -55,10 +55,17 @@ export function buildCoverageReport(
   for (const e of article.sourceExamples) cite(e.sourceBlockIds)
   for (const c of article.caveats) cite(c.sourceBlockIds)
 
-  // Unrepresented = everything not represented and not removed.
+  // Unrepresented = everything not represented, not removed, and not uncertain.
+  // Uncertain blocks get their own bucket (preserved by policy, never removed),
+  // so they must not double-count here — the buckets are disjoint and a UI may
+  // sum them. Uncertain blocks still count against coveragePercent below: an
+  // uncited uncertain block IS a coverage miss.
   const unrepresentedBlockIds = blocks
     .map((b) => b.id)
-    .filter((id) => !represented.has(id) && !removedIds.has(id))
+    .filter(
+      (id) =>
+        !represented.has(id) && !removedIds.has(id) && !uncertainIds.has(id),
+    )
 
   const denominator = total - removedIds.size
   const coveragePercent =
