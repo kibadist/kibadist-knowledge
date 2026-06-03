@@ -59,6 +59,11 @@ export default function TracksPage() {
       <div className='page-head'>
         <div className='section-label'>§ Tracks · Intent</div>
         <h1>Tracks</h1>
+        {tracks.length > 0 && (
+          <div className='head-count intent'>
+            {tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}
+          </div>
+        )}
         <p className='lede'>
           What you’re trying to understand. Each track sets its own required
           depth for a concept — the same idea can be shallow in one and deep in
@@ -86,7 +91,9 @@ export default function TracksPage() {
 
       {byStatus.map((group) => (
         <section key={group.status} className='track-group'>
-          <h2 className='track-group-head'>{STATUS_LABELS[group.status]}</h2>
+          <h2 className='track-group-head'>
+            {STATUS_LABELS[group.status]} <span>{group.items.length}</span>
+          </h2>
           <ul className='rows'>
             {group.items.map((track) => (
               <TrackCard key={track.id} track={track} />
@@ -124,14 +131,14 @@ function TrackCard({ track }: { track: Track }) {
         <div className='track-progress'>
           <div className='track-progress-bar'>
             <span
-              className='track-progress-fill'
+              className={`track-progress-fill${pct === 100 ? ' is-complete' : ''}`}
               style={{ width: `${pct}%` }}
             />
           </div>
           <span className='track-progress-label'>
             {total === 0
               ? 'No concepts yet'
-              : `${met} / ${total} at required depth`}
+              : `${pct}% · ${met} / ${total} at depth`}
           </span>
         </div>
       </Link>
