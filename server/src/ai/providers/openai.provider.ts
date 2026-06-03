@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common'
 import OpenAI from 'openai'
@@ -126,6 +127,14 @@ export class OpenAiProvider implements AiProvider {
       if (status === 429) {
         return new ServiceUnavailableException(
           `OpenAI rate limit or quota exceeded: ${message}`,
+        )
+      }
+      // 4xx (e.g. a gpt-image-1 content-policy refusal) is a rejected request,
+      // not a server fault — surface it as a 4xx so the UI can say "the prompt
+      // was rejected" rather than implying an upstream outage.
+      if (status >= 400 && status < 500) {
+        return new BadRequestException(
+          `OpenAI rejected the request (${status}): ${message}`,
         )
       }
       return new BadGatewayException(

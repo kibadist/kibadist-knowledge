@@ -207,9 +207,14 @@ export class TransformerController {
       id,
       suggestionId,
     )
-    // Raw bytes with the stored content-type; @Res() takes over the response so
-    // Fastify sends the Buffer as-is (no JSON serialization).
-    await reply.type(image.mediaType).send(image.data)
+    // Raw bytes; @Res() takes over the response so Fastify sends the Buffer
+    // as-is (no JSON serialization). The stored bytes are always PNG, so pin the
+    // content-type to a constant and forbid MIME-sniffing — defence against a
+    // future provider ever returning a sniffable type.
+    await reply
+      .header('X-Content-Type-Options', 'nosniff')
+      .type('image/png')
+      .send(image.data)
   }
 
   /** Remove a rendered illustration (DET-261); clears suggestion.image. */

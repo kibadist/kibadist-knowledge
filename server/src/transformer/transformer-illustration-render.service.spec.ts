@@ -42,6 +42,9 @@ function makeHarness(suggestions: IllustrationSuggestion[]) {
     `${articleId}:${suggestionId}`
 
   const prisma = {
+    // The service batches the image-row write + plan patch in $transaction([...]);
+    // the mocked ops already run when the array is built, so just await them.
+    $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
     transformedArticle: {
       findFirst: jest.fn(async ({ where }: { where: { id: string } }) =>
         where.id === 'a1' ? { ...article } : null,

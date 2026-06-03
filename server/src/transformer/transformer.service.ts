@@ -424,33 +424,17 @@ export class TransformerService {
     const result = await this.ai.image({ prompt })
     const generatedAt = new Date().toISOString()
 
-    await this.prisma.transformerIllustrationImage.upsert({
-      where: {
-        articleId_suggestionId: { articleId: article.id, suggestionId },
-      },
-      create: {
-        articleId: article.id,
-        suggestionId,
-        // Prisma `Bytes` expects a Uint8Array (see createPdfSource note).
-        data: new Uint8Array(Buffer.from(result.base64, 'base64')),
-        mediaType: result.mediaType,
-        width: result.width,
-        height: result.height,
-        provider: this.ai.providerName,
-        model: result.model,
-        prompt,
-      },
-      update: {
-        data: new Uint8Array(Buffer.from(result.base64, 'base64')),
-        mediaType: result.mediaType,
-        width: result.width,
-        height: result.height,
-        provider: this.ai.providerName,
-        model: result.model,
-        prompt,
-      },
-    })
-
+    const bytes = new Uint8Array(Buffer.from(result.base64, 'base64'))
+    const imageRow = {
+      // Prisma `Bytes` expects a Uint8Array (see createPdfSource note).
+      data: bytes,
+      mediaType: result.mediaType,
+      width: result.width,
+      height: result.height,
+      provider: this.ai.providerName,
+      model: result.model,
+      prompt,
+    }
     const updated: IllustrationPlan = {
       suggestions: plan.suggestions.map((s) =>
         s.id === suggestionId
@@ -467,10 +451,21 @@ export class TransformerService {
           : s,
       ),
     }
-    await this.prisma.transformedArticle.update({
-      where: { id: article.id },
-      data: { illustrationPlan: updated as unknown as Prisma.InputJsonValue },
-    })
+    // Atomic: the image bytes and the plan's `image` metadata must never desync
+    // (an orphan row with a null plan field, or vice-versa).
+    await this.prisma.$transaction([
+      this.prisma.transformerIllustrationImage.upsert({
+        where: {
+          articleId_suggestionId: { articleId: article.id, suggestionId },
+        },
+        create: { articleId: article.id, suggestionId, ...imageRow },
+        update: imageRow,
+      }),
+      this.prisma.transformedArticle.update({
+        where: { id: article.id },
+        data: { illustrationPlan: updated as unknown as Prisma.InputJsonValue },
+      }),
+    ])
     return updated
   }
 
@@ -511,19 +506,21 @@ export class TransformerService {
     const suggestion = plan.suggestions.find((s) => s.id === suggestionId)
     if (!suggestion) throw new NotFoundException('Suggestion not found')
 
-    await this.prisma.transformerIllustrationImage.deleteMany({
-      where: { articleId: article.id, suggestionId },
-    })
-
     const updated: IllustrationPlan = {
       suggestions: plan.suggestions.map((s) =>
         s.id === suggestionId ? { ...s, image: null } : s,
       ),
     }
-    await this.prisma.transformedArticle.update({
-      where: { id: article.id },
-      data: { illustrationPlan: updated as unknown as Prisma.InputJsonValue },
-    })
+    // Atomic: drop the bytes and clear the plan's `image` field together.
+    await this.prisma.$transaction([
+      this.prisma.transformerIllustrationImage.deleteMany({
+        where: { articleId: article.id, suggestionId },
+      }),
+      this.prisma.transformedArticle.update({
+        where: { id: article.id },
+        data: { illustrationPlan: updated as unknown as Prisma.InputJsonValue },
+      }),
+    ])
     return updated
   }
 
