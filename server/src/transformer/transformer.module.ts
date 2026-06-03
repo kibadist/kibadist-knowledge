@@ -2,8 +2,15 @@ import { Module } from '@nestjs/common'
 
 import { AiModule } from '../ai/ai.module'
 import { WorkspacesModule } from '../workspaces/workspaces.module'
+import { ArticleGeneratorService } from './article-generator.service'
+import { ArticlePipelineService } from './article-pipeline.service'
 import { BlockClassifierService } from './block-classifier.service'
+import { FidelityCheckerService } from './fidelity-checker.service'
+import { IllustrationPlannerService } from './illustration-planner.service'
+import { LearningLayerService } from './learning-layer.service'
 import { PipelineService } from './pipeline.service'
+import { ReshapingPlanService } from './reshaping-plan.service'
+import { StructureModelService } from './structure-model.service'
 import { TransformerController } from './transformer.controller'
 import { TransformerService } from './transformer.service'
 
@@ -19,7 +26,18 @@ import { TransformerService } from './transformer.service'
 @Module({
   imports: [AiModule, WorkspacesModule],
   controllers: [TransformerController],
-  providers: [TransformerService, PipelineService, BlockClassifierService],
+  providers: [
+    TransformerService,
+    PipelineService,
+    BlockClassifierService,
+    StructureModelService,
+    ReshapingPlanService,
+    ArticleGeneratorService,
+    FidelityCheckerService,
+    IllustrationPlannerService,
+    LearningLayerService,
+    ArticlePipelineService,
+  ],
   exports: [TransformerService, PipelineService],
 })
 export class TransformerModule {}

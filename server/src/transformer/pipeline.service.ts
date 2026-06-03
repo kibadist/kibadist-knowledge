@@ -12,6 +12,7 @@ import {
   extractTextDocument,
   extractUrlDocument,
 } from '../source-document/source-document'
+import { ArticlePipelineService } from './article-pipeline.service'
 import { BlockClassifierService } from './block-classifier.service'
 import { extractPdfPages } from './pdf-pages.util'
 import {
@@ -67,6 +68,10 @@ export class PipelineService implements OnApplicationBootstrap {
   constructor(
     private readonly prisma: PrismaService,
     private readonly classifier: BlockClassifierService,
+    // Optional so the Wave A unit tests (which exercise only extract→classify)
+    // can construct the pipeline without the M2/M3 article services. In the app
+    // it is always provided by DI; `onSourceReady` no-ops when it is absent.
+    private readonly articlePipeline?: ArticlePipelineService,
   ) {}
 
   /**
@@ -296,12 +301,23 @@ export class PipelineService implements OnApplicationBootstrap {
   }
 
   /**
-   * Wave B EXTENSION POINT. Called once a source reaches READY. Wave B overrides
-   * this to create a TransformedArticle and run the article-generation steps
-   * (structure model → plan → generation → fidelity). Currently a no-op.
+   * Called once a source reaches READY: auto-create a TransformedArticle and run
+   * the article-generation steps (structure model → plan → generation →
+   * fidelity). `createAndRun` returns immediately after firing the article
+   * pipeline as a detached promise, so READY is never blocked on generation.
    */
-  protected async onSourceReady(_sourceId: string): Promise<void> {
-    // intentionally empty — Wave B hook.
+  protected async onSourceReady(sourceId: string): Promise<void> {
+    if (!this.articlePipeline) return
+    try {
+      await this.articlePipeline.createAndRun(sourceId)
+    } catch (error) {
+      // Article creation failing must not roll back the source's READY status.
+      this.logger.error(
+        `Auto-create article failed for source ${sourceId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
   }
 
   private async setStatus(

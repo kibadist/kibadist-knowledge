@@ -5,6 +5,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Req,
 } from '@nestjs/common'
@@ -17,6 +18,8 @@ import { WorkspaceId } from '../workspaces/workspace-id.decorator'
 import { WorkspacesService } from '../workspaces/workspaces.service'
 import { CreateTextSourceDto } from './dto/create-text-source.dto'
 import { CreateUrlSourceDto } from './dto/create-url-source.dto'
+import { UpdateIllustrationDto } from './dto/update-illustration.dto'
+import { UpdateLearningItemDto } from './dto/update-learning-item.dto'
 import { TransformerService } from './transformer.service'
 
 /**
@@ -110,5 +113,61 @@ export class TransformerController {
   @Get('sources/:id/blocks')
   blocks(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.transformer.blocks(user.userId, id)
+  }
+
+  @Post('sources/:id/transform')
+  transform(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.transformer.transform(user.userId, id)
+  }
+
+  @Get('articles/:id')
+  getArticle(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.transformer.getArticle(user.userId, id)
+  }
+
+  @Post('articles/:id/illustrations')
+  generateIllustrations(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.transformer.generateIllustrations(user.userId, id)
+  }
+
+  @Patch('articles/:id/illustrations/:suggestionId')
+  updateIllustration(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('suggestionId') suggestionId: string,
+    @Body() dto: UpdateIllustrationDto,
+  ) {
+    return this.transformer.updateIllustrationApproval(
+      user.userId,
+      id,
+      suggestionId,
+      dto.approval,
+    )
+  }
+
+  @Post('articles/:id/learning-layer')
+  generateLearningLayer(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.transformer.generateLearningLayer(user.userId, id)
+  }
+
+  @Patch('articles/:id/learning-layer/items/:itemId')
+  updateLearningItem(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateLearningItemDto,
+  ) {
+    return this.transformer.updateLearningItem(
+      user.userId,
+      id,
+      itemId,
+      dto.validationStatus,
+    )
   }
 }
