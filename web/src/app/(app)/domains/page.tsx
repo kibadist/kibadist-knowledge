@@ -26,6 +26,11 @@ export default function DomainsPage() {
       <div className='page-head'>
         <div className='section-label'>§ Domains · Regions</div>
         <h1>Domains</h1>
+        {domains.length > 0 && (
+          <div className='head-count region'>
+            {domains.length} {domains.length === 1 ? 'region' : 'regions'}
+          </div>
+        )}
         <p className='lede'>
           Semantic regions your knowledge falls into — not folders. A concept
           can live in several. Domains accrue over time; you’re never forced to
@@ -103,12 +108,15 @@ function DomainCard({
   })
 
   return (
-    <li className='domain-card'>
-      <span
-        className='domain-swatch'
-        style={{ background: domain.color ?? 'var(--rule-soft)' }}
-        aria-hidden
-      />
+    // The domain's color is carried as a left "spine" so the list is scannable
+    // by region at a glance (DET-241), rather than via a tiny swatch.
+    <li
+      className='domain-card'
+      style={{
+        borderLeftColor: domain.color ?? 'var(--rule)',
+        borderLeftWidth: 4,
+      }}
+    >
       {editing ? (
         <form
           className='domain-edit'
