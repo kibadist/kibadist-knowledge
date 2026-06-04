@@ -64,7 +64,10 @@ const article: ArticleJsonV2 = {
       heading: 'Dosing guidance',
       headingSource: 'original',
       headingSourceBlockIds: ['b1'],
-      sourceBlockIds: ['b1', 'b2', 'b5'],
+      // The section represents the dosing-limit blocks (b3, b4) too — they back
+      // the top-level caveats, so the section overlaps them. This lets DET-272
+      // place each caveat as an inline callout BESIDE this section.
+      sourceBlockIds: ['b1', 'b2', 'b3', 'b4', 'b5'],
       blocks: [
         {
           id: 'p1',

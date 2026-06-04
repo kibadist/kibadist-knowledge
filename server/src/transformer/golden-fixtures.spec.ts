@@ -4,12 +4,14 @@ import {
   v1Fixture,
   v2Fixtures,
 } from './__fixtures__'
+import { caveatHeavy } from './__fixtures__/caveat-heavy'
 import { UNSUPPORTED_HIGHLIGHT_UNKNOWN_ID } from './__fixtures__/unsupported-highlight'
 import {
   collectArticleSourceBlockIds,
   findUnknownSourceBlockIds,
   toArticleV2,
 } from './article-compat.util'
+import { placeCallouts } from './callout-placement.util'
 import { buildCoverageReport } from './coverage.util'
 import { mergeDeterministicChecks } from './fidelity-checker.service'
 import { ArticleJsonV2Schema } from './schemas'
@@ -190,6 +192,33 @@ describe.each(
     expect(merged.lostInformation).toEqual([])
     expect(merged.unsupportedHeadings).toEqual([])
     expect(merged.approved).toBe(true)
+  })
+})
+
+describe('golden fixture: inline callout placement (DET-272)', () => {
+  it('places every caveat that overlaps a section beside that section', () => {
+    const { article } = caveatHeavy
+    const placement = placeCallouts(article)
+
+    // The caveat-heavy fixture's single section overlaps both caveats' source
+    // blocks (b3, b4), so BOTH caveats land beside it and nothing is unplaced.
+    const placedCaveats = Object.values(placement.bySection)
+      .flat()
+      .filter((c) => c.kind === 'caveat')
+    expect(placedCaveats).toHaveLength(article.caveats.length)
+    expect(placement.unplaced).toEqual([])
+
+    // Each placed caveat carries a human-readable reason and mirrors its source
+    // item's text exactly (re-placement, never a rewrite — plan decision 8).
+    for (const c of placedCaveats) {
+      expect(c.placementReason).toMatch(/overlap section/)
+      expect(article.caveats.some((src) => src.text === c.text)).toBe(true)
+    }
+  })
+
+  it('is deterministic and idempotent over the fixture', () => {
+    const { article } = caveatHeavy
+    expect(placeCallouts(article)).toEqual(placeCallouts(article))
   })
 })
 

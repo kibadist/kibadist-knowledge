@@ -52,10 +52,29 @@ const sampleArticle: ArticleJsonV2 = {
       fidelityRisk: 'low',
     },
   ],
-  sections: [],
+  sections: [
+    {
+      id: 's1',
+      heading: 'Only section',
+      headingSource: 'original',
+      sourceBlockIds: ['b1'],
+      blocks: [
+        {
+          id: 'sp1',
+          type: 'paragraph',
+          text: 'x',
+          sourceBlockIds: ['b1'],
+          transformationType: 'verbatim',
+          fidelityRisk: 'low',
+        },
+      ],
+    },
+  ],
   keyTerms: [],
   sourceExamples: [],
-  caveats: [],
+  // A caveat backed by b1 overlaps the only section, so the pipeline's
+  // deterministic placement (DET-272) must anchor it beside s1.
+  caveats: [{ text: 'A caveat', sourceBlockIds: ['b1'] }],
   originalStructure: [],
 }
 
@@ -125,6 +144,18 @@ describe('ArticlePipelineService.run', () => {
     expect(article.fidelityScore).toBe(98)
     expect(article.articleJson).toBeTruthy()
     expect(article.coverageReport).toBeTruthy()
+
+    // The pipeline attaches deterministic inline callout placements (DET-272) to
+    // the stored articleJson — computed in code, not by the generator stub.
+    const stored = article.articleJson as ArticleJsonV2
+    expect(stored.calloutPlacements).toBeDefined()
+    expect(stored.calloutPlacements?.bySection.s1).toHaveLength(1)
+    expect(stored.calloutPlacements?.bySection.s1[0]).toMatchObject({
+      kind: 'caveat',
+      text: 'A caveat',
+      id: 'co-caveat-0',
+    })
+    expect(stored.calloutPlacements?.unplaced).toEqual([])
   })
 
   it('ends BLOCKED when the fidelity gate rejects', async () => {

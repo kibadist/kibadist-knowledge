@@ -215,4 +215,76 @@ describe('ArticleView (v2 renderer)', () => {
       screen.queryByRole('button', { name: /This paragraph has no source/ }),
     ).toBeNull()
   })
+
+  // --- DET-272: inline callout placement -----------------------------------
+
+  it('renders a placed callout beside its section with a kind label (DET-272)', () => {
+    const { container } = renderArticleView(vi.fn())
+    // The placed caveat is rendered inside the section wrapper that owns the
+    // section's DOM id (the anchor target), in the margin-note rail.
+    const wrap = container.querySelector('#s1.tf-section-wrap')
+    expect(wrap).toBeInTheDocument()
+    const rail = wrap?.querySelector('.tf-callout-rail')
+    expect(rail).toBeInTheDocument()
+    // The placed caveat's text renders inside the rail (margin note).
+    expect(rail?.textContent).toContain('A placed caveat beside the section.')
+    // The small-caps kind label is present (two: the rail note + the index row).
+    expect(screen.getAllByText('Caveat').length).toBeGreaterThan(0)
+  })
+
+  it('a placed callout is clickable → onInspect with its sourceBlockIds and kind', async () => {
+    const onInspect = vi.fn()
+    renderArticleView(onInspect)
+    const user = userEvent.setup()
+
+    await user.click(
+      screen.getByRole('button', {
+        name: /A placed caveat beside the section\./,
+      }),
+    )
+    expect(onInspect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Caveat',
+        transformedText: 'A placed caveat beside the section.',
+        sourceBlockIds: ['b2'],
+      }),
+    )
+  })
+
+  it('renders the compact end index with an anchor link back to the section (DET-272)', () => {
+    const { container } = renderArticleView(vi.fn())
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Index' }),
+    ).toBeInTheDocument()
+    // The index links back to the placed callout's section via #section-id.
+    const link = container.querySelector('a.tf-callout-index-link')
+    expect(link).toBeInTheDocument()
+    expect(link?.getAttribute('href')).toBe('#s1')
+  })
+
+  it('renders the unplaced fallback group in full (DET-272)', () => {
+    renderArticleView(vi.fn())
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Notes' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('An unplaced example with nowhere inline to live.'),
+    ).toBeInTheDocument()
+  })
+
+  it('no longer renders the old terminal end-matter sections or the caveat pull-quote (DET-272)', () => {
+    const { container } = renderArticleView(vi.fn())
+    // The old full sections are replaced by the compact index.
+    expect(
+      screen.queryByRole('heading', { name: 'Important caveats' }),
+    ).toBeNull()
+    expect(
+      screen.queryByRole('heading', { name: 'Source examples' }),
+    ).toBeNull()
+    // The only pull-quote left is the first-class generator block (b5); no
+    // caveat-sourced pull-quote is injected mid-article anymore.
+    const pullQuotes = container.querySelectorAll('.tf-pullquote')
+    expect(pullQuotes).toHaveLength(1)
+    expect(pullQuotes[0].textContent).toContain('A pulled excerpt.')
+  })
 })

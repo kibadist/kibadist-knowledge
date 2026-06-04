@@ -286,18 +286,38 @@ export interface ArticleReadingAids {
   sourceHighlights?: { text: string; sourceBlockIds: string[] }[]
 }
 
-/** One callout placed inline against a section (DET-272). */
-export interface ArticleCalloutPlacement {
-  /** Reference to the placed item (end-matter index / callout block id). */
-  refId: string
-  sectionId: string
+/**
+ * One end-matter item (key term / source example / caveat) re-placed inline as a
+ * section callout (DET-272). This is a REFERENCE WITH PLACEMENT METADATA, not a
+ * new piece of content: the top-level `keyTerms` / `sourceExamples` / `caveats`
+ * arrays remain the single source of truth (plan decision 8); the callout simply
+ * carries the same item's `text` (and, for a key term, its `term`) plus where it
+ * was placed and why. Ids are derived deterministically (e.g. `co-keyTerm-0`) —
+ * never random — so placement is reproducible.
+ */
+export interface ArticleCallout {
+  /** Deterministic id, e.g. `co-keyTerm-0` / `co-example-1` / `co-caveat-2`. */
+  id: string
+  kind: 'keyTerm' | 'example' | 'caveat'
+  /** Present only for `keyTerm` items — the term being defined. */
+  term?: string
+  /** The item's display text (the term for a key term, the body otherwise). */
+  text: string
+  sourceBlockIds: string[]
+  /** Human-readable reason, e.g. "3/4 source blocks overlap section 'Heading'". */
   placementReason: string
 }
 
-/** Where inline callouts were placed + what could not be placed (DET-272). */
-export interface ArticleCalloutPlacements {
-  bySection: Record<string, ArticleCalloutPlacement[]>
-  unplaced: ArticleCalloutPlacement[]
+/**
+ * Where inline callouts were placed + what could not be placed (DET-272).
+ * `bySection` maps a section id to the callouts anchored beside it; `unplaced`
+ * holds items with no confident section match (zero source-block overlap). The
+ * renderer shows placed callouts as margin notes / inline cards beside their
+ * section and the unplaced items in a general end-of-article group.
+ */
+export interface ArticleCalloutPlacement {
+  bySection: Record<string, ArticleCallout[]>
+  unplaced: ArticleCallout[]
 }
 
 /** Genre/shape of the article (DET-273). */
@@ -339,7 +359,7 @@ export interface ArticleJsonV2 {
   originalStructure: { blockId: string; blockType: string; preview: string }[]
   /* Forward-reserved optional fields (typed now; producers land later). */
   readingAids?: ArticleReadingAids
-  calloutPlacements?: ArticleCalloutPlacements
+  calloutPlacements?: ArticleCalloutPlacement
   shape?: ArticleShape
   reorderings?: ArticleReorderingAudit[]
 }

@@ -153,4 +153,30 @@ export const fixtureArticle: ArticleJsonV2 = {
   sourceExamples: [],
   caveats: [],
   originalStructure: [],
+  // Inline callout placement (DET-272). In production the SERVER computes this
+  // (deterministic, no LLM) and attaches it; the web test just includes it in
+  // the fixture so the renderer's margin-note / index / unplaced paths are
+  // covered. One caveat is placed beside section `s1`; one example is unplaced.
+  calloutPlacements: {
+    bySection: {
+      s1: [
+        {
+          id: 'co-caveat-0',
+          kind: 'caveat',
+          text: 'A placed caveat beside the section.',
+          sourceBlockIds: ['b2'],
+          placementReason: "1/1 source block overlap section 'All blocks'",
+        },
+      ],
+    },
+    unplaced: [
+      {
+        id: 'co-example-0',
+        kind: 'example',
+        text: 'An unplaced example with nowhere inline to live.',
+        sourceBlockIds: ['b6'],
+        placementReason: 'No source-block overlap with any section.',
+      },
+    ],
+  },
 }

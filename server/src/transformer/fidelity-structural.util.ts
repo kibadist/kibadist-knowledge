@@ -275,6 +275,13 @@ export function checkQuoteAttribution(
  * is a medium structural finding — EXCEPT pullQuote blocks, whose whole job is
  * to re-display source text for emphasis (exempt). If a CAVEAT is the duplicated
  * content (and the other side is not a pullQuote) → HIGH severity (blocks).
+ *
+ * `calloutPlacements` (DET-272) is INTENTIONALLY NOT walked here: those entries
+ * are the SAME end-matter items re-placed inline (references with placement
+ * metadata, per plan decision 8), not a second full rendering. The walk only
+ * visits section `blocks` + the top-level caveat/example/keyTerm arrays, so a
+ * placed callout can never collide with its own source array — keep it that way
+ * if this walk is extended.
  */
 export function checkDuplicateRendering(
   input: SourcePreservingArticle | ArticleJsonV2,

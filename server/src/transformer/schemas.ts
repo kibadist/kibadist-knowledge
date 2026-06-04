@@ -354,15 +354,24 @@ const readingAids = z.object({
     .optional(),
 })
 
-const calloutPlacement = z.object({
-  refId: z.string().min(1),
-  sectionId: z.string().min(1),
+// One end-matter item (key term / example / caveat) re-placed inline as a
+// callout (DET-272): a reference WITH placement metadata, not new content. The
+// id is deterministic (`co-<kind>-<index>`); `term` is present only for keyTerm.
+const callout = z.object({
+  id: z.string().min(1),
+  kind: z.enum(['keyTerm', 'example', 'caveat']),
+  term: z.string().min(1).optional(),
+  text: z.string().min(1),
+  // Placement source ids mirror the underlying end-matter item; an unplaced item
+  // may legitimately have zero overlap with any section but still carries its own
+  // ids, so we do not require non-empty here (the end-matter array is the gate).
+  sourceBlockIds: z.array(z.string().min(1)),
   placementReason: z.string().min(1),
 })
 
 const calloutPlacements = z.object({
-  bySection: z.record(z.string(), z.array(calloutPlacement)),
-  unplaced: z.array(calloutPlacement),
+  bySection: z.record(z.string(), z.array(callout)),
+  unplaced: z.array(callout),
 })
 
 const articleShape = z.enum([

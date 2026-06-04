@@ -1131,15 +1131,18 @@ export interface ArticleReadingAids {
   sourceHighlights?: { text: string; sourceBlockIds: string[] }[]
 }
 
-export interface ArticleCalloutPlacement {
-  refId: string
-  sectionId: string
+export interface ArticleCallout {
+  id: string
+  kind: 'keyTerm' | 'example' | 'caveat'
+  term?: string
+  text: string
+  sourceBlockIds: string[]
   placementReason: string
 }
 
-export interface ArticleCalloutPlacements {
-  bySection: Record<string, ArticleCalloutPlacement[]>
-  unplaced: ArticleCalloutPlacement[]
+export interface ArticleCalloutPlacement {
+  bySection: Record<string, ArticleCallout[]>
+  unplaced: ArticleCallout[]
 }
 
 export type ArticleShape =
@@ -1172,7 +1175,7 @@ export interface ArticleJsonV2 {
   caveats: { text: string; sourceBlockIds: string[] }[]
   originalStructure: { blockId: string; blockType: string; preview: string }[]
   readingAids?: ArticleReadingAids
-  calloutPlacements?: ArticleCalloutPlacements
+  calloutPlacements?: ArticleCalloutPlacement
   shape?: ArticleShape
   reorderings?: ArticleReorderingAudit[]
 }

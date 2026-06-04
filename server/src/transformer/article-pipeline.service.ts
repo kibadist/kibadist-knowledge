@@ -6,6 +6,7 @@ import {
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { ArticleGeneratorService } from './article-generator.service'
+import { placeCallouts } from './callout-placement.util'
 import { buildCoverageReport, type CoverageBlock } from './coverage.util'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
@@ -142,7 +143,15 @@ export class ArticlePipelineService {
 
     // --- 8. Article generation ----------------------------------------------
     await this.setStatus(articleId, TransformedArticleStatus.GENERATING)
-    const article = await this.generator.generate(plan, blocks)
+    const generated = await this.generator.generate(plan, blocks)
+    // Inline callout placement (DET-272) is deterministic, computed in code (no
+    // LLM): place the end-matter (keyTerms/examples/caveats) against the sections
+    // by source-block overlap and attach it to the stored artifact. The top-level
+    // arrays remain the single source of truth — these are placement REFERENCES.
+    const article: ArticleJsonV2 = {
+      ...generated,
+      calloutPlacements: placeCallouts(generated),
+    }
     await this.persist(articleId, {
       articleJson: article as unknown as Prisma.InputJsonValue,
     })

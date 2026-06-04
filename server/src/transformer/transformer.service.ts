@@ -16,6 +16,7 @@ import { fetchReadable } from '../inbox/url-fetch.util'
 import { PrismaService } from '../prisma/prisma.service'
 import { toArticleV2 } from './article-compat.util'
 import { ArticlePipelineService } from './article-pipeline.service'
+import { placeCallouts } from './callout-placement.util'
 import type { CreateTextSourceDto } from './dto/create-text-source.dto'
 import type { CreateUrlSourceDto } from './dto/create-url-source.dto'
 import { ARTICLE_IN_FLIGHT, PipelineService } from './pipeline.service'
@@ -32,6 +33,18 @@ import type {
   FidelityReport,
   SourcePreservingArticle,
 } from './transformer.types'
+
+/**
+ * Ensure a v2 article carries inline callout placements (DET-272). Pipeline-
+ * produced articles already have them; legacy v1 (post-adaptation) and pre-wave
+ * v2 articles do not — placement is deterministic and cheap, so we compute it at
+ * the read boundary rather than rewriting stored JSON. Existing placements are
+ * preserved (idempotent).
+ */
+function withCalloutPlacements(article: ArticleJsonV2): ArticleJsonV2 {
+  if (article.calloutPlacements) return article
+  return { ...article, calloutPlacements: placeCallouts(article) }
+}
 
 /** A source as shown in the workspace list (status + latest article summary). */
 export interface TransformerSourceListItem {
@@ -340,12 +353,19 @@ export class TransformerService {
       | SourcePreservingArticle
       | ArticleJsonV2
       | null
+    // Inline callout placement (DET-272) is deterministic and cheap, so compute
+    // it here for any article that lacks it — legacy v1 articles and v2 articles
+    // generated before this wave. The adapter stays representation-only on
+    // purpose (toArticleV2 must not invent placement); placement is layered on at
+    // the read boundary, after adaptation. Native v2 articles produced by the
+    // pipeline already carry `calloutPlacements`, so this is a no-op for them.
+    const adapted = stored ? withCalloutPlacements(toArticleV2(stored)) : null
     return {
       id: article.id,
       sourceId: article.sourceId,
       status: article.status,
       blocksVersion: article.blocksVersion,
-      articleJson: stored ? toArticleV2(stored) : null,
+      articleJson: adapted,
       fidelityReport: article.fidelityReport as FidelityReport | null,
       fidelityScore: article.fidelityScore,
       coverageReport: article.coverageReport as CoverageReport | null,

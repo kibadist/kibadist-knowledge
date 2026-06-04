@@ -225,9 +225,27 @@ describe('ArticleJsonV2Schema (DET-277)', () => {
     },
     calloutPlacements: {
       bySection: {
-        s1: [{ refId: 'co1', sectionId: 's1', placementReason: 'overlap' }],
+        s1: [
+          {
+            id: 'co-caveat-0',
+            kind: 'caveat',
+            text: 'CV',
+            sourceBlockIds: ['b3'],
+            placementReason:
+              "1/1 source block overlap section 'Original heading'",
+          },
+        ],
       },
-      unplaced: [],
+      unplaced: [
+        {
+          id: 'co-keyTerm-0',
+          kind: 'keyTerm',
+          term: 'K',
+          text: 'K',
+          sourceBlockIds: ['bX'],
+          placementReason: 'No source-block overlap with any section.',
+        },
+      ],
     },
     shape: 'explainer',
     reorderings: [

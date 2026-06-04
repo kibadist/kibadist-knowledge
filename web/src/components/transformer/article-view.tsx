@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import {
   ApiError,
   type ArticleBlock,
+  type ArticleCallout,
   type ArticleCalloutBlock,
   type ArticleCodeBlock,
   type ArticleFigureAnchorBlock,
@@ -89,13 +90,16 @@ export function ArticleView({
 
   const placement = placeIllustrations(article, illustrationPlan)
 
-  // One source-grounded pull-quote, pulled from the first caveat (real source
-  // text), dropped roughly mid-article between sections. It only renders when
-  // the caveat carries source block ids — an ungrounded quote would violate the
-  // source-preservation promise.
-  const pullCaveat = article.caveats.find((c) => c.sourceBlockIds.length > 0)
-  const pullAt =
-    article.sections.length > 1 ? Math.floor(article.sections.length / 2) : -1
+  // Inline callout placement (DET-272). The end-matter (keyTerms / examples /
+  // caveats) is re-placed beside the section it overlaps most; the server
+  // computes this deterministically and attaches it to `calloutPlacements`. The
+  // top-level arrays remain the single source of truth; here we only RENDER the
+  // placement. `bySection` anchors margin notes / inline cards beside a section;
+  // `unplaced` items render in a general group at the end (nowhere else to live).
+  const callouts = article.calloutPlacements ?? { bySection: {}, unplaced: [] }
+  const hasIndex =
+    Object.values(callouts.bySection).some((cs) => cs.length > 0) ||
+    callouts.unplaced.length > 0
 
   return (
     <article className='tf-article'>
@@ -154,8 +158,12 @@ export function ArticleView({
 
       {article.sections.map((section, i) => {
         const slot = placement.bySection.get(section.id)
+        const placedCallouts = callouts.bySection[section.id] ?? []
         return (
-          <div key={section.id}>
+          // The section wrapper is relatively positioned + carries a stable DOM
+          // id: the margin-note rail anchors into its right gutter on wide
+          // screens, and the compact end index links back here via #section-id.
+          <div key={section.id} id={section.id} className='tf-section-wrap'>
             {i > 0 && <SectionOrnament />}
             <section className='tf-article-section'>
               <SectionHeading
@@ -188,105 +196,168 @@ export function ArticleView({
                 </section>
               ))}
             </section>
-            {i === pullAt && pullCaveat && (
-              <PullQuote
-                text={pullCaveat.text}
-                sourceBlockIds={pullCaveat.sourceBlockIds}
-                kind='Caveat'
-                onInspect={onInspect}
-              />
+            {placedCallouts.length > 0 && (
+              <aside className='tf-callout-rail' aria-label='Section notes'>
+                {placedCallouts.map((c) => (
+                  <CalloutNote key={c.id} callout={c} onInspect={onInspect} />
+                ))}
+              </aside>
             )}
           </div>
         )
       })}
 
-      {article.keyTerms.length > 0 && (
-        <section className='tf-article-aux'>
-          <h3 className='tf-aux-h'>Key terms</h3>
-          <dl className='tf-terms'>
-            {article.keyTerms.map((t) => (
-              <div key={t.term} className='tf-term'>
-                <dt>
-                  <button
-                    type='button'
-                    className='tf-term-btn'
-                    onClick={() =>
-                      onInspect({
-                        kind: 'Key term',
-                        transformedText: t.term,
-                        sourceBlockIds: t.sourceBlockIds,
-                      })
-                    }
-                  >
-                    {t.term}
-                  </button>
-                  {t.sourceBlockIds.length === 0 && (
-                    <span className='chip chip-contested'>missing source</span>
-                  )}
-                </dt>
-              </div>
-            ))}
-          </dl>
-        </section>
-      )}
-
-      {article.sourceExamples.length > 0 && (
-        <section className='tf-article-aux'>
-          <h3 className='tf-aux-h'>Source examples</h3>
-          <ul className='tf-aux-list'>
-            {article.sourceExamples.map((ex, i) => (
-              <li key={`${i}-${ex.text.slice(0, 24)}`}>
-                <button
-                  type='button'
-                  className='tf-aux-item'
-                  onClick={() =>
-                    onInspect({
-                      kind: 'Source example',
-                      transformedText: ex.text,
-                      sourceBlockIds: ex.sourceBlockIds,
-                    })
-                  }
-                >
-                  {ex.text}
-                </button>
-                {ex.sourceBlockIds.length === 0 && (
-                  <span className='chip chip-contested'>missing source</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {article.caveats.length > 0 && (
-        <section className='tf-article-aux'>
-          <h3 className='tf-aux-h'>Important caveats</h3>
-          <ul className='tf-aux-list tf-caveats'>
-            {article.caveats.map((c, i) => (
-              <li key={`${i}-${c.text.slice(0, 24)}`}>
-                <button
-                  type='button'
-                  className='tf-aux-item'
-                  onClick={() =>
-                    onInspect({
-                      kind: 'Caveat',
-                      transformedText: c.text,
-                      sourceBlockIds: c.sourceBlockIds,
-                    })
-                  }
-                >
-                  {c.text}
-                </button>
-                {c.sourceBlockIds.length === 0 && (
-                  <span className='chip chip-contested'>missing source</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
+      {/* The terminal full "Key terms / Source examples / Important caveats"
+          sections are gone (DET-272). Their content now appears inline as placed
+          callouts beside the section it belongs to. What remains here is a
+          COMPACT INDEX — short labels linking back to where each callout sits —
+          plus a general group rendering any UNPLACED item in full (it has
+          nowhere inline to live). */}
+      {hasIndex && (
+        <CalloutIndex
+          bySection={callouts.bySection}
+          sections={article.sections}
+          unplaced={callouts.unplaced}
+          onInspect={onInspect}
+        />
       )}
     </article>
   )
+}
+
+/** Small-caps label + accent for each callout kind. */
+const CALLOUT_KIND_LABEL: Record<ArticleCallout['kind'], string> = {
+  keyTerm: 'Key term',
+  example: 'Example',
+  caveat: 'Caveat',
+}
+
+/**
+ * A single placed callout — a margin note on wide screens (anchored into the
+ * section's right gutter via the rail) and an inline card on narrow screens. It
+ * is clickable → opens the source inspector with the item's own sourceBlockIds
+ * and a kind-labelled selection. An untraceable item (no sourceBlockIds) shows a
+ * loud "missing source" chip and is not clickable.
+ */
+function CalloutNote({
+  callout,
+  onInspect,
+}: {
+  callout: ArticleCallout
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  const label = CALLOUT_KIND_LABEL[callout.kind]
+  const missing = callout.sourceBlockIds.length === 0
+  const body = (
+    <>
+      <p
+        className={`tf-callout-note-kind tf-callout-note-kind--${callout.kind}`}
+      >
+        {label}
+      </p>
+      <p className='tf-callout-note-text'>{callout.text}</p>
+    </>
+  )
+
+  if (missing) {
+    return (
+      <div className='tf-callout-note tf-callout-note--missing'>
+        {body}
+        <span className='chip chip-contested'>missing source</span>
+      </div>
+    )
+  }
+  return (
+    <button
+      type='button'
+      className='tf-callout-note tf-callout-note--clickable'
+      onClick={() =>
+        onInspect({
+          kind: label,
+          transformedText: callout.text,
+          sourceBlockIds: callout.sourceBlockIds,
+        })
+      }
+    >
+      {body}
+    </button>
+  )
+}
+
+/**
+ * The compact end-of-article index (DET-272) that replaces the old full
+ * end-matter sections. For every PLACED callout it shows a one-line label + an
+ * anchor link (#section-id) back to where the callout is rendered. UNPLACED
+ * items have no section to point at, so they render in FULL under a general
+ * "Notes" group (clickable into the inspector) — they would otherwise vanish.
+ */
+function CalloutIndex({
+  bySection,
+  sections,
+  unplaced,
+  onInspect,
+}: {
+  bySection: Record<string, ArticleCallout[]>
+  sections: ArticleSectionV2[]
+  unplaced: ArticleCallout[]
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  const headingById = new Map(sections.map((s) => [s.id, s.heading]))
+  // Walk sections in reading order so the index mirrors the article.
+  const placedRows = sections
+    .flatMap((s) =>
+      (bySection[s.id] ?? []).map((c) => ({ sectionId: s.id, c })),
+    )
+    .filter((row) => row.c.text.length > 0)
+
+  return (
+    <section className='tf-article-aux tf-callout-end'>
+      {placedRows.length > 0 && (
+        <>
+          <h3 className='tf-aux-h'>Index</h3>
+          <ul className='tf-callout-index'>
+            {placedRows.map(({ sectionId, c }) => (
+              <li key={c.id} className='tf-callout-index-row'>
+                <span
+                  className={`tf-callout-index-kind tf-callout-index-kind--${c.kind}`}
+                >
+                  {CALLOUT_KIND_LABEL[c.kind]}
+                </span>
+                <a className='tf-callout-index-link' href={`#${sectionId}`}>
+                  {c.kind === 'keyTerm'
+                    ? (c.term ?? c.text)
+                    : shortLabel(c.text)}
+                </a>
+                <span className='tf-callout-index-where'>
+                  {headingById.get(sectionId) ?? sectionId}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {unplaced.length > 0 && (
+        <div className='tf-callout-unplaced'>
+          <h3 className='tf-aux-h'>Notes</h3>
+          <ul className='tf-aux-list'>
+            {unplaced.map((c) => (
+              <li key={c.id}>
+                <CalloutNote callout={c} onInspect={onInspect} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** First sentence / clause of a callout body, for a compact index label. */
+function shortLabel(text: string): string {
+  const trimmed = text.trim()
+  if (trimmed.length <= 64) return trimmed
+  return `${trimmed.slice(0, 61).trimEnd()}…`
 }
 
 function SectionOrnament() {
@@ -339,9 +410,10 @@ function SectionHeading({
 }
 
 /**
- * A large italic display pull-quote. Used both for the ad-hoc caveat pull-quote
- * (kept until W6) and for first-class generator-emitted `pullQuote` blocks
- * (DET-271); the `kind` keeps the inspector label honest for each source.
+ * A large italic display pull-quote for first-class generator-emitted `pullQuote`
+ * blocks (DET-271). The ad-hoc caveat pull-quote was removed in W6 (DET-272):
+ * caveats now render as placed inline callouts, so the only pull-quotes left are
+ * real generator blocks. The `kind` keeps the inspector label honest.
  */
 function PullQuote({
   text,
