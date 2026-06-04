@@ -34,6 +34,7 @@ import { TracksModule } from './tracks/tracks.module'
 import { TransformerModule } from './transformer/transformer.module'
 import { TutorModule } from './tutor/tutor.module'
 import { UsersModule } from './users/users.module'
+import { WaitlistModule } from './waitlist/waitlist.module'
 import { WorkspacesModule } from './workspaces/workspaces.module'
 
 @Module({
@@ -112,6 +113,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module'
     SearchModule,
     SessionsModule,
     MetricsModule,
+    WaitlistModule,
   ],
   providers: [
     // Global authentication: every route requires a valid JWT unless marked @Public().

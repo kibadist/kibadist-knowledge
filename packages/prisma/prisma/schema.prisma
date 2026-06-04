@@ -1124,6 +1124,17 @@ enum SourceConfidence {
   needs_review
 }
 
+// Public waitlist (DET-270). Standalone — no relation to any user or workspace.
+// Idempotent on duplicate email: the service upserts and always returns { ok: true }.
+model WaitlistEntry {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  source    String?
+  createdAt DateTime @default(now())
+
+  @@map("waitlist_entry")
+}
+
 // ============================================================================
 // Source-Preserving Article Transformer (DET-247…259)
 //
