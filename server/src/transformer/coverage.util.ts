@@ -1,7 +1,9 @@
 import { toArticleV2 } from './article-compat.util'
+import { auditReorderCoverage } from './reorder-audit.util'
 import type {
   ArticleBlock,
   ArticleJsonV2,
+  ArticleReorderingAudit,
   ArticleSectionV2,
   CoverageReport,
   SourcePreservingArticle,
@@ -108,6 +110,15 @@ export function buildCoverageReport(
   }
   for (const s of article.sections) mapSection(s)
 
+  // Audited-reorder summary (DET-275). `blocks` arrives in SOURCE order (the
+  // pipeline loads them ordered by orderIndex), so the same pure util the
+  // fidelity checker uses derives how many moves were detected vs covered by the
+  // article's declared audit. Additive — the field is omitted only if the caller
+  // never passes reorderings AND the article carries none (kept always-present
+  // for v2 articles so the provenance summary is stable).
+  const reorderings: ArticleReorderingAudit[] = article.reorderings ?? []
+  const coverage = auditReorderCoverage(article, blocks, reorderings)
+
   return {
     totalBlocks: total,
     coveragePercent,
@@ -116,5 +127,9 @@ export function buildCoverageReport(
     uncertainBlockIds: [...uncertainIds],
     unrepresentedBlockIds,
     paragraphMap,
+    reorderAudit: {
+      audited: coverage.audited,
+      unaudited: coverage.unaudited.length,
+    },
   }
 }

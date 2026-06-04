@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 
 import { AiService } from '../ai/ai.service'
 import { completeJson } from './llm-json.util'
+import { auditPlanReorderCoverage } from './reorder-audit.util'
 import { buildReshapingPlanPrompt } from './reshaping-plan.prompt'
 import {
   type ReshapingPlan,
@@ -63,6 +64,10 @@ const ROLE_GROUNDING: Record<string, ReadonlySet<string>> = {
  *    blocks cited by step-role sections must appear in source order across the
  *    plan; a violation is an auditable warning (hard ordering is the fidelity
  *    layer's job — DET-273 fidelity-structural procedure check).
+ *  - audited reorder coverage (DET-275): recompute section movement (plan order
+ *    vs source order) and warn for any move the plan's `reorderings[]` does not
+ *    cover. Code never re-sorts LLM-planned sections; an uncovered move blocks
+ *    downstream (the article-side fidelity checker recomputes the same coverage).
  */
 @Injectable()
 export class ReshapingPlanService {
@@ -176,6 +181,23 @@ export class ReshapingPlanService {
     // fidelity-structural procedure check).
     if (plan.shape === 'procedure') {
       checkProcedureOrder(groundedSections, byId, blocks, warnings)
+    }
+
+    // Guard F (DET-275): audited reorder coverage. Recompute section movement
+    // (plan section order vs source order, by min cited orderIndex) and warn for
+    // any movement the plan's `reorderings[]` does not cover. Code does NOT
+    // re-sort the LLM-planned sections (riskier than blocking); the gap becomes a
+    // high-severity blocking fidelity finding downstream (the article-side checker
+    // recomputes the same coverage). report/narrative shapes that follow source
+    // order produce no movement, so no audit is required.
+    const reorderCoverage = auditPlanReorderCoverage(
+      { sections: groundedSections, reorderings: plan.reorderings },
+      blocks,
+    )
+    for (const m of reorderCoverage.unaudited) {
+      warnings.push(
+        `unaudited reorder: section "${m.sectionId}" moves from source position ${m.sourceIndex} to reading position ${m.readingIndex} (anchor block ${m.anchorBlockId || 'unknown'}) but is not recorded in reorderings[]. Record the move (sourceBlockId + fromIndex/toIndex + reason + risk) or restore source order.`,
+      )
     }
 
     return {

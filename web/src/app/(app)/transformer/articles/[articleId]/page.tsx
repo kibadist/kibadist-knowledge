@@ -9,6 +9,7 @@ import { CoveragePanel } from '@/components/transformer/coverage-panel'
 import { IllustrationPanel } from '@/components/transformer/illustration-panel'
 import { placeIllustrations } from '@/components/transformer/illustration-placement'
 import { LearningToolsPanel } from '@/components/transformer/learning-tools-panel'
+import { ReorderAuditPanel } from '@/components/transformer/reorder-audit-panel'
 import {
   type InspectorSelection,
   SourceInspectorPanel,
@@ -226,6 +227,13 @@ export default function ArticlePage() {
               <div className='tf-behind-body'>
                 {article.articleJson?.shape && (
                   <ArticleShapePanel article={article.articleJson} />
+                )}
+
+                {article.articleJson && (
+                  <ReorderAuditPanel
+                    reorderings={article.articleJson.reorderings}
+                    blocksById={blocksById}
+                  />
                 )}
 
                 {article.coverageReport && (

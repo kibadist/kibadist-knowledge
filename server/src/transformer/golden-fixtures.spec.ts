@@ -1,6 +1,7 @@
 import {
   knownBlockIds,
   negativeFixtures,
+  reorderFixtures,
   v1Fixture,
   v2Fixtures,
 } from './__fixtures__'
@@ -417,6 +418,73 @@ describe('golden fixture: negatives', () => {
         f.severity === 'high' && /separated from the claim/.test(f.description),
     )
     expect(separation).toBeDefined()
+    expect(merged.approved).toBe(false)
+  })
+})
+
+describe('golden fixture: audited reorder (DET-275)', () => {
+  it('safe-reorder: schema-valid, fully audited, approves the deterministic merge', () => {
+    const { article, blocks, structureModel } = reorderFixtures.safeReorder
+    expect(ArticleJsonV2Schema.safeParse(article).success).toBe(true)
+    const merged = mergeDeterministicChecks(
+      cleanReport(),
+      article,
+      knownBlockIds(blocks),
+      { structureModel, blocks },
+    )
+    expect(
+      merged.structuralFindings.some((f) =>
+        /unaudited reorder/i.test(f.description),
+      ),
+    ).toBe(false)
+    expect(merged.approved).toBe(true)
+    // Coverage records the audited move with nothing unaudited.
+    const coverage = buildCoverageReport(
+      article,
+      blocks.map((b) => ({ id: b.id, uncertain: false })),
+      [],
+    )
+    expect(coverage.reorderAudit).toEqual({ audited: 1, unaudited: 0 })
+  })
+
+  it('unaudited-movement: an opaque reorder is a high blocking structuralFinding', () => {
+    const { article, blocks, structureModel } =
+      reorderFixtures.unauditedMovement
+    expect(ArticleJsonV2Schema.safeParse(article).success).toBe(true)
+    const merged = mergeDeterministicChecks(
+      cleanReport(),
+      article,
+      knownBlockIds(blocks),
+      { structureModel, blocks },
+    )
+    expect(
+      merged.structuralFindings.some(
+        (f) => f.severity === 'high' && /unaudited reorder/i.test(f.description),
+      ),
+    ).toBe(true)
+    expect(merged.approved).toBe(false)
+  })
+
+  it('unsafe-reorder: audited but still blocked by the cluster check', () => {
+    const { article, blocks, structureModel } = reorderFixtures.unsafeReorder
+    const merged = mergeDeterministicChecks(
+      cleanReport(),
+      article,
+      knownBlockIds(blocks),
+      { structureModel, blocks },
+    )
+    // The move IS audited (no unaudited finding) — yet it still blocks.
+    expect(
+      merged.structuralFindings.some((f) =>
+        /unaudited reorder/i.test(f.description),
+      ),
+    ).toBe(false)
+    expect(
+      merged.structuralFindings.some(
+        (f) =>
+          f.severity === 'high' && /separated from the claim/.test(f.description),
+      ),
+    ).toBe(true)
     expect(merged.approved).toBe(false)
   })
 })

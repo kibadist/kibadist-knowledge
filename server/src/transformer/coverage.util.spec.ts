@@ -249,3 +249,74 @@ describe('buildCoverageReport on v2 articles (DET-277)', () => {
     expect(fromV2).toEqual(fromV1)
   })
 })
+
+describe('buildCoverageReport — reorderAudit summary (DET-275)', () => {
+  function v2(sections: ArticleJsonV2['sections']): ArticleJsonV2 {
+    return {
+      schemaVersion: 'v2',
+      mode: 'source_preserving_article',
+      title: { text: 'T', source: 'original' },
+      abstract: [],
+      sections,
+      keyTerms: [],
+      sourceExamples: [],
+      caveats: [],
+      originalStructure: [],
+    }
+  }
+  const para = (id: string, ids: string[]) => ({
+    id,
+    type: 'paragraph' as const,
+    text: id,
+    sourceBlockIds: ids,
+    transformationType: 'verbatim' as const,
+    fidelityRisk: 'low' as const,
+  })
+  const sec = (id: string, ids: string[]) => ({
+    id,
+    heading: id,
+    headingSource: 'inferred' as const,
+    sourceBlockIds: ids,
+    blocks: [para(`${id}-p`, ids)],
+  })
+  const blocks = [
+    { id: 'b1', uncertain: false },
+    { id: 'b2', uncertain: false },
+    { id: 'b3', uncertain: false },
+  ]
+
+  it('reports audited=0, unaudited=0 when reading order matches source order', () => {
+    const report = buildCoverageReport(
+      v2([sec('s1', ['b1']), sec('s2', ['b2']), sec('s3', ['b3'])]),
+      blocks,
+      [],
+    )
+    expect(report.reorderAudit).toEqual({ audited: 0, unaudited: 0 })
+  })
+
+  it('counts an unaudited move when a section moves without an audit entry', () => {
+    // b3 jumps to the front with no reorderings → one unaudited move.
+    const report = buildCoverageReport(
+      v2([sec('s3', ['b3']), sec('s1', ['b1']), sec('s2', ['b2'])]),
+      blocks,
+      [],
+    )
+    expect(report.reorderAudit?.unaudited).toBe(1)
+    expect(report.reorderAudit?.audited).toBe(0)
+  })
+
+  it('counts a covered move as audited with zero unaudited', () => {
+    const article = v2([sec('s3', ['b3']), sec('s1', ['b1']), sec('s2', ['b2'])])
+    article.reorderings = [
+      {
+        sourceBlockId: 'b3',
+        fromIndex: 2,
+        toIndex: 0,
+        reason: 'moved up',
+        risk: 'low',
+      },
+    ]
+    const report = buildCoverageReport(article, blocks, [])
+    expect(report.reorderAudit).toEqual({ audited: 1, unaudited: 0 })
+  })
+})

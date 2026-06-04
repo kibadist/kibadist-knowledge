@@ -92,6 +92,7 @@ describe('ArticleGeneratorService traceability guard', () => {
     ],
     removedBlocks: [],
     warnings: [],
+    reorderings: [],
   }
 
   const articleWith = (sourceBlockIds: string[]) => ({

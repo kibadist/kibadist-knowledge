@@ -1082,6 +1082,57 @@
   line-height: 1.45;
 }
 
+/* ---------------- reading-order reorder audit (DET-275) ---------------- */
+.kbapp .tf-reorder-empty {
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  color: var(--ink-muted);
+  margin: 0;
+}
+.kbapp .tf-reorder-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.kbapp .tf-reorder-item {
+  padding: 10px 0;
+  border-bottom: 1px dotted var(--rule-soft);
+}
+.kbapp .tf-reorder-item:last-child {
+  border-bottom: none;
+}
+.kbapp .tf-reorder-line {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.kbapp .tf-reorder-block {
+  font-family: var(--font-body), serif;
+  font-size: 14.5px;
+  color: var(--ink);
+}
+.kbapp .tf-reorder-move {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.kbapp .tf-reorder-reason {
+  font-family: var(--font-body), serif;
+  font-size: 14px;
+  color: var(--ink-muted);
+  margin: 4px 0 0;
+  line-height: 1.45;
+}
+.kbapp .tf-reorder-cluster {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+  margin: 4px 0 0;
+}
+
 /* ---------------- in-progress article ---------------- */
 .kbapp .tf-progress-label {
   font-family: var(--font-display), serif;
@@ -1412,7 +1463,10 @@
   cursor: pointer;
   white-space: nowrap;
   opacity: 0;
-  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 .kbapp .tf-heading-row:hover .tf-section-extract,
 .kbapp .tf-heading-row:focus-within .tf-section-extract,

@@ -103,6 +103,14 @@ export interface CoverageReport {
     transformationType: TransformationType
     fidelityRisk: FidelityRisk
   }[]
+  /**
+   * Audited-reorder summary (DET-275). Additive + back-compat: absent on coverage
+   * reports produced before this wave. `audited` is the number of declared audit
+   * entries; `unaudited` is the number of detected section moves NOT covered by
+   * the audit (the fidelity checker independently blocks those). Computed by the
+   * same pure `auditReorderCoverage` util the checker uses.
+   */
+  reorderAudit?: { audited: number; unaudited: number }
 }
 
 /* ===========================================================================

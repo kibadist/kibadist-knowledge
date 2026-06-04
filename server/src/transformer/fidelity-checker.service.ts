@@ -12,6 +12,7 @@ import {
   checkUnsupportedHighlights,
 } from './fidelity-structural.util'
 import { completeJson } from './llm-json.util'
+import { auditReorderCoverage } from './reorder-audit.util'
 import type { SourceStructureModel } from './schemas'
 import { FidelityReportSchema } from './schemas'
 import type { ClassifiedBlockInput } from './structure-model.service'
@@ -42,6 +43,12 @@ const MIN_FIDELITY_SCORE = 95
  *    (medium; high for a duplicated caveat), unsupported highlights (high),
  *    claim/caveat + claim/evidence cluster SEPARATION (high), chronology
  *    inversion (high `emphasisChanges`) — DET-281.
+ *  - AUDITED REORDER (DET-275): movement is recomputed from the article's own
+ *    section order vs source order; a section move NOT covered by the article's
+ *    `reorderings` audit → high `structuralFindings` (blocks, opaque = unsafe);
+ *    an audited risk:'high' move → medium `emphasisChanges` (visible, not
+ *    auto-blocking). Cluster separation / chronology inversion still BLOCK
+ *    regardless of whether a move was audited.
  *  - `approved = false` if ANY high-severity addedInformation, lostInformation,
  *    meaningChanges, emphasisChanges OR structuralFindings, OR fidelityScore
  *    < 95, OR any traceability violation.
@@ -189,13 +196,46 @@ export function mergeDeterministicChecks(
   if (inputs.blocks)
     structuralFindings.push(...checkQuoteAttribution(article, inputs.blocks))
   if (inputs.structureModel && inputs.blocks) {
+    // The reorder audit is fed in for traceability, but cluster separation +
+    // chronology inversion BLOCK regardless of audit (an audited unsafe move is
+    // still unsafe) — the util ignores `reorderings` deterministically (DET-275).
     const clusters = validateClusters(
       article,
       inputs.structureModel,
       inputs.blocks,
+      { reorderings: article.reorderings ?? [] },
     )
     structuralFindings.push(...clusters.structuralFindings)
     emphasisChanges.push(...clusters.emphasisChanges)
+  }
+
+  // --- DET-275 audited reorder checks ---------------------------------------
+  // Recompute section movement from the ARTICLE's own sections vs source order
+  // (no plan dependency) and compare against the article's declared audit. Needs
+  // the source blocks IN SOURCE ORDER (the pipeline loads them ordered).
+  if (inputs.blocks) {
+    const reorderings = article.reorderings ?? []
+    const coverage = auditReorderCoverage(article, inputs.blocks, reorderings)
+    // (a) Unaudited movement → high structuralFinding (blocks). An opaque reorder
+    // is treated as unsafe: every deviation from source order must be recorded.
+    for (const m of coverage.unaudited) {
+      structuralFindings.push({
+        severity: 'high',
+        description: `Unaudited reorder: section "${m.sectionId}" moved from source position ${m.sourceIndex} to reading position ${m.readingIndex} (anchor block ${m.anchorBlockId || 'unknown'}) without a reorderings[] audit entry.`,
+        articleRef: m.sectionId,
+        ...(m.anchorBlockId ? { sourceBlockIds: [m.anchorBlockId] } : {}),
+      })
+    }
+    // (b) Audited HIGH-risk moves → medium emphasisChanges (visible, not auto-
+    // blocking) unless they also trip the cluster/chronology checks above.
+    for (const r of reorderings) {
+      if (r.risk !== 'high') continue
+      emphasisChanges.push({
+        severity: 'medium',
+        description: `Audited high-risk reorder of block ${r.sourceBlockId} (source ${r.fromIndex} → reading ${r.toIndex}): ${r.reason}`,
+        sourceBlockIds: [r.sourceBlockId],
+      })
+    }
   }
 
   const hasHigh = (findings: FidelityFinding[]) =>

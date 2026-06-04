@@ -1,3 +1,5 @@
+import { reorderFixtures } from './__fixtures__'
+import { knownBlockIds } from './__fixtures__/index'
 import { mergeDeterministicChecks } from './fidelity-checker.service'
 import { FidelityReportSchema } from './schemas'
 import type {
@@ -160,6 +162,84 @@ describe('mergeDeterministicChecks (fidelity blocking rules)', () => {
     })
     const out = mergeDeterministicChecks(report, article(), known)
     expect(out.approved).toBe(true)
+  })
+
+  // --- DET-275 audited reorder ----------------------------------------------
+
+  it('blocks: unaudited movement → high structuralFinding', () => {
+    const { article, blocks, structureModel } = reorderFixtures.unauditedMovement
+    const out = mergeDeterministicChecks(
+      emptyReport(99),
+      article,
+      knownBlockIds(blocks),
+      { structureModel, blocks },
+    )
+    const finding = out.structuralFindings.find(
+      (f) => f.severity === 'high' && /unaudited reorder/i.test(f.description),
+    )
+    expect(finding).toBeDefined()
+    expect(out.approved).toBe(false)
+  })
+
+  it('approves: a fully-audited, cluster-safe reorder', () => {
+    const { article, blocks, structureModel } = reorderFixtures.safeReorder
+    const out = mergeDeterministicChecks(
+      emptyReport(99),
+      article,
+      knownBlockIds(blocks),
+      { structureModel, blocks },
+    )
+    // No unaudited movement, no cluster separation, no chronology inversion.
+    expect(
+      out.structuralFindings.some((f) => /unaudited reorder/i.test(f.description)),
+    ).toBe(false)
+    expect(out.approved).toBe(true)
+  })
+
+  it('audited HIGH-risk move surfaces a medium emphasisChanges note (non-blocking by itself)', () => {
+    const { article, blocks, structureModel } = reorderFixtures.safeReorder
+    // Re-stamp the safe article with a high-risk audit entry; it must surface a
+    // medium emphasisChanges finding without blocking (no high finding).
+    const highRisk = {
+      ...article,
+      reorderings: (article.reorderings ?? []).map((r) => ({
+        ...r,
+        risk: 'high' as const,
+      })),
+    }
+    const out = mergeDeterministicChecks(
+      emptyReport(99),
+      highRisk,
+      knownBlockIds(blocks),
+      { structureModel, blocks },
+    )
+    const note = out.emphasisChanges.find(
+      (f) => f.severity === 'medium' && /high-risk reorder/i.test(f.description),
+    )
+    expect(note).toBeDefined()
+    // The high-risk audit alone does not block (still cluster/chronology-safe).
+    expect(out.approved).toBe(true)
+  })
+
+  it('blocks: an audited-but-unsafe reorder (cluster separation still wins)', () => {
+    const { article, blocks, structureModel } = reorderFixtures.unsafeReorder
+    const out = mergeDeterministicChecks(
+      emptyReport(99),
+      article,
+      knownBlockIds(blocks),
+      { structureModel, blocks },
+    )
+    // The move is fully audited → no unaudited-movement finding…
+    expect(
+      out.structuralFindings.some((f) => /unaudited reorder/i.test(f.description)),
+    ).toBe(false)
+    // …yet the cluster check still blocks (caveat separated from its claim).
+    expect(
+      out.structuralFindings.some(
+        (f) => f.severity === 'high' && /separated from the claim/.test(f.description),
+      ),
+    ).toBe(true)
+    expect(out.approved).toBe(false)
   })
 
   it('old stored report shape (no emphasis/structural fields) still parses via schema defaults', () => {

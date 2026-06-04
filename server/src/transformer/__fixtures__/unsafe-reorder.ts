@@ -127,8 +127,12 @@ const article: ArticleJsonV2 = {
       preview: 'But only when total daily calories also fall…',
     },
   ],
-  // The audit records that the caveat block (b3) was moved AFTER b4, away from
-  // the claim (b2) it qualifies — the signal DET-281's cluster check will block.
+  // AUDITED-BUT-UNSAFE (DET-275). The audit FULLY records the moves: the caveat
+  // block (b3) was pushed to the end and the trials block (b4) consequently moved
+  // up. Both anchors are covered, so the deterministic unaudited-movement check is
+  // satisfied — yet the move is still UNSAFE (the caveat is now two sections from
+  // the claim it qualifies), so the cluster check BLOCKS regardless of the audit.
+  // The b3 entry is risk:'high', which also surfaces a medium emphasisChanges note.
   reorderings: [
     {
       sourceBlockId: 'b3',
@@ -136,6 +140,13 @@ const article: ArticleJsonV2 = {
       toIndex: 4,
       reason: 'Grouped as a closing note',
       risk: 'high',
+    },
+    {
+      sourceBlockId: 'b4',
+      fromIndex: 3,
+      toIndex: 2,
+      reason: 'Trials detail moved up after the caveat was relocated',
+      risk: 'low',
     },
   ],
 }

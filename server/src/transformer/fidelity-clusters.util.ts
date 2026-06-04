@@ -3,6 +3,7 @@ import type { SourceStructureModel } from './schemas'
 import type { ClassifiedBlockInput } from './structure-model.service'
 import type {
   ArticleJsonV2,
+  ArticleReorderingAudit,
   ArticleSectionV2,
   FidelityFinding,
   SourcePreservingArticle,
@@ -41,9 +42,16 @@ const CHRONOLOGY_INVERSION_THRESHOLD = 0.5
 /** Fraction of chronology-anchored sections needed to treat source as ordered. */
 const CHRONOLOGY_MARKER_THRESHOLD = 0.5
 
-/** Forward-compat input for W10 — proposed reorderings, ignored deterministically. */
+/**
+ * W10 input — the article's audited reorderings (DET-275). They are accepted for
+ * traceability/symmetry with the checker, but the cluster + chronology checks
+ * IGNORE them deterministically: an audited move is still unsafe if it separates a
+ * claim from its caveat/evidence or inverts chronology, so those findings BLOCK
+ * regardless of whether the move was recorded. Unaudited-movement detection lives
+ * in `reorder-audit.util.ts`, not here.
+ */
 export interface ClusterValidationOptions {
-  reorderings?: { sourceBlockId: string }[]
+  reorderings?: ArticleReorderingAudit[]
 }
 
 interface ClusterContext {

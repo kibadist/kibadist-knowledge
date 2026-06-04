@@ -1015,6 +1015,10 @@ export interface CoverageReport {
     transformationType: TransformationType
     fidelityRisk: FidelityRisk
   }[]
+  // Audited-reorder summary (DET-275). Additive + back-compat: absent on coverage
+  // reports produced before W10. `audited` = declared audit entries; `unaudited` =
+  // detected section moves not covered by the audit (the checker blocks those).
+  reorderAudit?: { audited: number; unaudited: number }
 }
 
 // --- Article JSON v2 contract (DET-277) ---

@@ -41,7 +41,9 @@ import { articleV1Legacy } from './legacy-v1'
 import { messyTranscript } from './messy-transcript'
 import { noisyHeadings } from './noisy-headings'
 import { quoteHeavy } from './quote-heavy'
+import { safeReorder } from './safe-reorder'
 import { tableHeavy } from './table-heavy'
+import { unauditedMovement } from './unaudited-movement'
 import { unsafeReorder } from './unsafe-reorder'
 import { unsupportedHighlight } from './unsupported-highlight'
 import { wikipediaExplainer } from './wikipedia-explainer'
@@ -81,13 +83,26 @@ export const v2Fixtures: V2Fixture[] = [
 export const v1Fixture: V1Fixture = articleV1Legacy
 
 /**
- * Negative fixtures (DET-279). `unsafeReorder` is exercised by an `it.todo`
- * until the DET-281 blocking check lands; `unsupportedHighlight` is exercised
- * now via the traceability walk.
+ * Negative fixtures (DET-279). `unsafeReorder` (now audited-but-still-unsafe —
+ * DET-275) and `unauditedMovement` (DET-275, opaque reorder) both BLOCK;
+ * `unsupportedHighlight` is flagged by the traceability walk.
  */
 export const negativeFixtures = {
   unsafeReorder,
   unsupportedHighlight,
+  unauditedMovement,
+}
+
+/**
+ * Reorder fixtures (DET-275). `safeReorder` is a POSITIVE case (an audited,
+ * cluster-safe move that approves); the negative reorder cases live in
+ * `negativeFixtures`. Each carries the structure model the cluster + audit checks
+ * need.
+ */
+export const reorderFixtures = {
+  safeReorder,
+  unsafeReorder,
+  unauditedMovement,
 }
 
 /** The set of source block ids a fixture's blocks define (the known universe). */

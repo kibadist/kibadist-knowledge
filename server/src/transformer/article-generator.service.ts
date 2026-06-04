@@ -31,8 +31,12 @@ const PREVIEW_CHARS = 120
  *    OVERWRITTEN from the matching plan section (by heading, falling back to
  *    document order) — the LLM's own role is discarded, so a role the plan did not
  *    assign can never survive. Subsections are synced one level the same way.
- *  - other later-wave fields (readingAids/calloutPlacements/reorderings) are never
- *    requested and the LLM schema cannot carry them, so the artifact is clean by
+ *  - AUDITED REORDERINGS (DET-275): the article's `reorderings` audit is COPIED
+ *    from the plan in code (the LLM schema cannot carry it); only entries the plan
+ *    declared survive, and an empty/absent audit omits the field. The LLM can
+ *    never inject a reorder claim.
+ *  - other later-wave fields (readingAids/calloutPlacements) are never requested
+ *    and the LLM schema cannot carry them, so the artifact is clean by
  *    construction.
  */
 @Injectable()
@@ -80,8 +84,11 @@ export class ArticleGeneratorService {
     const sections = syncSectionRoles(llm.sections, plan.sections)
 
     // Stamp the version in code AFTER validation; copy `shape` from the plan
-    // (never prompt-trusted); other later-wave fields are absent on the LLM
-    // artifact, so the result is a clean native v2 article.
+    // (never prompt-trusted); copy the audited `reorderings` from the plan in code
+    // (DET-275 — the LLM schema cannot carry them; only entries the plan declared
+    // survive, and an empty/absent audit omits the field). Other later-wave fields
+    // are absent on the LLM artifact, so the result is a clean native v2 article.
+    const reorderings = plan.reorderings ?? []
     return {
       schemaVersion: ARTICLE_SCHEMA_VERSION,
       mode: llm.mode,
@@ -94,6 +101,7 @@ export class ArticleGeneratorService {
       caveats: llm.caveats,
       originalStructure,
       ...(plan.shape ? { shape: plan.shape } : {}),
+      ...(reorderings.length > 0 ? { reorderings } : {}),
     }
   }
 }

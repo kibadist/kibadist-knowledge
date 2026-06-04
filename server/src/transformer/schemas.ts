@@ -198,6 +198,25 @@ const removedBlock = z.object({
 })
 
 /**
+ * One audited reading-order move (DET-275). Mirrors `ArticleReorderingAudit` in
+ * transformer.types.ts. The plan MAY propose a reading-optimized order, but EVERY
+ * deviation from source order must be recorded here: `sourceBlockId` is the anchor
+ * block that moved; `fromIndex`/`toIndex` are its source-order → reading-order
+ * positions; `movedWithClusterIds` lists blocks moved TOGETHER to keep a
+ * claim/evidence/caveat/qualifier cluster intact; `reason` + `risk` make the move
+ * inspectable. The deterministic guard re-checks that every detected movement is
+ * covered; the fidelity cluster checks still block unsafe moves regardless.
+ */
+const reorderingAudit = z.object({
+  sourceBlockId: z.string().min(1),
+  fromIndex: z.number(),
+  toIndex: z.number(),
+  movedWithClusterIds: z.array(z.string().min(1)).optional(),
+  reason: z.string().min(1),
+  risk: fidelityRisk,
+})
+
+/**
  * The reshaping plan (DET-252): how the article will be laid out, expressed only
  * in terms of real source blocks. `removedBlocks` may ONLY contain removable /
  * noise blocks — the service moves any protected-class violation into `warnings`
@@ -220,6 +239,13 @@ export const ReshapingPlanSchema = z.object({
   sections: z.array(planSection).min(1),
   removedBlocks: z.array(removedBlock),
   warnings: z.array(z.string().min(1)),
+  /**
+   * Audited reading-order moves (DET-275). Defaults to `[]` so a plan that keeps
+   * source order needs no audit; every proposed deviation must be recorded here.
+   * The service's deterministic guard appends a warning for any detected movement
+   * this audit does not cover; the generator stamps these onto the article.
+   */
+  reorderings: z.array(reorderingAudit).default([]),
 })
 
 export type ReshapingPlan = z.infer<typeof ReshapingPlanSchema>
@@ -433,15 +459,6 @@ const articleShape = z.enum([
   'narrative',
   'hybrid',
 ])
-
-const reorderingAudit = z.object({
-  sourceBlockId: z.string().min(1),
-  fromIndex: z.number(),
-  toIndex: z.number(),
-  movedWithClusterIds: z.array(z.string().min(1)).optional(),
-  reason: z.string().min(1),
-  risk: fidelityRisk,
-})
 
 /**
  * What the GENERATOR LLM is asked to return (DET-271). It is the v2 article

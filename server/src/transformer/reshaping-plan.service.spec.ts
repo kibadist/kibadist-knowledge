@@ -460,3 +460,75 @@ describe('ReshapingPlanSchema heading vocabulary (DET-276)', () => {
     expect(result.success).toBe(true)
   })
 })
+
+describe('ReshapingPlanService audited reorder (DET-275)', () => {
+  // b1 at source pos 0, b2 at source pos 1; reversing the two sections moves one.
+  const invertedSections = [
+    {
+      heading: 'Definition first',
+      headingSource: 'inferred' as const,
+      headingInferenceReason: 'no heading',
+      sourceBlockIds: ['b2'],
+      allowedTransformations: [],
+    },
+    {
+      heading: 'Argument second',
+      headingSource: 'inferred' as const,
+      headingInferenceReason: 'no heading',
+      sourceBlockIds: ['b1'],
+      allowedTransformations: [],
+    },
+  ]
+
+  it('warns when a section moves but the move is not recorded in reorderings', async () => {
+    const { service } = makeService({
+      titleProposal: { text: 'T', source: 'inferred' },
+      sections: invertedSections,
+      removedBlocks: [],
+      warnings: [],
+    })
+    const plan = await service.build(structureModel, blocks)
+    expect(plan.warnings.some((w) => /unaudited reorder/i.test(w))).toBe(true)
+  })
+
+  it('does NOT warn when the move is recorded in reorderings', async () => {
+    const { service } = makeService({
+      titleProposal: { text: 'T', source: 'inferred' },
+      sections: invertedSections,
+      removedBlocks: [],
+      warnings: [],
+      // The section anchored on b2 reads before the b1 section → b2 jumped up.
+      reorderings: [
+        {
+          sourceBlockId: 'b2',
+          fromIndex: 1,
+          toIndex: 0,
+          reason: 'definition reads better first',
+          risk: 'low',
+        },
+      ],
+    })
+    const plan = await service.build(structureModel, blocks)
+    expect(plan.warnings.some((w) => /unaudited reorder/i.test(w))).toBe(false)
+    expect(plan.reorderings).toHaveLength(1)
+  })
+
+  it('defaults reorderings to [] when the plan omits them', async () => {
+    const { service } = makeService({
+      titleProposal: { text: 'T', source: 'inferred' },
+      sections: [
+        {
+          heading: 'H',
+          headingSource: 'inferred',
+          headingInferenceReason: 'no heading',
+          sourceBlockIds: ['b1'],
+          allowedTransformations: [],
+        },
+      ],
+      removedBlocks: [],
+      warnings: [],
+    })
+    const plan = await service.build(structureModel, blocks)
+    expect(plan.reorderings).toEqual([])
+  })
+})

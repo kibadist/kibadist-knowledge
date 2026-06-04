@@ -37,6 +37,7 @@ const plan: ReshapingPlan = {
   ],
   removedBlocks: [],
   warnings: [],
+  reorderings: [],
 }
 
 const blocks: ClassifiedBlockInput[] = [
@@ -217,6 +218,35 @@ describe('ArticleGeneratorService', () => {
     await expect(service.generate(plan, blocks)).rejects.toThrow(
       /unknown block ids: nope/i,
     )
+  })
+
+  it('stamps reorderings from the plan and ignores any the LLM injected (DET-275)', async () => {
+    // The plan declares an audited move; the LLM injects a DIFFERENT reorderings
+    // array (validLlmArticle sets sourceBlockId 'b2'). The article must carry the
+    // PLAN's audit, never the model's.
+    const planWithReorder: ReshapingPlan = {
+      ...plan,
+      reorderings: [
+        {
+          sourceBlockId: 'b1',
+          fromIndex: 0,
+          toIndex: 2,
+          reason: 'moved for readability',
+          risk: 'low',
+        },
+      ],
+    }
+    const service = makeService(validLlmArticle())
+    const article = await service.generate(planWithReorder, blocks)
+    expect(article.reorderings).toEqual(planWithReorder.reorderings)
+    expect(article.reorderings?.[0].sourceBlockId).toBe('b1')
+  })
+
+  it('omits reorderings when the plan declares none (DET-275)', async () => {
+    // The LLM injects reorderings but the plan has none → the field is omitted.
+    const service = makeService(validLlmArticle())
+    const article = await service.generate(plan, blocks)
+    expect(article.reorderings).toBeUndefined()
   })
 
   it('drops a model-proposed role when the plan assigns none (DET-273)', async () => {

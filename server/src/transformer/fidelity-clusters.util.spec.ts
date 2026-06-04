@@ -241,7 +241,15 @@ describe('validateClusters — W10 forward-compat', () => {
       section('s2', ['b2'], [para('p2', 'caveat', ['b2'])]),
     ])
     const withOpt = validateClusters(a, sm, blocks, {
-      reorderings: [{ sourceBlockId: 'b2' }],
+      reorderings: [
+        {
+          sourceBlockId: 'b2',
+          fromIndex: 1,
+          toIndex: 1,
+          reason: 'kept beside its claim',
+          risk: 'low',
+        },
+      ],
     })
     const without = validateClusters(a, sm, blocks)
     expect(withOpt).toEqual(without)
