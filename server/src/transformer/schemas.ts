@@ -673,10 +673,40 @@ const retrievalPrompt = z.object({
 
 export type RetrievalPrompt = z.infer<typeof retrievalPrompt>
 
-/** Stored learning layer (code-managed ids + validationStatus). */
+/**
+ * A per-section concept-extraction CANDIDATE (DET-283). A proposal — never an
+ * earned/library Concept: `aiAssisted` is forced true and `validationStatus`
+ * starts 'pending'; validating it ONLY flips the status, it never creates any
+ * Concept row. Every candidate is scoped to the v2 section it was extracted from
+ * (`sectionId`) and grounded in that section's real source blocks
+ * (`sourceBlockIds`, non-empty — the service drops ungrounded ones). `blockType`
+ * / `sectionRole` are metadata stamped IN CODE from the actual section, never
+ * trusted from the LLM. Stored as an additive parallel array on `LearningLayer`,
+ * so old learning-layer rows (without `conceptCandidates`) stay valid.
+ */
+const learningConceptCandidate = z.object({
+  id: z.string().min(1),
+  sectionId: z.string().min(1),
+  label: z.string().min(1),
+  definition: z.string().min(1),
+  sourceBlockIds,
+  blockType: z.string().min(1).optional(),
+  sectionRole: z.string().min(1).optional(),
+  aiAssisted: z.literal(true),
+  validationStatus,
+})
+
+export type LearningConceptCandidate = z.infer<typeof learningConceptCandidate>
+
+/**
+ * Stored learning layer (code-managed ids + validationStatus). `conceptCandidates`
+ * is an ADDITIVE optional parallel array (DET-283): old stored rows predate it and
+ * still parse. `concepts` / `retrievalPrompts` and their update flow are untouched.
+ */
 export const LearningLayerSchema = z.object({
   concepts: z.array(learningConcept),
   retrievalPrompts: z.array(retrievalPrompt),
+  conceptCandidates: z.array(learningConceptCandidate).optional(),
 })
 
 export type LearningLayer = z.infer<typeof LearningLayerSchema>
@@ -697,6 +727,24 @@ export const LearningLayerLlmSchema = z.object({
   retrievalPrompts: z.array(
     z.object({
       prompt: z.string().min(1),
+      sourceBlockIds: z.array(z.string()).default([]),
+    }),
+  ),
+})
+
+/**
+ * What the LLM returns for per-section concept extraction (DET-283) — only
+ * `label` / `definition` / `sourceBlockIds`. The id, sectionId, blockType,
+ * sectionRole, aiAssisted flag and validationStatus are all CODE-OWNED (stamped
+ * after validation, never prompt-trusted). `sourceBlockIds` is loosened to allow
+ * empties so the service can DROP ungrounded candidates in code rather than the
+ * model omitting them to satisfy the schema (mirrors LearningLayerLlmSchema).
+ */
+export const ConceptCandidatesLlmSchema = z.object({
+  candidates: z.array(
+    z.object({
+      label: z.string().min(1),
+      definition: z.string().min(1),
       sourceBlockIds: z.array(z.string()).default([]),
     }),
   ),

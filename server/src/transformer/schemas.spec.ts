@@ -1,6 +1,7 @@
 import {
   ArticleJsonV2Schema,
   ArticleSchema,
+  LearningLayerSchema,
   ReshapingPlanSchema,
   SourceStructureModelSchema,
 } from './schemas'
@@ -325,5 +326,82 @@ describe('ArticleJsonV2Schema (DET-277)', () => {
     }
     broken.sections[0].blocks[0].type = 'sidebar'
     expect(ArticleJsonV2Schema.safeParse(broken).success).toBe(false)
+  })
+})
+
+describe('LearningLayerSchema conceptCandidates (DET-283)', () => {
+  it('still parses an old stored layer without conceptCandidates (additive)', () => {
+    const old = {
+      concepts: [
+        {
+          id: 'c1',
+          label: 'L',
+          definition: 'D',
+          sourceBlockIds: ['b1'],
+          validationStatus: 'pending',
+        },
+      ],
+      retrievalPrompts: [],
+    }
+    expect(LearningLayerSchema.safeParse(old).success).toBe(true)
+  })
+
+  it('parses a layer carrying conceptCandidates', () => {
+    const withCandidates = {
+      concepts: [],
+      retrievalPrompts: [],
+      conceptCandidates: [
+        {
+          id: 'cc1',
+          sectionId: 's1',
+          label: 'L',
+          definition: 'D',
+          sourceBlockIds: ['b1'],
+          blockType: 'paragraph',
+          sectionRole: 'definition',
+          aiAssisted: true,
+          validationStatus: 'pending',
+        },
+      ],
+    }
+    expect(LearningLayerSchema.safeParse(withCandidates).success).toBe(true)
+  })
+
+  it('rejects a candidate with empty sourceBlockIds', () => {
+    const broken = {
+      concepts: [],
+      retrievalPrompts: [],
+      conceptCandidates: [
+        {
+          id: 'cc1',
+          sectionId: 's1',
+          label: 'L',
+          definition: 'D',
+          sourceBlockIds: [],
+          aiAssisted: true,
+          validationStatus: 'pending',
+        },
+      ],
+    }
+    expect(LearningLayerSchema.safeParse(broken).success).toBe(false)
+  })
+
+  it('rejects a candidate with aiAssisted !== true', () => {
+    const broken = {
+      concepts: [],
+      retrievalPrompts: [],
+      conceptCandidates: [
+        {
+          id: 'cc1',
+          sectionId: 's1',
+          label: 'L',
+          definition: 'D',
+          sourceBlockIds: ['b1'],
+          aiAssisted: false,
+          validationStatus: 'pending',
+        },
+      ],
+    }
+    expect(LearningLayerSchema.safeParse(broken).success).toBe(false)
   })
 })

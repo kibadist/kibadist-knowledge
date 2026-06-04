@@ -88,6 +88,8 @@ export function ArticleView({
   sourceBlockCount,
   masthead,
   onInspect,
+  onExtractConcepts,
+  extractingSectionId,
 }: {
   article: ArticleJsonV2
   articleId: string
@@ -98,6 +100,10 @@ export function ArticleView({
   masthead: ReactNode
   // Open the source inspector for a transformed fragment.
   onInspect: (selection: InspectorSelection) => void
+  /** Extract concept candidates for a section (DET-283). Omitted → no affordance. */
+  onExtractConcepts?: (sectionId: string) => void
+  /** The section id currently extracting (disables + labels its button). */
+  extractingSectionId?: string | null
 }) {
   const queryClient = useQueryClient()
 
@@ -244,6 +250,8 @@ export function ArticleView({
                 section={section}
                 level={2}
                 onInspect={onInspect}
+                onExtractConcepts={onExtractConcepts}
+                extracting={extractingSectionId === section.id}
               />
               {slot && (
                 <IllustrationSlot
@@ -263,6 +271,8 @@ export function ArticleView({
                     section={sub}
                     level={3}
                     onInspect={onInspect}
+                    onExtractConcepts={onExtractConcepts}
+                    extracting={extractingSectionId === sub.id}
                   />
                   {sub.blocks.map((b) => (
                     <Block key={b.id} block={b} onInspect={onInspect} />
@@ -532,10 +542,15 @@ function SectionHeading({
   section,
   level,
   onInspect,
+  onExtractConcepts,
+  extracting = false,
 }: {
   section: ArticleSectionV2
   level: 2 | 3
   onInspect: (selection: InspectorSelection) => void
+  /** Extract concept candidates for this section (DET-283). Omitted → no button. */
+  onExtractConcepts?: (sectionId: string) => void
+  extracting?: boolean
 }) {
   const className = level === 2 ? 'tf-article-heading' : 'tf-article-subheading'
   const sourceBlockIds = section.headingSourceBlockIds ?? []
@@ -551,16 +566,25 @@ function SectionHeading({
   const role = roleLabel ? (
     <span className='tf-section-role'>{roleLabel}</span>
   ) : null
-  if (sourceBlockIds.length === 0) {
-    return (
-      <div className='tf-heading-row'>
-        <Tag className={className}>{section.heading}</Tag>
-        {role}
-      </div>
-    )
-  }
-  return (
-    <div className='tf-heading-row'>
+  // A subtle per-section "Extract concepts" action (DET-283). Quiet by default
+  // (revealed on hover via CSS), it asks the server to extract AI-assisted
+  // concept candidates grounded in THIS section's source blocks — proposals the
+  // reader validates later in the learning panel, never auto-saved concepts.
+  const extract = onExtractConcepts ? (
+    <button
+      type='button'
+      className='tf-section-extract'
+      disabled={extracting}
+      onClick={() => onExtractConcepts(section.id)}
+      title='Extract concept candidates from this section (AI-assisted)'
+    >
+      {extracting ? 'Extracting…' : '✦ Extract concepts'}
+    </button>
+  ) : null
+  const heading =
+    sourceBlockIds.length === 0 ? (
+      <Tag className={className}>{section.heading}</Tag>
+    ) : (
       <Tag className={className}>
         <button
           type='button'
@@ -576,7 +600,12 @@ function SectionHeading({
           {section.heading}
         </button>
       </Tag>
+    )
+  return (
+    <div className='tf-heading-row'>
+      {heading}
       {role}
+      {extract}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
@@ -46,6 +46,19 @@ import '../../transformer.css'
 export default function ArticlePage() {
   const { articleId } = useParams<{ articleId: string }>()
   const [selection, setSelection] = useState<InspectorSelection | null>(null)
+  const queryClient = useQueryClient()
+
+  // Per-section concept-extraction (DET-283). The mutation appends AI-assisted
+  // candidates to the article's learning layer; on success we invalidate the
+  // article query so the learning panel re-renders with the new candidates.
+  const extractConcepts = useMutation({
+    mutationFn: (sectionId: string) =>
+      api.extractSectionConcepts(articleId, sectionId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ['transformer-article', articleId],
+      }),
+  })
 
   const articleQuery = useQuery({
     queryKey: ['transformer-article', articleId],
@@ -185,6 +198,14 @@ export default function ArticlePage() {
                 </>
               }
               onInspect={setSelection}
+              onExtractConcepts={(sectionId) =>
+                extractConcepts.mutate(sectionId)
+              }
+              extractingSectionId={
+                extractConcepts.isPending
+                  ? (extractConcepts.variables ?? null)
+                  : null
+              }
             />
           )}
 
@@ -222,6 +243,7 @@ export default function ArticlePage() {
                 <LearningToolsPanel
                   articleId={article.id}
                   layer={article.learningLayer}
+                  sections={article.articleJson?.sections}
                   onInspect={setSelection}
                 />
 

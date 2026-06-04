@@ -628,7 +628,91 @@ export class TransformerService {
     )
   }
 
-  /** Update one learning-layer concept's validation status (DET-258). */
+  /**
+   * Mutate an article's learningLayer JSON atomically (DET-283). The learning
+   * layer is a single JSON blob, so concurrent mutations (re-extracting a
+   * section's candidates while validating another, say) would each write back
+   * only their own patch and silently drop the other's (lost update) — the same
+   * class `withLockedPlan` solves for illustrations. Locking the article row with
+   * `FOR UPDATE` and re-reading the layer inside the transaction serialises them,
+   * so each patch derives from the latest committed layer. `apply` returns the
+   * next layer derived from the freshly-read one.
+   */
+  private async withLockedLearningLayer(
+    articleId: string,
+    apply: (layer: LearningLayer) => LearningLayer,
+  ): Promise<LearningLayer> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "transformed_articles" WHERE id = ${articleId} FOR UPDATE`
+      const row = await tx.transformedArticle.findUnique({
+        where: { id: articleId },
+        select: { learningLayer: true },
+      })
+      const layer: LearningLayer =
+        (row?.learningLayer as LearningLayer | null) ?? {
+          concepts: [],
+          retrievalPrompts: [],
+        }
+      const updated = apply(layer)
+      await tx.transformedArticle.update({
+        where: { id: articleId },
+        data: { learningLayer: updated as unknown as Prisma.InputJsonValue },
+      })
+      return updated
+    })
+  }
+
+  /**
+   * Extract per-section concept CANDIDATES and append them to the article's
+   * learningLayer JSON (DET-283). Candidates are PROPOSALS — aiAssisted,
+   * unvalidated, source-grounded — and NEVER create a library Concept row; user
+   * validation stays explicit (see updateLearningItem).
+   *
+   * Re-extraction rule: re-running for the same section REPLACES that section's
+   * PENDING candidates, while KEEPING any the user already validated or dismissed
+   * (their decisions are not discarded by a fresh extraction). The append is done
+   * under the per-article row lock + re-read so a concurrent validate/extract can
+   * never clobber it.
+   */
+  async extractSectionConcepts(
+    userId: string,
+    articleId: string,
+    sectionId: string,
+  ): Promise<LearningLayer> {
+    const article = await this.findOwnedArticle(userId, articleId)
+    if (!article.articleJson) {
+      throw new ConflictException('Article has not been generated yet')
+    }
+    // The extractor needs v2; stored JSON may be legacy v1 — adapt at this read
+    // boundary exactly as getArticle does (representation-only).
+    const v2 = toArticleV2(
+      article.articleJson as unknown as SourcePreservingArticle | ArticleJsonV2,
+    )
+    const candidates = await this.articlePipeline.extractSectionConcepts(
+      v2,
+      sectionId,
+      article.sourceId,
+      article.blocksVersion,
+    )
+    return this.withLockedLearningLayer(article.id, (layer) => {
+      const existing = layer.conceptCandidates ?? []
+      // Keep this section's already-decided candidates; drop only its pending
+      // ones (they are superseded by the fresh extraction). Other sections are
+      // untouched.
+      const kept = existing.filter(
+        (c) => c.sectionId !== sectionId || c.validationStatus !== 'pending',
+      )
+      return { ...layer, conceptCandidates: [...kept, ...candidates] }
+    })
+  }
+
+  /**
+   * Update one learning-layer item's validation status (DET-258/283). The item id
+   * is looked up across `concepts` AND `conceptCandidates` (retrievalPrompts have
+   * no validation state). For a candidate this ONLY flips `validationStatus` — it
+   * never creates a library Concept row (mirrors the concept path, which has never
+   * persisted Concept rows). Atomic under the per-article row lock + re-read.
+   */
   async updateLearningItem(
     userId: string,
     articleId: string,
@@ -636,21 +720,24 @@ export class TransformerService {
     validationStatus: LearningConcept['validationStatus'],
   ): Promise<LearningLayer> {
     const article = await this.findOwnedArticle(userId, articleId)
-    const layer = article.learningLayer as LearningLayer | null
-    if (!layer) throw new NotFoundException('No learning layer')
-    const concept = layer.concepts.find((c) => c.id === itemId)
-    if (!concept) throw new NotFoundException('Learning item not found')
-    const updated: LearningLayer = {
+    const current = article.learningLayer as LearningLayer | null
+    if (!current) throw new NotFoundException('No learning layer')
+    const inConcepts = current.concepts.some((c) => c.id === itemId)
+    const inCandidates = (current.conceptCandidates ?? []).some(
+      (c) => c.id === itemId,
+    )
+    if (!inConcepts && !inCandidates) {
+      throw new NotFoundException('Learning item not found')
+    }
+    return this.withLockedLearningLayer(article.id, (layer) => ({
       ...layer,
       concepts: layer.concepts.map((c) =>
         c.id === itemId ? { ...c, validationStatus } : c,
       ),
-    }
-    await this.prisma.transformedArticle.update({
-      where: { id: article.id },
-      data: { learningLayer: updated as unknown as Prisma.InputJsonValue },
-    })
-    return updated
+      conceptCandidates: layer.conceptCandidates?.map((c) =>
+        c.id === itemId ? { ...c, validationStatus } : c,
+      ),
+    }))
   }
 
   /** Load an article, asserting it belongs to the user (via the source). 404 otherwise. */

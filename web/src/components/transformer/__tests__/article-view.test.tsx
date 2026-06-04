@@ -21,6 +21,10 @@ import { fixtureArticle, fixtureArticleNoAids } from './article-view.fixture'
 function renderArticleView(
   onInspect: (s: InspectorSelection) => void,
   article: ArticleJsonV2 = fixtureArticle,
+  extra?: {
+    onExtractConcepts?: (sectionId: string) => void
+    extractingSectionId?: string | null
+  },
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -36,6 +40,8 @@ function renderArticleView(
       sourceBlockCount={8}
       masthead={null}
       onInspect={onInspect}
+      onExtractConcepts={extra?.onExtractConcepts}
+      extractingSectionId={extra?.extractingSectionId ?? null}
     />,
     { wrapper },
   )
@@ -367,6 +373,37 @@ describe('ArticleView (v2 renderer)', () => {
     const { container } = renderArticleView(vi.fn(), noShape)
     expect(screen.queryByText(/Procedure — ordered steps preserved/)).toBeNull()
     expect(container.querySelector('.tf-section-role')).toBeNull()
+  })
+
+  // --- DET-283: per-section concept-extraction affordance ------------------
+
+  it('renders an "Extract concepts" action per section (incl. subsection) and calls the handler with the section id', async () => {
+    const onExtractConcepts = vi.fn()
+    renderArticleView(vi.fn(), fixtureArticle, { onExtractConcepts })
+    const user = userEvent.setup()
+
+    // One on the top-level section + one on the nested subsection.
+    const buttons = screen.getAllByRole('button', { name: /Extract concepts/ })
+    expect(buttons).toHaveLength(2)
+
+    await user.click(buttons[0])
+    expect(onExtractConcepts).toHaveBeenCalledWith('s1')
+  })
+
+  it('omits the extract action when no handler is passed', () => {
+    renderArticleView(vi.fn())
+    expect(
+      screen.queryByRole('button', { name: /Extract concepts/ }),
+    ).toBeNull()
+  })
+
+  it('disables + labels the extracting section button', () => {
+    renderArticleView(vi.fn(), fixtureArticle, {
+      onExtractConcepts: vi.fn(),
+      extractingSectionId: 's1',
+    })
+    const extracting = screen.getByRole('button', { name: 'Extracting…' })
+    expect(extracting).toBeDisabled()
   })
 
   it('omits TOC, reading time and Source Highlights when readingAids is absent (old article)', () => {

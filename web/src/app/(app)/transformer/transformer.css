@@ -1392,6 +1392,124 @@
 }
 
 /* ============================================================================
+   Concept-extraction candidates (DET-283) — a per-section "Extract concepts"
+   affordance + AI-assisted, unvalidated proposals in the learning panel.
+   ============================================================================ */
+
+/* The per-section action sits in the heading row. Quiet by default, revealed on
+   hover / focus of the row so it never competes with the heading; always visible
+   (subtle) on touch where there is no hover. */
+.kbapp .tf-section-extract {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--indigo);
+  background: transparent;
+  border: 1px solid var(--rule-soft);
+  border-radius: 2px;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.kbapp .tf-heading-row:hover .tf-section-extract,
+.kbapp .tf-heading-row:focus-within .tf-section-extract,
+.kbapp .tf-section-extract:focus-visible {
+  opacity: 1;
+}
+.kbapp .tf-section-extract:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.kbapp .tf-section-extract:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+@media (hover: none) {
+  /* No hover surface on touch — keep the action discoverable but understated. */
+  .kbapp .tf-section-extract {
+    opacity: 0.65;
+  }
+}
+
+.kbapp .tf-candidates {
+  margin-top: 22px;
+  border-top: 1px solid var(--rule-soft);
+  padding-top: 18px;
+}
+.kbapp .tf-candidate-group {
+  margin-bottom: 18px;
+}
+.kbapp .tf-candidate-section {
+  display: inline-block;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  margin-bottom: 10px;
+}
+.kbapp .tf-candidate-section:hover {
+  color: var(--indigo);
+  border-bottom-color: currentColor;
+}
+.kbapp .tf-candidate-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kbapp .tf-candidate {
+  border: 1px solid var(--rule-soft);
+  background: var(--paper-hi);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kbapp .tf-candidate.is-dismissed {
+  opacity: 0.55;
+}
+.kbapp .tf-candidate-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.kbapp .tf-candidate-label {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--ink);
+}
+.kbapp .tf-candidate-def {
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin: 0;
+}
+.kbapp .tf-candidate-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.kbapp .tf-candidate-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ============================================================================
    Source inspector side panel (DET-257) — slide-in right rail.
    ============================================================================ */
 .kbapp .tf-scrim {

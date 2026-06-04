@@ -15,6 +15,7 @@ import { buildReadingAids } from './reading-aids.util'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import type {
   IllustrationPlan,
+  LearningConceptCandidate,
   LearningLayer,
   ReshapingPlan,
   SourceStructureModel,
@@ -209,6 +210,22 @@ export class ArticlePipelineService {
       learningLayer: layer as unknown as Prisma.InputJsonValue,
     })
     return layer
+  }
+
+  /**
+   * Extract concept candidates for one section of an article (DET-283). Loads the
+   * article's PINNED blocks and delegates the scoping + grounding + code guards to
+   * the learning-layer service; persistence (under the per-article row lock) is
+   * the caller's job — this never touches articleJson or learningLayer.
+   */
+  async extractSectionConcepts(
+    article: ArticleJsonV2,
+    sectionId: string,
+    sourceId: string,
+    blocksVersion: number,
+  ): Promise<LearningConceptCandidate[]> {
+    const blocks = await this.loadBlocks(sourceId, blocksVersion)
+    return this.learning.extractCandidatesForSection(article, sectionId, blocks)
   }
 
   // --- helpers --------------------------------------------------------------

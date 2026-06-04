@@ -1304,9 +1304,29 @@ export interface LearningRetrievalPrompt {
   sourceBlockIds: string[]
 }
 
+// A per-section concept-extraction CANDIDATE (DET-283). A PROPOSAL — never an
+// earned/library Concept: aiAssisted is always true and validationStatus starts
+// 'pending'. Scoped to the v2 section it was extracted from (sectionId) and
+// grounded in that section's real source blocks (sourceBlockIds). blockType /
+// sectionRole are code-stamped metadata. Mirrors the server LearningConceptCandidate
+// byte-for-byte.
+export interface LearningConceptCandidate {
+  id: string
+  sectionId: string
+  label: string
+  definition: string
+  sourceBlockIds: string[]
+  blockType?: string
+  sectionRole?: string
+  aiAssisted: true
+  validationStatus: LearningValidationStatus
+}
+
 export interface LearningLayer {
   concepts: LearningConcept[]
   retrievalPrompts: LearningRetrievalPrompt[]
+  // Additive (DET-283): old learning-layer rows predate this and omit it.
+  conceptCandidates?: LearningConceptCandidate[]
 }
 
 // GET /transformer/articles/:id — the article + fidelity + coverage + status.
@@ -1894,5 +1914,12 @@ export const api = {
     request<LearningLayer>(
       `/transformer/articles/${articleId}/learning-layer/items/${itemId}`,
       { method: 'PATCH', body: JSON.stringify({ validationStatus }) },
+    ),
+  // Concept-extraction candidates (DET-283): per-section, AI-assisted proposals
+  // stored on the learning layer. Validation reuses setLearningItemValidation.
+  extractSectionConcepts: (articleId: string, sectionId: string) =>
+    request<LearningLayer>(
+      `/transformer/articles/${articleId}/sections/${sectionId}/concepts`,
+      { method: 'POST' },
     ),
 }

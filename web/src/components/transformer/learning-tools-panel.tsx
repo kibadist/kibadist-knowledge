@@ -2,7 +2,13 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { ApiError, api, type LearningLayer } from '@/lib/api'
+import {
+  ApiError,
+  type ArticleSectionV2,
+  api,
+  type LearningConceptCandidate,
+  type LearningLayer,
+} from '@/lib/api'
 
 import type { InspectorSelection } from './source-inspector-panel'
 
@@ -17,10 +23,13 @@ import type { InspectorSelection } from './source-inspector-panel'
 export function LearningToolsPanel({
   articleId,
   layer,
+  sections,
   onInspect,
 }: {
   articleId: string
   layer: LearningLayer | null
+  /** Article sections (incl. subsections) for candidate grouping labels (DET-283). */
+  sections?: ArticleSectionV2[]
   onInspect: (selection: InspectorSelection) => void
 }) {
   const queryClient = useQueryClient()
@@ -44,8 +53,12 @@ export function LearningToolsPanel({
       }),
   })
 
+  const candidates = layer?.conceptCandidates ?? []
   const hasContent =
-    layer && (layer.concepts.length > 0 || layer.retrievalPrompts.length > 0)
+    layer &&
+    (layer.concepts.length > 0 ||
+      layer.retrievalPrompts.length > 0 ||
+      candidates.length > 0)
 
   return (
     <section className='panel tf-ai-panel'>
@@ -171,8 +184,148 @@ export function LearningToolsPanel({
               </ul>
             </div>
           )}
+
+          {candidates.length > 0 && (
+            <ConceptCandidates
+              candidates={candidates}
+              sections={sections ?? []}
+              onValidate={(itemId, status) =>
+                validate.mutate({ itemId, status })
+              }
+              validating={validate.isPending}
+              onInspect={onInspect}
+            />
+          )}
         </>
       )}
     </section>
+  )
+}
+
+/** Flatten sections + subsections into an id→heading map for candidate labels. */
+function headingMap(sections: ArticleSectionV2[]): Map<string, string> {
+  const map = new Map<string, string>()
+  const walk = (s: ArticleSectionV2) => {
+    map.set(s.id, s.heading)
+    for (const sub of s.subsections ?? []) walk(sub)
+  }
+  for (const s of sections) walk(s)
+  return map
+}
+
+/**
+ * Per-section concept candidates (DET-283). PROPOSALS — each carries an
+ * always-visible "AI-assisted · unvalidated" badge for pending items; clicking a
+ * candidate opens the source inspector with its sourceBlockIds, and an anchor
+ * links back to its section (#section-id). Validate/Dismiss reuse the existing
+ * learning-item PATCH flow. Candidates are grouped by their section, in section
+ * order where the section is known, then any orphans.
+ */
+function ConceptCandidates({
+  candidates,
+  sections,
+  onValidate,
+  validating,
+  onInspect,
+}: {
+  candidates: LearningConceptCandidate[]
+  sections: ArticleSectionV2[]
+  onValidate: (itemId: string, status: 'validated' | 'dismissed') => void
+  validating: boolean
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  const headings = headingMap(sections)
+  // Group by sectionId, preserving section order; unknown sections fall to the end.
+  const order = [...headings.keys()]
+  const bySection = new Map<string, LearningConceptCandidate[]>()
+  for (const c of candidates) {
+    const list = bySection.get(c.sectionId) ?? []
+    list.push(c)
+    bySection.set(c.sectionId, list)
+  }
+  const sortedIds = [...bySection.keys()].sort((a, b) => {
+    const ia = order.indexOf(a)
+    const ib = order.indexOf(b)
+    return (
+      (ia === -1 ? Number.MAX_SAFE_INTEGER : ia) -
+      (ib === -1 ? Number.MAX_SAFE_INTEGER : ib)
+    )
+  })
+
+  return (
+    <div className='tf-candidates'>
+      <h4 className='tf-aux-h'>Concept candidates</h4>
+      {sortedIds.map((sectionId) => {
+        const heading = headings.get(sectionId) ?? sectionId
+        return (
+          <div key={sectionId} className='tf-candidate-group'>
+            <a className='tf-candidate-section' href={`#${sectionId}`}>
+              {heading}
+            </a>
+            <ul className='tf-candidate-list'>
+              {(bySection.get(sectionId) ?? []).map((c) => (
+                <li
+                  key={c.id}
+                  className={`tf-candidate${c.validationStatus === 'dismissed' ? ' is-dismissed' : ''}`}
+                >
+                  <div className='tf-candidate-top'>
+                    <span className='tf-candidate-label'>{c.label}</span>
+                    {c.validationStatus === 'pending' ? (
+                      <span className='chip chip-ai'>
+                        AI-assisted · unvalidated
+                      </span>
+                    ) : (
+                      <span
+                        className={`chip ${c.validationStatus === 'validated' ? 'chip-cleared' : 'chip-quiet'}`}
+                      >
+                        {c.validationStatus}
+                      </span>
+                    )}
+                  </div>
+                  <p className='tf-candidate-def'>{c.definition}</p>
+                  <div className='tf-candidate-foot'>
+                    <button
+                      type='button'
+                      className='tf-ref-btn'
+                      onClick={() =>
+                        onInspect({
+                          kind: 'Concept candidate',
+                          transformedText: `${c.label} — ${c.definition}`,
+                          sourceBlockIds: c.sourceBlockIds,
+                        })
+                      }
+                    >
+                      source refs ({c.sourceBlockIds.length})
+                    </button>
+                    <div className='tf-candidate-actions'>
+                      <button
+                        type='button'
+                        className='btn-ghost-xs'
+                        disabled={
+                          validating || c.validationStatus === 'validated'
+                        }
+                        onClick={() => onValidate(c.id, 'validated')}
+                      >
+                        Validate
+                      </button>
+                      <button
+                        type='button'
+                        className='btn-ghost-xs'
+                        disabled={
+                          validating || c.validationStatus === 'dismissed'
+                        }
+                        onClick={() => onValidate(c.id, 'dismissed')}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      })}
+    </div>
   )
 }

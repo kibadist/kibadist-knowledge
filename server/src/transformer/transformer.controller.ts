@@ -240,6 +240,23 @@ export class TransformerController {
     return this.transformer.generateLearningLayer(user.userId, id)
   }
 
+  /**
+   * Extract concept CANDIDATES for one section of an article (DET-283).
+   * AI-throttled like generateLearningLayer. Candidates are proposals — never
+   * library Concept rows; the service enforces grounding + the replace-pending
+   * rule in code. Workspace/user scoping is identical to the other article
+   * endpoints (ownership resolved via the source's userId in the service).
+   */
+  @Throttle(AI_THROTTLE)
+  @Post('articles/:id/sections/:sectionId/concepts')
+  extractSectionConcepts(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('sectionId') sectionId: string,
+  ) {
+    return this.transformer.extractSectionConcepts(user.userId, id, sectionId)
+  }
+
   @Patch('articles/:id/learning-layer/items/:itemId')
   updateLearningItem(
     @CurrentUser() user: AuthUser,
