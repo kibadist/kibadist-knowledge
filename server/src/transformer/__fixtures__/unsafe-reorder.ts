@@ -1,3 +1,4 @@
+import type { SourceStructureModel } from '../schemas'
 import type { ClassifiedBlockInput } from '../structure-model.service'
 import type { ArticleJsonV2 } from '../transformer.types'
 import type { V2Fixture } from './index'
@@ -139,8 +140,46 @@ const article: ArticleJsonV2 = {
   ],
 }
 
-export const unsafeReorder: V2Fixture = {
+/**
+ * Minimal structure model for the cluster check (DET-281). The claim (b2) and
+ * the caveat that qualifies it (b3) are source-ADJACENT (positions 1 and 2), so
+ * the caveat is anchored to the claim; the article renders the claim in section 0
+ * and the caveat in section 2 → a separation of 2 (> the gap-1 threshold), which
+ * the cluster util flags as a high-severity, blocking structuralFinding.
+ */
+const structureModel: SourceStructureModel = {
+  title: {
+    text: 'Intermittent fasting and weight loss',
+    sourceBlockIds: ['b1'],
+  },
+  subtitle: null,
+  claims: [
+    {
+      text: 'Intermittent fasting reliably produces weight loss in the studied groups.',
+      sourceBlockIds: ['b2'],
+    },
+  ],
+  definitions: [],
+  examples: [],
+  caveats: [
+    {
+      text: 'Fasting only helped when total daily calories also fell.',
+      sourceBlockIds: ['b3'],
+    },
+  ],
+  terminology: [],
+  originalOutline: [
+    { heading: 'Intermittent fasting and weight loss', sourceBlockIds: ['b1'] },
+  ],
+  noiseDecisions: [],
+  uncertainBlockIds: [],
+}
+
+export const unsafeReorder: V2Fixture & {
+  structureModel: SourceStructureModel
+} = {
   name: 'unsafe-reorder',
   blocks,
   article,
+  structureModel,
 }

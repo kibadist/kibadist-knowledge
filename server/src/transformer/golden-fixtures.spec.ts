@@ -36,6 +36,8 @@ function cleanReport(): FidelityReport {
     unsupportedHeadings: [],
     missingCaveats: [],
     unsupportedExamples: [],
+    emphasisChanges: [],
+    structuralFindings: [],
   }
 }
 
@@ -237,17 +239,47 @@ describe('golden fixture: negatives', () => {
     expect(unknown).toEqual([UNSUPPORTED_HIGHLIGHT_UNKNOWN_ID])
   })
 
+  it('unsupported-highlight: the deterministic merge emits a high blocking structuralFinding (DET-281)', () => {
+    const { article, blocks } = negativeFixtures.unsupportedHighlight
+    const merged = mergeDeterministicChecks(
+      cleanReport(),
+      article,
+      knownBlockIds(blocks),
+    )
+    const highlightFinding = merged.structuralFindings.find(
+      (f) =>
+        f.severity === 'high' &&
+        (f.sourceBlockIds?.includes(UNSUPPORTED_HIGHLIGHT_UNKNOWN_ID) ?? false),
+    )
+    expect(highlightFinding).toBeDefined()
+    expect(merged.approved).toBe(false)
+  })
+
   it('unsafe-reorder fixture is schema-valid and fully traceable (the violation is semantic)', () => {
     const { article, blocks } = negativeFixtures.unsafeReorder
     expect(ArticleJsonV2Schema.safeParse(article).success).toBe(true)
     // Every fragment is traceable — the problem is the caveat/claim separation,
-    // not a missing id. The blocking check lands in DET-281 (see it.todo below).
+    // not a missing id. The blocking check is the cluster util (next test).
     expect(findUnknownSourceBlockIds(article, knownBlockIds(blocks))).toEqual(
       [],
     )
   })
 
-  // The deterministic caveat-separation blocking check is DET-281 scope; the
-  // fixture is in place so wiring the live assertion is a one-line change then.
-  it.todo('blocks caveat-separation reorder (DET-281)')
+  it('blocks caveat-separation reorder (DET-281)', () => {
+    const { article, blocks, structureModel } = negativeFixtures.unsafeReorder
+    // With the structure model + classified blocks, the cluster util sees the
+    // caveat (b3) rendered two sections away from the claim (b2) it qualifies.
+    const merged = mergeDeterministicChecks(
+      cleanReport(),
+      article,
+      knownBlockIds(blocks),
+      { structureModel, blocks },
+    )
+    const separation = merged.structuralFindings.find(
+      (f) =>
+        f.severity === 'high' && /separated from the claim/.test(f.description),
+    )
+    expect(separation).toBeDefined()
+    expect(merged.approved).toBe(false)
+  })
 })

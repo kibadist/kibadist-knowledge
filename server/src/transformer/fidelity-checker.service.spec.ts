@@ -1,4 +1,5 @@
 import { mergeDeterministicChecks } from './fidelity-checker.service'
+import { FidelityReportSchema } from './schemas'
 import type {
   FidelityReport,
   SourcePreservingArticle,
@@ -14,6 +15,8 @@ function emptyReport(score: number): FidelityReport {
     unsupportedHeadings: [],
     missingCaveats: [],
     unsupportedExamples: [],
+    emphasisChanges: [],
+    structuralFindings: [],
   }
 }
 
@@ -125,5 +128,55 @@ describe('mergeDeterministicChecks (fidelity blocking rules)', () => {
     const report = emptyReport(50) // model claims approved:true but score is 50
     const out = mergeDeterministicChecks(report, article(), known)
     expect(out.approved).toBe(false)
+  })
+
+  // --- DET-281: new finding groups block approval ---------------------------
+
+  it('blocks: a high-severity emphasisChanges finding (DET-281)', () => {
+    const report = emptyReport(99)
+    report.emphasisChanges.push({
+      severity: 'high',
+      description: 'reading order inverts a chronological source',
+    })
+    const out = mergeDeterministicChecks(report, article(), known)
+    expect(out.approved).toBe(false)
+  })
+
+  it('blocks: a high-severity structuralFindings finding (DET-281)', () => {
+    const report = emptyReport(99)
+    report.structuralFindings.push({
+      severity: 'high',
+      description: 'caveat separated from its claim',
+    })
+    const out = mergeDeterministicChecks(report, article(), known)
+    expect(out.approved).toBe(false)
+  })
+
+  it('does NOT block on a medium-severity structuralFindings finding', () => {
+    const report = emptyReport(99)
+    report.structuralFindings.push({
+      severity: 'medium',
+      description: 'a soft heuristic finding',
+    })
+    const out = mergeDeterministicChecks(report, article(), known)
+    expect(out.approved).toBe(true)
+  })
+
+  it('old stored report shape (no emphasis/structural fields) still parses via schema defaults', () => {
+    // An old stored fidelityReport JSON predates DET-281 — it has none of the
+    // two new groups. The schema `.default([])` must fill them in on re-read.
+    const stored = {
+      fidelityScore: 98,
+      approved: true,
+      addedInformation: [],
+      lostInformation: [],
+      meaningChanges: [],
+      unsupportedHeadings: [],
+      missingCaveats: [],
+      unsupportedExamples: [],
+    }
+    const parsed = FidelityReportSchema.parse(stored)
+    expect(parsed.emphasisChanges).toEqual([])
+    expect(parsed.structuralFindings).toEqual([])
   })
 })

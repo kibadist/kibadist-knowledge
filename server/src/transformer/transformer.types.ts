@@ -74,6 +74,20 @@ export interface FidelityReport {
   unsupportedHeadings: FidelityFinding[]
   missingCaveats: FidelityFinding[]
   unsupportedExamples: FidelityFinding[]
+  /**
+   * Emphasis shifts that come from STRUCTURE rather than wording (DET-281):
+   * heavy reading-order inversion of chronological source, display emphasis
+   * that overstates a point. High severity blocks approval (code-computed).
+   * Backward-safe: old stored reports lack this field — schema defaults to [].
+   */
+  emphasisChanges: FidelityFinding[]
+  /**
+   * Structural fidelity findings (DET-281): untraceable typed blocks / reading
+   * aids, quote-attribution loss, duplicate full rendering, claim/caveat or
+   * claim/evidence cluster separation. High severity blocks approval.
+   * Backward-safe: old stored reports lack this field — schema defaults to [].
+   */
+  structuralFindings: FidelityFinding[]
 }
 
 export interface CoverageReport {

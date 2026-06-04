@@ -995,6 +995,11 @@ export interface FidelityReport {
   unsupportedHeadings: FidelityFinding[]
   missingCaveats: FidelityFinding[]
   unsupportedExamples: FidelityFinding[]
+  // DET-281: structure-driven emphasis shifts + structural fidelity findings.
+  // Optional in the mirror because old stored reports predate these groups and
+  // the renderer must tolerate absence (defaults to [] on the server).
+  emphasisChanges?: FidelityFinding[]
+  structuralFindings?: FidelityFinding[]
 }
 
 export interface CoverageReport {

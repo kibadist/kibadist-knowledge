@@ -158,7 +158,11 @@ export function ArticleView({
           <div key={section.id}>
             {i > 0 && <SectionOrnament />}
             <section className='tf-article-section'>
-              <SectionHeading section={section} level={2} onInspect={onInspect} />
+              <SectionHeading
+                section={section}
+                level={2}
+                onInspect={onInspect}
+              />
               {slot && (
                 <IllustrationSlot
                   articleId={articleId}
@@ -173,7 +177,11 @@ export function ArticleView({
               ))}
               {section.subsections?.map((sub) => (
                 <section key={sub.id} className='tf-article-subsection'>
-                  <SectionHeading section={sub} level={3} onInspect={onInspect} />
+                  <SectionHeading
+                    section={sub}
+                    level={3}
+                    onInspect={onInspect}
+                  />
                   {sub.blocks.map((b) => (
                     <Block key={b.id} block={b} onInspect={onInspect} />
                   ))}
@@ -305,8 +313,7 @@ function SectionHeading({
   level: 2 | 3
   onInspect: (selection: InspectorSelection) => void
 }) {
-  const className =
-    level === 2 ? 'tf-article-heading' : 'tf-article-subheading'
+  const className = level === 2 ? 'tf-article-heading' : 'tf-article-subheading'
   const sourceBlockIds = section.headingSourceBlockIds ?? []
   const Tag = level === 2 ? 'h2' : 'h3'
   if (sourceBlockIds.length === 0) {

@@ -519,6 +519,10 @@ export const FidelityReportSchema: z.ZodType<FidelityReport> = z.object({
   unsupportedHeadings: z.array(fidelityFinding),
   missingCaveats: z.array(fidelityFinding),
   unsupportedExamples: z.array(fidelityFinding),
+  // Backward-safe (DET-281): old stored fidelityReport JSON predates these two
+  // groups, so `.default([])` lets a re-read of an old report still parse.
+  emphasisChanges: z.array(fidelityFinding).default([]),
+  structuralFindings: z.array(fidelityFinding).default([]),
 })
 
 // --- Illustration plan (step 10, DET-259) ----------------------------------

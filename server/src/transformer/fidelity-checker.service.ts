@@ -3,6 +3,13 @@ import { Injectable } from '@nestjs/common'
 import { AiService } from '../ai/ai.service'
 import { toArticleV2 } from './article-compat.util'
 import { buildFidelityPrompt } from './fidelity-checker.prompt'
+import { validateClusters } from './fidelity-clusters.util'
+import {
+  checkDuplicateRendering,
+  checkEndMatterTraceability,
+  checkQuoteAttribution,
+  checkUnsupportedHighlights,
+} from './fidelity-structural.util'
 import { completeJson } from './llm-json.util'
 import type { SourceStructureModel } from './schemas'
 import { FidelityReportSchema } from './schemas'
@@ -19,15 +26,24 @@ import type {
 const MIN_FIDELITY_SCORE = 95
 
 /**
- * Fidelity-checker service (DET-254, step 9). The LLM report is MERGED with
- * deterministic code checks, then the binding `approved` is recomputed in code:
+ * Fidelity-checker service (DET-254 / DET-281, step 9). The LLM report is MERGED
+ * with deterministic code checks, then the binding `approved` is recomputed in
+ * code:
  *
  *  - blocks with no sourceBlockIds OR with unknown block ids → high-severity
  *    `lostInformation` findings (a traceability violation).
  *  - section headings with headingSource 'inferred' whose section
  *    sourceBlockIds are empty → `unsupportedHeadings` findings.
- *  - `approved = false` if ANY high-severity addedInformation OR high-severity
- *    lostInformation OR fidelityScore < 95 OR any traceability violation.
+ *  - FULL v2 traversal traceability (every typed block / subsection / abstract /
+ *    keyTerm / sourceExample / caveat / readingAids highlight) → high-severity
+ *    `structuralFindings` + traceability violation (DET-281).
+ *  - quote attribution loss (heuristic, medium), duplicate full rendering
+ *    (medium; high for a duplicated caveat), unsupported highlights (high),
+ *    claim/caveat + claim/evidence cluster SEPARATION (high), chronology
+ *    inversion (high `emphasisChanges`) — DET-281.
+ *  - `approved = false` if ANY high-severity addedInformation, lostInformation,
+ *    meaningChanges, emphasisChanges OR structuralFindings, OR fidelityScore
+ *    < 95, OR any traceability violation.
  *
  * The model's own `approved` is discarded. approved ⇒ FINAL, else ⇒ BLOCKED.
  */
@@ -62,24 +78,42 @@ export class FidelityCheckerService {
       maxTokens: 4000,
     })
 
-    return mergeDeterministicChecks(report, article, known)
+    return mergeDeterministicChecks(report, article, known, {
+      structureModel,
+      blocks,
+    })
   }
 }
 
 /**
- * Merge the LLM report with deterministic traceability/heading checks and
- * recompute `approved` in code (never trusting the model).
+ * Optional deterministic-check inputs (DET-281). When the structure model and
+ * classified blocks (with text) are supplied, the merge additionally runs the
+ * structural + cluster checks (quote attribution, duplicate rendering, cluster
+ * separation, chronology). Omitting them keeps the original traceability/heading
+ * merge — the 3-arg call site stays valid.
+ */
+export interface DeterministicCheckInputs {
+  structureModel?: SourceStructureModel
+  blocks?: ClassifiedBlockInput[]
+}
+
+/**
+ * Merge the LLM report with deterministic traceability / heading / structural
+ * checks (DET-281) and recompute `approved` in code (never trusting the model).
  */
 export function mergeDeterministicChecks(
   report: FidelityReport,
   input: SourcePreservingArticle | ArticleJsonV2,
   known: ReadonlySet<string>,
+  inputs: DeterministicCheckInputs = {},
 ): FidelityReport {
   // Adapt v1 → v2 so the traversal is uniform; idempotent for native v2.
   const article = toArticleV2(input)
   let traceabilityViolation = false
   const lost: FidelityFinding[] = [...report.lostInformation]
   const unsupportedHeadings: FidelityFinding[] = [...report.unsupportedHeadings]
+  const emphasisChanges: FidelityFinding[] = [...report.emphasisChanges]
+  const structuralFindings: FidelityFinding[] = [...report.structuralFindings]
 
   const checkFragment = (
     fragment: { id: string; sourceBlockIds: string[] },
@@ -123,14 +157,47 @@ export function mergeDeterministicChecks(
   for (const p of article.abstract) checkFragment(p, 'abstract')
   for (const s of article.sections) checkSection(s)
 
-  const hasHighAdded = report.addedInformation.some(
-    (f) => f.severity === 'high',
-  )
-  const hasHighLost = lost.some((f) => f.severity === 'high')
+  // --- DET-281 structural checks --------------------------------------------
+  // End-matter + reading-aid traceability beyond the abstract/blocks/headings
+  // already checked above (subtitle, keyTerms, sourceExamples, caveats,
+  // highlights). Any untraceable fragment is a high structuralFinding + a
+  // traceability violation. `checkFullTraceability` re-walks blocks/abstract
+  // too, so we add only the structuralFindings it surfaces for the END-MATTER
+  // surfaces, avoiding double-counting the block/abstract findings already in
+  // `lost`. (The util is exercised whole by its own unit spec.)
+  const endMatterTrace = checkEndMatterTraceability(article, known)
+  structuralFindings.push(...endMatterTrace.structuralFindings)
+  if (endMatterTrace.traceabilityViolation) traceabilityViolation = true
+
+  // Unsupported reading-aid highlights (high, blocking).
+  structuralFindings.push(...checkUnsupportedHighlights(article, known))
+
+  // Duplicate full rendering (medium; high for a duplicated caveat).
+  const dup = checkDuplicateRendering(article)
+  structuralFindings.push(...dup.findings)
+
+  // Cluster + attribution checks need block text + the structure model.
+  if (inputs.blocks)
+    structuralFindings.push(...checkQuoteAttribution(article, inputs.blocks))
+  if (inputs.structureModel && inputs.blocks) {
+    const clusters = validateClusters(
+      article,
+      inputs.structureModel,
+      inputs.blocks,
+    )
+    structuralFindings.push(...clusters.structuralFindings)
+    emphasisChanges.push(...clusters.emphasisChanges)
+  }
+
+  const hasHigh = (findings: FidelityFinding[]) =>
+    findings.some((f) => f.severity === 'high')
 
   const approved =
-    !hasHighAdded &&
-    !hasHighLost &&
+    !hasHigh(report.addedInformation) &&
+    !hasHigh(lost) &&
+    !hasHigh(report.meaningChanges) &&
+    !hasHigh(emphasisChanges) &&
+    !hasHigh(structuralFindings) &&
     !traceabilityViolation &&
     report.fidelityScore >= MIN_FIDELITY_SCORE
 
@@ -139,5 +206,7 @@ export function mergeDeterministicChecks(
     approved,
     lostInformation: lost,
     unsupportedHeadings,
+    emphasisChanges,
+    structuralFindings,
   }
 }

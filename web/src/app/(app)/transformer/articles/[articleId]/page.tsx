@@ -289,6 +289,9 @@ function BlockedRibbon({ report }: { report: FidelityReport }) {
     { label: 'Unsupported headings', findings: report.unsupportedHeadings },
     { label: 'Missing caveats', findings: report.missingCaveats },
     { label: 'Unsupported examples', findings: report.unsupportedExamples },
+    // DET-281 — tolerate old stored reports that predate these two groups.
+    { label: 'Emphasis changes', findings: report.emphasisChanges ?? [] },
+    { label: 'Structural findings', findings: report.structuralFindings ?? [] },
   ]
   // Lead with the high-severity findings — they are why the gate blocked it.
   const blocking = groups

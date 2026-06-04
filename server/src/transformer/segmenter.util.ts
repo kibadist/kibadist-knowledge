@@ -110,9 +110,11 @@ function segmentLocatedBlocks(located: LocatedBlock[]): SegmentedSource {
  * Returns null when the block should be DROPPED (a captionless image, or a block
  * whose flattened text is empty).
  */
-function mapBlock(
-  block: SourceBlock,
-): { blockType: TransformerBlockType; text: string; headingLevel: number | null } | null {
+function mapBlock(block: SourceBlock): {
+  blockType: TransformerBlockType
+  text: string
+  headingLevel: number | null
+} | null {
   switch (block.type) {
     case 'heading':
       // Preserve the original heading depth (1–6) so the plan can rebuild the
@@ -148,7 +150,11 @@ function finalize(
   blockType: TransformerBlockType,
   text: string,
   headingLevel: number | null = null,
-): { blockType: TransformerBlockType; text: string; headingLevel: number | null } | null {
+): {
+  blockType: TransformerBlockType
+  text: string
+  headingLevel: number | null
+} | null {
   const trimmed = text.trim()
   if (!trimmed) return null
   return { blockType, text: trimmed, headingLevel }

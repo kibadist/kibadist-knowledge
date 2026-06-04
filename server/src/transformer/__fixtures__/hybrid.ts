@@ -112,12 +112,11 @@ const article: ArticleJsonV2 = {
   ],
   keyTerms: [{ term: 'Continuous deployment', sourceBlockIds: ['b2'] }],
   sourceExamples: [],
-  caveats: [
-    {
-      text: 'Keep a one-click rollback ready before you enable automatic deploys.',
-      sourceBlockIds: ['b5'],
-    },
-  ],
+  // b5 (the rollback note) is a DISTINCT source note box, rendered inline as the
+  // `callout` block `co1`. Per global decision §8 (single source of truth per
+  // content class) it is NOT mirrored into top-level `caveats` — doing so would
+  // be a duplicate full rendering, which the DET-281 duplicate check now blocks.
+  caveats: [],
   originalStructure: [
     {
       blockId: 'b1',

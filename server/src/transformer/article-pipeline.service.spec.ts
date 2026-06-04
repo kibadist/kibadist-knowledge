@@ -68,6 +68,8 @@ const okReport: FidelityReport = {
   unsupportedHeadings: [],
   missingCaveats: [],
   unsupportedExamples: [],
+  emphasisChanges: [],
+  structuralFindings: [],
 }
 
 function makeServices(overrides: {

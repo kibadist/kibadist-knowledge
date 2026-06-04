@@ -124,9 +124,21 @@ const article: ArticleJsonV2 = {
   ],
   caveats: [],
   originalStructure: [
-    { blockId: 'b2', blockType: 'PARAGRAPH', preview: 'Rate limiting protects the API…' },
-    { blockId: 'b3', blockType: 'PARAGRAPH', preview: 'A client that exceeds its quota…' },
-    { blockId: 'b5', blockType: 'PARAGRAPH', preview: 'Quotas reset on a fixed window…' },
+    {
+      blockId: 'b2',
+      blockType: 'PARAGRAPH',
+      preview: 'Rate limiting protects the API…',
+    },
+    {
+      blockId: 'b3',
+      blockType: 'PARAGRAPH',
+      preview: 'A client that exceeds its quota…',
+    },
+    {
+      blockId: 'b5',
+      blockType: 'PARAGRAPH',
+      preview: 'Quotas reset on a fixed window…',
+    },
   ],
 }
 
