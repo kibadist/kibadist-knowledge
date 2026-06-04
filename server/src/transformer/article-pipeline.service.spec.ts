@@ -7,10 +7,7 @@ import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import { StructureModelService } from './structure-model.service'
-import type {
-  FidelityReport,
-  SourcePreservingArticle,
-} from './transformer.types'
+import type { ArticleJsonV2, FidelityReport } from './transformer.types'
 
 /** Prisma stub: one article row + one block row; records every status set. */
 function makeStubPrisma() {
@@ -40,7 +37,10 @@ function makeStubPrisma() {
   return { prisma, article, statusLog }
 }
 
-const sampleArticle: SourcePreservingArticle = {
+// The generator now emits a NATIVE v2 article (DET-271); the pipeline's stored
+// artifact is v2, so the stub mirrors that shape.
+const sampleArticle: ArticleJsonV2 = {
+  schemaVersion: 'v2',
   mode: 'source_preserving_article',
   title: { text: 'T', source: 'original' },
   abstract: [

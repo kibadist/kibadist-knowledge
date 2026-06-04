@@ -337,6 +337,87 @@ const reorderingAudit = z.object({
   risk: fidelityRisk,
 })
 
+/**
+ * What the GENERATOR LLM is asked to return (DET-271). It is the v2 article
+ * MINUS the fields the model must never be trusted for:
+ *  - `schemaVersion` — stamped in code after validation, not prompt-trusted.
+ *  - `readingAids` / `calloutPlacements` / `shape` / `reorderings` — owned by
+ *    later waves (DET-274/272/273/275); the generator must not emit them, and the
+ *    service strips any that leak through before validating against this schema.
+ *  - `figureAnchor` blocks — illustrations have their own placement system, so
+ *    the generator's section blocks are the union WITHOUT figureAnchor.
+ *
+ * `originalStructure` is still requested (left `[]`) but is re-derived
+ * deterministically in code, exactly as v1 was.
+ */
+const llmArticleBlock = z.discriminatedUnion('type', [
+  paragraphBlock,
+  listBlock,
+  quoteBlock,
+  pullQuoteBlock,
+  tableBlock,
+  codeBlock,
+  calloutBlock,
+])
+
+// LLM sections nest one level and never carry figureAnchor blocks.
+const llmArticleSectionV2: z.ZodType<LlmArticleSectionV2> = z.lazy(() =>
+  z.object({
+    id: z.string().min(1),
+    heading: z.string().min(1),
+    headingSource: headingSourceV2,
+    headingSourceBlockIds: z.array(z.string().min(1)).optional(),
+    sourceBlockIds,
+    blocks: z.array(llmArticleBlock),
+    subsections: z.array(llmArticleSectionV2).optional(),
+  }),
+)
+
+/** The block shape the generator LLM may emit (no figureAnchor). */
+export type LlmArticleBlock = z.infer<typeof llmArticleBlock>
+
+/** A generator-LLM section (no schemaVersion-stamped wrapper, no figureAnchor). */
+export interface LlmArticleSectionV2 {
+  id: string
+  heading: string
+  headingSource: z.infer<typeof headingSourceV2>
+  headingSourceBlockIds?: string[]
+  sourceBlockIds: string[]
+  blocks: LlmArticleBlock[]
+  subsections?: LlmArticleSectionV2[]
+}
+
+export const ArticleLlmV2Schema = z.object({
+  mode: z.literal('source_preserving_article'),
+  title: z.object({ text: z.string().min(1), source: headingSourceV2 }),
+  subtitle: z
+    .object({
+      text: z.string().min(1),
+      source: headingSourceV2,
+      sourceBlockIds,
+    })
+    .optional(),
+  abstract: z.array(articleParagraphSchema),
+  sections: z.array(llmArticleSectionV2),
+  keyTerms: z.array(z.object({ term: z.string().min(1), sourceBlockIds })),
+  sourceExamples: z.array(
+    z.object({ text: z.string().min(1), sourceBlockIds }),
+  ),
+  caveats: z.array(z.object({ text: z.string().min(1), sourceBlockIds })),
+  originalStructure: z
+    .array(
+      z.object({
+        blockId: z.string().min(1),
+        blockType: z.string().min(1),
+        preview: z.string(),
+      }),
+    )
+    .optional()
+    .default([]),
+})
+
+export type ArticleLlmV2 = z.infer<typeof ArticleLlmV2Schema>
+
 export const ArticleJsonV2Schema: z.ZodType<ArticleJsonV2> = z.object({
   schemaVersion: z.literal('v2'),
   mode: z.literal('source_preserving_article'),

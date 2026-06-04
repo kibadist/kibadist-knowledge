@@ -413,6 +413,208 @@
   color: var(--ink);
 }
 
+/* ============================================================================
+   Typed section blocks (DET-271) — list / quote / table / code / callout.
+   Each is first-class magazine matter on the paper/ink/accent/rule tokens, and
+   every type is clickable into the source inspector (same accent hover as a
+   paragraph). A `tf-block--missing` wrapper carries the loud "missing source"
+   chip for an untraceable block of any type.
+   ============================================================================ */
+.kbapp .tf-block {
+  margin: 0 0 24px;
+}
+.kbapp .tf-block--clickable {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  padding: 2px 0 2px 14px;
+  margin-left: -16px;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.kbapp .tf-block--clickable:hover {
+  border-left-color: var(--accent);
+  background: var(--accent-tint);
+}
+.kbapp .tf-block--missing {
+  border-left: 2px solid var(--accent);
+  padding: 2px 0 2px 14px;
+  margin-left: -16px;
+  background: rgba(138, 42, 31, 0.05);
+}
+
+/* ---- list ---- */
+.kbapp .tf-list {
+  margin: 0;
+  padding-left: 1.5em;
+  font-family: var(--font-body), serif;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.kbapp .tf-list--ordered {
+  list-style: decimal;
+}
+.kbapp .tf-list--unordered {
+  list-style: none;
+  padding-left: 0;
+}
+.kbapp .tf-list--unordered .tf-list-item {
+  position: relative;
+  padding-left: 1.4em;
+}
+.kbapp .tf-list--unordered .tf-list-item::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+.kbapp .tf-list-item {
+  margin: 0 0 8px;
+}
+.kbapp .tf-list-item::marker {
+  color: var(--accent);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.85em;
+}
+
+/* ---- quote ---- */
+.kbapp .tf-quote {
+  margin: 0;
+  padding: 4px 0 4px 20px;
+  border-left: 3px solid var(--rule);
+}
+.kbapp .tf-quote-text {
+  margin: 0;
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.kbapp .tf-quote-attr {
+  margin-top: 10px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+/* ---- table ---- */
+.kbapp .tf-table-wrap {
+  margin: 0;
+  overflow-x: auto;
+}
+.kbapp .tf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-body), serif;
+  font-size: 15.5px;
+  color: var(--ink);
+}
+.kbapp .tf-table th,
+.kbapp .tf-table td {
+  text-align: left;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+}
+.kbapp .tf-table thead th {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-muted);
+  border-bottom: 1.5px solid var(--rule);
+  background: var(--paper-2);
+}
+.kbapp .tf-table-caption {
+  margin-top: 10px;
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+/* ---- code ---- */
+.kbapp .tf-code {
+  margin: 0;
+  border: 1px solid var(--rule-soft);
+  background: var(--paper-2);
+}
+.kbapp .tf-code-lang {
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--rule-soft);
+  background: var(--paper-hi);
+}
+.kbapp .tf-code-pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-family: var(--font-mono), monospace;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre;
+}
+
+/* ---- callout (note box) ---- */
+.kbapp .tf-callout {
+  margin: 0;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--ochre);
+  background: var(--paper-hi);
+  padding: 16px 18px;
+}
+.kbapp .tf-callout-title {
+  margin: 0 0 6px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ochre);
+}
+.kbapp .tf-callout-text {
+  margin: 0;
+  font-family: var(--font-body), serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* ---- figure anchor (metadata-only inspector marker) ---- */
+.kbapp .tf-figure-anchor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 24px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  background: transparent;
+  border: none;
+  border-bottom: 1px dotted currentColor;
+  padding: 0 0 1px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.kbapp .tf-figure-anchor:hover {
+  color: var(--accent);
+}
+
 /* Auxiliary sections — key terms, examples, caveats, original structure. */
 .kbapp .tf-article-aux {
   border-top: 1px solid var(--rule-soft);

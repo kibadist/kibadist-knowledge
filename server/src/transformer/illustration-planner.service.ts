@@ -11,7 +11,10 @@ import {
   type IllustrationSuggestion,
 } from './schemas'
 import type { ClassifiedBlockInput } from './structure-model.service'
-import type { SourcePreservingArticle } from './transformer.types'
+import type {
+  ArticleJsonV2,
+  SourcePreservingArticle,
+} from './transformer.types'
 
 /**
  * Illustration planner (DET-259, step 10, on demand only). LLM via
@@ -28,7 +31,7 @@ export class IllustrationPlannerService {
   constructor(private readonly ai: AiService) {}
 
   async plan(
-    article: SourcePreservingArticle,
+    article: SourcePreservingArticle | ArticleJsonV2,
     blocks: ClassifiedBlockInput[],
   ): Promise<IllustrationPlan> {
     const byId = new Map(blocks.map((b) => [b.id, b]))

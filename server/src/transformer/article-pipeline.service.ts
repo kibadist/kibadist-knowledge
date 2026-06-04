@@ -20,6 +20,7 @@ import type {
 import type { ClassifiedBlockInput } from './structure-model.service'
 import { StructureModelService } from './structure-model.service'
 import type {
+  ArticleJsonV2,
   CoverageReport,
   FidelityReport,
   SourcePreservingArticle,
@@ -165,7 +166,7 @@ export class ArticlePipelineService {
   /** Generate + persist illustration suggestions for a FINAL/BLOCKED article. */
   async generateIllustrations(
     articleId: string,
-    article: SourcePreservingArticle,
+    article: SourcePreservingArticle | ArticleJsonV2,
     sourceId: string,
     blocksVersion: number,
   ): Promise<IllustrationPlan> {
@@ -194,7 +195,7 @@ export class ArticlePipelineService {
   // --- helpers --------------------------------------------------------------
 
   private buildCoverage(
-    article: SourcePreservingArticle,
+    article: SourcePreservingArticle | ArticleJsonV2,
     blocks: LoadedBlock[],
     plan: ReshapingPlan,
   ): CoverageReport {

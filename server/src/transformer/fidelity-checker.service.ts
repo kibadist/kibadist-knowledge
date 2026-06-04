@@ -36,7 +36,7 @@ export class FidelityCheckerService {
   constructor(private readonly ai: AiService) {}
 
   async check(
-    article: SourcePreservingArticle,
+    article: SourcePreservingArticle | ArticleJsonV2,
     structureModel: SourceStructureModel,
     blocks: ClassifiedBlockInput[],
   ): Promise<FidelityReport> {

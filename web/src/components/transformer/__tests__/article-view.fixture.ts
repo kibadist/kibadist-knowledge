@@ -54,6 +54,15 @@ export const fixtureArticle: ArticleJsonV2 = {
           fidelityRisk: 'low',
         },
         {
+          id: 'list2',
+          type: 'list',
+          ordered: false,
+          items: ['Bullet one', 'Bullet two'],
+          sourceBlockIds: ['b3'],
+          transformationType: 'formatting_only',
+          fidelityRisk: 'low',
+        },
+        {
           id: 'quote1',
           type: 'quote',
           text: 'A memorable line.',

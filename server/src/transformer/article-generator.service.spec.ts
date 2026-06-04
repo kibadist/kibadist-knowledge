@@ -1,0 +1,203 @@
+import type { AiService } from '../ai/ai.service'
+import { ArticleGeneratorService } from './article-generator.service'
+import type { ReshapingPlan } from './schemas'
+import type { ClassifiedBlockInput } from './structure-model.service'
+
+/**
+ * Generator spec (DET-271). The model now returns a NATIVE v2 typed-block article
+ * (minus the code-owned fields). We mock the LLM and assert the CODE guarantees:
+ *  - `schemaVersion: 'v2'` is stamped in code (the model never sends it).
+ *  - `assertKnownIds` walks ALL typed block types + subsections; an unknown id in
+ *    a table (or any) block fails loudly.
+ *  - later-wave fields are absent (the LLM schema cannot carry them).
+ *  - `originalStructure` is re-derived deterministically from the kept blocks.
+ */
+
+function makeService(response: unknown) {
+  const complete = jest
+    .fn()
+    .mockResolvedValue({ text: JSON.stringify(response), model: 'stub' })
+  const ai = { complete } as unknown as AiService
+  return new ArticleGeneratorService(ai)
+}
+
+const plan: ReshapingPlan = {
+  titleProposal: { text: 'T', source: 'original' },
+  sections: [
+    {
+      heading: 'S',
+      headingSource: 'original',
+      sourceBlockIds: ['b1'],
+      allowedTransformations: ['grammar_cleanup'],
+    },
+  ],
+  removedBlocks: [],
+  warnings: [],
+}
+
+const blocks: ClassifiedBlockInput[] = [
+  {
+    id: 'b1',
+    type: 'HEADING',
+    classification: 'CORE',
+    text: 'Storage tiers',
+    removable: false,
+  },
+  {
+    id: 'b2',
+    type: 'PARAGRAPH',
+    classification: 'CORE',
+    text: 'Intro paragraph that is fairly long so the preview can be sliced.',
+    removable: false,
+  },
+  {
+    id: 'b3',
+    type: 'TABLE',
+    classification: 'CORE',
+    text: 'Tier | Cost\nHot | $1',
+    removable: false,
+  },
+  {
+    id: 'b4',
+    type: 'LIST',
+    classification: 'CORE',
+    text: '1. one\n2. two',
+    removable: false,
+  },
+  {
+    id: 'bX',
+    type: 'PARAGRAPH',
+    classification: 'NOISE',
+    text: 'removable noise',
+    removable: true,
+  },
+]
+
+/** A valid typed-block v2 LLM response (no schemaVersion / later-wave fields). */
+function validLlmArticle() {
+  return {
+    mode: 'source_preserving_article',
+    title: { text: 'Storage tiers', source: 'original' },
+    abstract: [
+      {
+        id: 'a1',
+        text: 'A faithful summary.',
+        sourceBlockIds: ['b2'],
+        transformationType: 'light_reword',
+        fidelityRisk: 'low',
+      },
+    ],
+    sections: [
+      {
+        id: 's1',
+        heading: 'Storage tiers',
+        headingSource: 'original',
+        headingSourceBlockIds: ['b1'],
+        sourceBlockIds: ['b1', 'b2', 'b3', 'b4'],
+        blocks: [
+          {
+            id: 'p1',
+            type: 'paragraph',
+            text: 'Intro paragraph.',
+            sourceBlockIds: ['b2'],
+            transformationType: 'grammar_cleanup',
+            fidelityRisk: 'low',
+          },
+          {
+            id: 't1',
+            type: 'table',
+            header: ['Tier', 'Cost'],
+            rows: [['Hot', '$1']],
+            sourceBlockIds: ['b3'],
+            transformationType: 'formatting_only',
+            fidelityRisk: 'low',
+          },
+          {
+            id: 'l1',
+            type: 'list',
+            ordered: true,
+            items: ['one', 'two'],
+            sourceBlockIds: ['b4'],
+            transformationType: 'formatting_only',
+            fidelityRisk: 'low',
+          },
+        ],
+      },
+    ],
+    keyTerms: [],
+    sourceExamples: [],
+    caveats: [],
+    // Forward-reserved later-wave fields the model must NOT own; even if present,
+    // they are dropped because the LLM schema cannot carry them.
+    schemaVersion: 'v2',
+    readingAids: { readingTimeMinutes: 9 },
+    shape: 'reference',
+    reorderings: [{ sourceBlockId: 'b2', fromIndex: 0, toIndex: 1 }],
+  }
+}
+
+describe('ArticleGeneratorService', () => {
+  it('stamps schemaVersion v2 in code, re-derives originalStructure, strips later-wave fields', async () => {
+    const service = makeService(validLlmArticle())
+    const article = await service.generate(plan, blocks)
+
+    expect(article.schemaVersion).toBe('v2')
+    // Later-wave fields are NOT carried into the generated artifact.
+    expect(article.readingAids).toBeUndefined()
+    expect(article.shape).toBeUndefined()
+    expect(article.reorderings).toBeUndefined()
+    expect(article.calloutPlacements).toBeUndefined()
+
+    // originalStructure is re-derived deterministically from KEPT blocks in order
+    // (removable bX excluded), never trusted from the model.
+    expect(article.originalStructure.map((o) => o.blockId)).toEqual([
+      'b1',
+      'b2',
+      'b3',
+      'b4',
+    ])
+    expect(article.originalStructure[2]).toMatchObject({ blockType: 'TABLE' })
+
+    // The typed blocks survive intact.
+    const types = article.sections[0].blocks.map((b) => b.type)
+    expect(types).toEqual(['paragraph', 'table', 'list'])
+  })
+
+  it('fails loudly when a TABLE block references an unknown source block id', async () => {
+    const bad = validLlmArticle()
+    bad.sections[0].blocks[1].sourceBlockIds = ['ghost']
+    const service = makeService(bad)
+
+    await expect(service.generate(plan, blocks)).rejects.toThrow(
+      /unknown block ids: ghost/i,
+    )
+  })
+
+  it('walks nested subsections when checking known ids', async () => {
+    const bad = validLlmArticle()
+    // @ts-expect-error — test injects a subsection with an unknown id.
+    bad.sections[0].subsections = [
+      {
+        id: 'sub1',
+        heading: 'Sub',
+        headingSource: 'original',
+        sourceBlockIds: ['b2'],
+        blocks: [
+          {
+            id: 'sp1',
+            type: 'paragraph',
+            text: 'Nested.',
+            sourceBlockIds: ['nope'],
+            transformationType: 'verbatim',
+            fidelityRisk: 'low',
+          },
+        ],
+      },
+    ]
+    const service = makeService(bad)
+
+    await expect(service.generate(plan, blocks)).rejects.toThrow(
+      /unknown block ids: nope/i,
+    )
+  })
+})

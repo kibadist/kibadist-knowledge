@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -52,28 +52,40 @@ describe('ArticleView (v2 renderer)', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders something readable for every ArticleBlock union member', () => {
-    renderArticleView(vi.fn())
+  it('renders each ArticleBlock union member with its own semantic element', () => {
+    const { container } = renderArticleView(vi.fn())
     // paragraph
     expect(
       screen.getByText('A clickable source-grounded paragraph.'),
     ).toBeInTheDocument()
-    // list (items joined by the W1 fallback renderer)
-    expect(screen.getByText(/First step/)).toBeInTheDocument()
-    expect(screen.getByText(/Second step/)).toBeInTheDocument()
-    // quote (with attribution)
-    expect(screen.getByText(/A memorable line\./)).toBeInTheDocument()
-    expect(screen.getByText(/Someone/)).toBeInTheDocument()
-    // pullQuote
+    // list — ordered renders <ol>, unordered renders <ul>
+    expect(container.querySelector('ol.tf-list--ordered')).toBeInTheDocument()
+    expect(container.querySelector('ul.tf-list--unordered')).toBeInTheDocument()
+    expect(screen.getByText('First step')).toBeInTheDocument()
+    expect(screen.getByText('Bullet one')).toBeInTheDocument()
+    // quote — a <blockquote> with an em-dash attribution line
+    const blockquote = container.querySelector('blockquote.tf-quote-text')
+    expect(blockquote).toBeInTheDocument()
+    expect(blockquote?.textContent).toContain('A memorable line.')
+    expect(screen.getByText('— Someone')).toBeInTheDocument()
+    // pullQuote — large display quote
     expect(screen.getByText(/A pulled excerpt\./)).toBeInTheDocument()
-    // table (caption + header + rows flattened)
-    expect(screen.getByText(/A small table/)).toBeInTheDocument()
-    // code
-    expect(screen.getByText(/const x = 1/)).toBeInTheDocument()
-    // figureAnchor (caption)
-    expect(screen.getByText('A figure caption.')).toBeInTheDocument()
-    // callout (title: text)
-    expect(screen.getByText(/A callout body\./)).toBeInTheDocument()
+    // table — a real <table> with header cells and body cells
+    const table = container.querySelector('table.tf-table')
+    expect(table).toBeInTheDocument()
+    expect(table?.querySelectorAll('thead th')).toHaveLength(2)
+    expect(screen.getByText('A small table')).toBeInTheDocument()
+    // code — a <pre><code> monospace block + language chip
+    const pre = container.querySelector('pre.tf-code-pre code')
+    expect(pre?.textContent).toBe('const x = 1')
+    expect(screen.getByText('ts')).toBeInTheDocument()
+    // figureAnchor — metadata-only inspector marker (caption present)
+    expect(screen.getByText(/A figure caption\./)).toBeInTheDocument()
+    // callout — bordered aside with optional title
+    const callout = container.querySelector('aside.tf-callout')
+    expect(callout).toBeInTheDocument()
+    expect(screen.getByText('A callout body.')).toBeInTheDocument()
+    expect(screen.getByText('Note')).toBeInTheDocument()
   })
 
   it('fires onInspect with the right sourceBlockIds when a paragraph is clicked', async () => {
@@ -95,6 +107,56 @@ describe('ArticleView (v2 renderer)', () => {
         sourceBlockIds: ['b2'],
       }),
     )
+  })
+
+  it('opens the inspector from every typed block with its sourceBlockIds', () => {
+    // Each typed block is wrapped in a clickable button carrying its own
+    // sourceBlockIds + kind label. We click each and assert the callback.
+    // fireEvent.click drives the wrapper <button> directly (userEvent declines a
+    // button that nests block-level content like <ol>/<table>/<pre>).
+    const cases: {
+      text: RegExp
+      kind: string
+      sourceBlockIds: string[]
+      /** Pull-quotes expose a separate "source ¶" ref button, not a wrapper. */
+      viaRef?: boolean
+    }[] = [
+      { text: /First step/, kind: 'List', sourceBlockIds: ['b3'] },
+      { text: /A memorable line/, kind: 'Quote', sourceBlockIds: ['b4'] },
+      {
+        text: /A pulled excerpt/,
+        kind: 'Pull-quote',
+        sourceBlockIds: ['b5'],
+        viaRef: true,
+      },
+      { text: /A small table/, kind: 'Table', sourceBlockIds: ['b6'] },
+      { text: /const x = 1/, kind: 'Code', sourceBlockIds: ['b7'] },
+      {
+        text: /A figure caption/,
+        kind: 'Figure anchor',
+        sourceBlockIds: ['b8'],
+      },
+      { text: /A callout body/, kind: 'Callout', sourceBlockIds: ['b2'] },
+    ]
+
+    for (const c of cases) {
+      const onInspect = vi.fn()
+      const { unmount } = renderArticleView(onInspect)
+      const node = screen.getByText(c.text)
+      const figure = node.closest('figure')
+      const button = c.viaRef
+        ? figure?.querySelector<HTMLButtonElement>('.tf-pullquote-ref')
+        : node.closest('button')
+      expect(button).not.toBeNull()
+      fireEvent.click(button as HTMLButtonElement)
+      expect(onInspect).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: c.kind,
+          sourceBlockIds: c.sourceBlockIds,
+        }),
+      )
+      unmount()
+    }
   })
 
   it('renders an error chip for an untraceable block and does not make it clickable', () => {

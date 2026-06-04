@@ -6,9 +6,15 @@ import type { ReactNode } from 'react'
 import {
   ApiError,
   type ArticleBlock,
+  type ArticleCalloutBlock,
+  type ArticleCodeBlock,
+  type ArticleFigureAnchorBlock,
   type ArticleJsonV2,
+  type ArticleListBlock,
   type ArticleParagraph,
   type ArticleParagraphBlock,
+  type ArticleQuoteBlock,
+  type ArticleTableBlock,
   api,
   type IllustrationPlan,
   type IllustrationSuggestion,
@@ -169,6 +175,7 @@ export function ArticleView({
               <PullQuote
                 text={pullCaveat.text}
                 sourceBlockIds={pullCaveat.sourceBlockIds}
+                kind='Caveat'
                 onInspect={onInspect}
               />
             )}
@@ -273,13 +280,20 @@ function SectionOrnament() {
   )
 }
 
+/**
+ * A large italic display pull-quote. Used both for the ad-hoc caveat pull-quote
+ * (kept until W6) and for first-class generator-emitted `pullQuote` blocks
+ * (DET-271); the `kind` keeps the inspector label honest for each source.
+ */
 function PullQuote({
   text,
   sourceBlockIds,
+  kind,
   onInspect,
 }: {
   text: string
   sourceBlockIds: string[]
+  kind: string
   onInspect: (selection: InspectorSelection) => void
 }) {
   return (
@@ -291,7 +305,7 @@ function PullQuote({
           className='tf-pullquote-ref'
           onClick={() =>
             onInspect({
-              kind: 'Caveat',
+              kind,
               transformedText: text,
               sourceBlockIds,
             })
@@ -567,12 +581,19 @@ function IllustrationSlot({
 }
 
 /**
- * Render one v2 section block (DET-277). Paragraph blocks render exactly as the
- * v1 paragraphs did — clickable → inspector, missing-source chip when
- * untraceable. The remaining typed block kinds (list/quote/table/code/…) get
- * their first-class rendering in W3 (DET-271); until the generator emits them,
- * sections only ever contain paragraph blocks (the v1→v2 adapter produces only
- * paragraph blocks), so the fallback below is a safety net, not a live path.
+ * Render one v2 section block (DET-271). Each typed block gets first-class
+ * magazine styling consistent with the `.kbapp` editorial tokens, and EVERY type
+ * is clickable → opens the source inspector with its own sourceBlockIds (same
+ * pattern as a paragraph). A block with no source block ids renders an explicit
+ * "missing source" error chip and is NOT clickable, so a broken traceability
+ * link is loud for every type, not just paragraphs.
+ *
+ * Per type: paragraph (prose, drop-cap-capable), list (ordered → numbered,
+ * unordered → bulleted), quote (blockquote + em-dash attribution), pullQuote
+ * (large italic display excerpt), table (editorial grid with caption + header
+ * row), code (monospace block with an optional language chip), callout (bordered
+ * aside card with optional title), figureAnchor (metadata only — renders nothing
+ * visible; illustration placement owns inline figures, DET-259/272).
  */
 function Block({
   block,
@@ -581,76 +602,341 @@ function Block({
   block: ArticleBlock
   onInspect: (selection: InspectorSelection) => void
 }) {
-  if (block.type === 'paragraph') {
-    return (
-      <Paragraph paragraph={block} kind='Paragraph' onInspect={onInspect} />
-    )
+  switch (block.type) {
+    case 'paragraph':
+      return (
+        <Paragraph paragraph={block} kind='Paragraph' onInspect={onInspect} />
+      )
+    case 'list':
+      return <ListBlock block={block} onInspect={onInspect} />
+    case 'quote':
+      return <QuoteBlock block={block} onInspect={onInspect} />
+    case 'pullQuote':
+      return (
+        <PullQuote
+          text={block.text}
+          sourceBlockIds={block.sourceBlockIds}
+          kind='Pull-quote'
+          onInspect={onInspect}
+        />
+      )
+    case 'table':
+      return <TableBlock block={block} onInspect={onInspect} />
+    case 'code':
+      return <CodeBlock block={block} onInspect={onInspect} />
+    case 'callout':
+      return <CalloutBlock block={block} onInspect={onInspect} />
+    case 'figureAnchor':
+      // Metadata only: the illustration slot system (DET-259/272) owns inline
+      // figures, so an anchor renders nothing visible. A subtle, inspectable
+      // marker keeps its provenance reachable when it carries a caption.
+      return <FigureAnchorBlock block={block} onInspect={onInspect} />
+    default:
+      // Exhaustiveness guard: a new ArticleBlock member added without a case
+      // here is a compile error (the union is narrowed to `never`).
+      return assertNever(block)
   }
-  // Non-paragraph blocks: minimal source-grounded rendering until W3 styles each
-  // type. Still clickable into the inspector so traceability is preserved.
-  const text = blockText(block)
+}
+
+/** Shared "missing source reference" chip for an untraceable typed block. */
+function MissingSourceChip() {
+  return (
+    <span className='chip chip-contested tf-missing-chip'>
+      missing source reference
+    </span>
+  )
+}
+
+/** An ordered/unordered list — numbered or bulleted, clickable into inspector. */
+function ListBlock({
+  block,
+  onInspect,
+}: {
+  block: ArticleListBlock
+  onInspect: (selection: InspectorSelection) => void
+}) {
   const missing = block.sourceBlockIds.length === 0
+  const items = block.items.map((item, i) => (
+    <li key={`${i}-${item.slice(0, 24)}`} className='tf-list-item'>
+      {item}
+    </li>
+  ))
+  const list = block.ordered ? (
+    <ol className='tf-list tf-list--ordered'>{items}</ol>
+  ) : (
+    <ul className='tf-list tf-list--unordered'>{items}</ul>
+  )
+
   if (missing) {
     return (
-      <p className='tf-paragraph tf-paragraph--missing'>
-        {text}
-        <span className='chip chip-contested tf-missing-chip'>
-          missing source reference
-        </span>
-      </p>
+      <div className='tf-block tf-block--missing'>
+        {list}
+        <MissingSourceChip />
+      </div>
     )
   }
   return (
     <button
       type='button'
-      className='tf-paragraph tf-paragraph--clickable'
+      className='tf-block tf-block--clickable'
       onClick={() =>
         onInspect({
-          kind: 'Paragraph',
-          transformedText: text,
+          kind: 'List',
+          transformedText: block.items.join('\n'),
           sourceBlockIds: block.sourceBlockIds,
           transformationType: block.transformationType,
           fidelityRisk: block.fidelityRisk,
         })
       }
     >
-      {text}
+      {list}
     </button>
   )
 }
 
-/** A plain-text rendering of any non-paragraph block (W1 fallback). */
-function blockText(
-  block: Exclude<ArticleBlock, ArticleParagraphBlock>,
-): string {
-  switch (block.type) {
-    case 'list':
-      return block.items.join('\n')
-    case 'quote':
-      return block.attribution
-        ? `“${block.text}” — ${block.attribution}`
-        : `“${block.text}”`
-    case 'pullQuote':
-      return `“${block.text}”`
-    case 'table':
-      return [
-        block.caption,
-        ...(block.header ? [block.header.join(' | ')] : []),
-      ]
-        .filter(Boolean)
-        .concat(block.rows.map((r) => r.join(' | ')))
-        .join('\n')
-    case 'code':
-      return block.text
-    case 'figureAnchor':
-      return block.caption ?? ''
-    case 'callout':
-      return block.title ? `${block.title}: ${block.text}` : block.text
-    default:
-      // Exhaustiveness guard: a new ArticleBlock member added without a case
-      // here is a compile error (the union is narrowed to `never`).
-      return assertNever(block)
+/** A block quotation with an em-dash attribution line when present. */
+function QuoteBlock({
+  block,
+  onInspect,
+}: {
+  block: ArticleQuoteBlock
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  const missing = block.sourceBlockIds.length === 0
+  const body = (
+    <figure className='tf-quote'>
+      <blockquote className='tf-quote-text'>“{block.text}”</blockquote>
+      {block.attribution && (
+        <figcaption className='tf-quote-attr'>— {block.attribution}</figcaption>
+      )}
+    </figure>
+  )
+
+  if (missing) {
+    return (
+      <div className='tf-block tf-block--missing'>
+        {body}
+        <MissingSourceChip />
+      </div>
+    )
   }
+  return (
+    <button
+      type='button'
+      className='tf-block tf-block--clickable'
+      onClick={() =>
+        onInspect({
+          kind: 'Quote',
+          transformedText: block.attribution
+            ? `“${block.text}” — ${block.attribution}`
+            : `“${block.text}”`,
+          sourceBlockIds: block.sourceBlockIds,
+          transformationType: block.transformationType,
+          fidelityRisk: block.fidelityRisk,
+        })
+      }
+    >
+      {body}
+    </button>
+  )
+}
+
+/** A clean editorial table — caption, styled header row, body rows. */
+function TableBlock({
+  block,
+  onInspect,
+}: {
+  block: ArticleTableBlock
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  const missing = block.sourceBlockIds.length === 0
+  const flat = [
+    block.caption,
+    ...(block.header ? [block.header.join(' | ')] : []),
+    ...block.rows.map((r) => r.join(' | ')),
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  const table = (
+    <figure className='tf-table-wrap'>
+      <table className='tf-table'>
+        {block.header && (
+          <thead>
+            <tr>
+              {block.header.map((h, i) => (
+                <th key={`${i}-${h}`}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {block.rows.map((row, ri) => (
+            <tr key={`r-${ri}-${row[0] ?? ''}`}>
+              {row.map((cell, ci) => (
+                <td key={`c-${ri}-${ci}`}>{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {block.caption && (
+        <figcaption className='tf-table-caption'>{block.caption}</figcaption>
+      )}
+    </figure>
+  )
+
+  if (missing) {
+    return (
+      <div className='tf-block tf-block--missing'>
+        {table}
+        <MissingSourceChip />
+      </div>
+    )
+  }
+  return (
+    <button
+      type='button'
+      className='tf-block tf-block--clickable tf-block--table'
+      onClick={() =>
+        onInspect({
+          kind: 'Table',
+          transformedText: flat,
+          sourceBlockIds: block.sourceBlockIds,
+          transformationType: block.transformationType,
+          fidelityRisk: block.fidelityRisk,
+        })
+      }
+    >
+      {table}
+    </button>
+  )
+}
+
+/** A monospace code block with a light editorial background + language chip. */
+function CodeBlock({
+  block,
+  onInspect,
+}: {
+  block: ArticleCodeBlock
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  const missing = block.sourceBlockIds.length === 0
+  const body = (
+    <figure className='tf-code'>
+      {block.language && (
+        <figcaption className='tf-code-lang'>{block.language}</figcaption>
+      )}
+      <pre className='tf-code-pre'>
+        <code>{block.text}</code>
+      </pre>
+    </figure>
+  )
+
+  if (missing) {
+    return (
+      <div className='tf-block tf-block--missing'>
+        {body}
+        <MissingSourceChip />
+      </div>
+    )
+  }
+  return (
+    <button
+      type='button'
+      className='tf-block tf-block--clickable tf-block--code'
+      onClick={() =>
+        onInspect({
+          kind: 'Code',
+          transformedText: block.text,
+          sourceBlockIds: block.sourceBlockIds,
+          transformationType: block.transformationType,
+          fidelityRisk: block.fidelityRisk,
+        })
+      }
+    >
+      {body}
+    </button>
+  )
+}
+
+/** A bordered aside card (note box) with an optional title. */
+function CalloutBlock({
+  block,
+  onInspect,
+}: {
+  block: ArticleCalloutBlock
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  const missing = block.sourceBlockIds.length === 0
+  const body = (
+    <aside className='tf-callout'>
+      {block.title && <p className='tf-callout-title'>{block.title}</p>}
+      <p className='tf-callout-text'>{block.text}</p>
+    </aside>
+  )
+
+  if (missing) {
+    return (
+      <div className='tf-block tf-block--missing'>
+        {body}
+        <MissingSourceChip />
+      </div>
+    )
+  }
+  return (
+    <button
+      type='button'
+      className='tf-block tf-block--clickable tf-block--callout'
+      onClick={() =>
+        onInspect({
+          kind: 'Callout',
+          transformedText: block.title
+            ? `${block.title}: ${block.text}`
+            : block.text,
+          sourceBlockIds: block.sourceBlockIds,
+          transformationType: block.transformationType,
+          fidelityRisk: block.fidelityRisk,
+        })
+      }
+    >
+      {body}
+    </button>
+  )
+}
+
+/**
+ * A figure anchor is metadata: the illustration slot system places inline
+ * figures, so the anchor itself renders nothing visible. When it carries a
+ * caption we expose a single subtle inspector marker so its provenance stays
+ * reachable; an untraceable anchor is silently dropped (it is furniture, never
+ * source content shown to the reader).
+ */
+function FigureAnchorBlock({
+  block,
+  onInspect,
+}: {
+  block: ArticleFigureAnchorBlock
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  if (!block.caption || block.sourceBlockIds.length === 0) return null
+  return (
+    <button
+      type='button'
+      className='tf-figure-anchor'
+      onClick={() =>
+        onInspect({
+          kind: 'Figure anchor',
+          transformedText: block.caption ?? '',
+          sourceBlockIds: block.sourceBlockIds,
+          transformationType: block.transformationType,
+          fidelityRisk: block.fidelityRisk,
+        })
+      }
+    >
+      ◇ {block.caption}
+    </button>
+  )
 }
 
 /** Compile-time exhaustiveness assertion for discriminated-union switches. */

@@ -111,9 +111,10 @@ describe('ArticleGeneratorService traceability guard', () => {
         heading: 'H',
         headingSource: 'original',
         sourceBlockIds: ['b1'],
-        paragraphs: [
+        blocks: [
           {
             id: 'p1',
+            type: 'paragraph',
             text: 'body',
             sourceBlockIds,
             transformationType: 'grammar_cleanup',
