@@ -24,8 +24,10 @@ import type {
   LearningConcept,
   LearningLayer,
 } from './schemas'
+import { toArticleV2 } from './article-compat.util'
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
+  ArticleJsonV2,
   CoverageReport,
   FidelityReport,
   SourcePreservingArticle,
@@ -68,7 +70,11 @@ export interface TransformerArticleDetail {
   sourceId: string
   status: TransformedArticleStatus
   blocksVersion: number
-  articleJson: SourcePreservingArticle | null
+  /**
+   * Always v2 to the client: the server is the single adaptation boundary
+   * (DET-277). Stored JSON may be legacy v1; `getArticle` adapts it read-time.
+   */
+  articleJson: ArticleJsonV2 | null
   fidelityReport: FidelityReport | null
   fidelityScore: number | null
   coverageReport: CoverageReport | null
@@ -328,12 +334,18 @@ export class TransformerService {
     articleId: string,
   ): Promise<TransformerArticleDetail> {
     const article = await this.findOwnedArticle(userId, articleId)
+    // Adapt v1 → v2 at the read boundary so the web only ever sees v2; stored
+    // JSON is never rewritten and adaptation is idempotent for native v2.
+    const stored = article.articleJson as
+      | SourcePreservingArticle
+      | ArticleJsonV2
+      | null
     return {
       id: article.id,
       sourceId: article.sourceId,
       status: article.status,
       blocksVersion: article.blocksVersion,
-      articleJson: article.articleJson as SourcePreservingArticle | null,
+      articleJson: stored ? toArticleV2(stored) : null,
       fidelityReport: article.fidelityReport as FidelityReport | null,
       fidelityScore: article.fidelityScore,
       coverageReport: article.coverageReport as CoverageReport | null,

@@ -1,4 +1,8 @@
+import { toArticleV2 } from './article-compat.util'
 import type {
+  ArticleBlock,
+  ArticleJsonV2,
+  ArticleSectionV2,
   CoverageReport,
   SourcePreservingArticle,
 } from './transformer.types'
@@ -16,10 +20,13 @@ export interface RemovedBlockRef {
 }
 
 /**
- * Deterministic coverage report (DET-255, step 9). Pure function — no LLM. A
- * block is "represented" if it is cited ANYWHERE in the article: any paragraph
- * (abstract or section), subtitle, keyTerm, sourceExample, or caveat. The
- * `paragraphMap` covers the abstract paragraphs plus every section paragraph.
+ * Deterministic coverage report (DET-255, step 9; v2 since DET-277). Pure
+ * function — no LLM. Accepts either a v1 `SourcePreservingArticle` or a v2
+ * `ArticleJsonV2`; v1 input is adapted to v2 first, so the result is identical
+ * either way. A block is "represented" if it is cited ANYWHERE in the article:
+ * any block (abstract paragraph or section/subsection block), subtitle, keyTerm,
+ * sourceExample, or caveat. The `paragraphMap` covers the abstract paragraphs
+ * plus every section/subsection block (in document order).
  *
  *   coveragePercent = represented / (total - removed), rounded.
  *
@@ -27,10 +34,11 @@ export interface RemovedBlockRef {
  * uncertain are accounted for — the audit of what the article silently dropped.
  */
 export function buildCoverageReport(
-  article: SourcePreservingArticle,
+  input: SourcePreservingArticle | ArticleJsonV2,
   blocks: CoverageBlock[],
   removedBlocks: RemovedBlockRef[],
 ): CoverageReport {
+  const article = toArticleV2(input)
   const total = blocks.length
   const allIds = new Set(blocks.map((b) => b.id))
   const removedIds = new Set(
@@ -45,12 +53,15 @@ export function buildCoverageReport(
   const cite = (ids: string[]) => {
     for (const id of ids) if (allIds.has(id)) represented.add(id)
   }
+  // Walk a section + its subsections, citing section + every block's ids.
+  const citeSection = (s: ArticleSectionV2) => {
+    cite(s.sourceBlockIds)
+    for (const b of s.blocks) cite(b.sourceBlockIds)
+    for (const sub of s.subsections ?? []) citeSection(sub)
+  }
   if (article.subtitle) cite(article.subtitle.sourceBlockIds)
   for (const p of article.abstract) cite(p.sourceBlockIds)
-  for (const s of article.sections) {
-    cite(s.sourceBlockIds)
-    for (const p of s.paragraphs) cite(p.sourceBlockIds)
-  }
+  for (const s of article.sections) citeSection(s)
   for (const t of article.keyTerms) cite(t.sourceBlockIds)
   for (const e of article.sourceExamples) cite(e.sourceBlockIds)
   for (const c of article.caveats) cite(c.sourceBlockIds)
@@ -71,7 +82,9 @@ export function buildCoverageReport(
   const coveragePercent =
     denominator <= 0 ? 100 : Math.round((represented.size / denominator) * 100)
 
-  // paragraphMap: abstract + all section paragraphs, in template order.
+  // paragraphMap: abstract paragraphs + every section/subsection block, in
+  // document order. Each entry keys on the block id; every block (any type)
+  // carries sourceBlockIds/transformationType/fidelityRisk.
   const paragraphMap: CoverageReport['paragraphMap'] = []
   for (const p of article.abstract) {
     paragraphMap.push({
@@ -81,16 +94,19 @@ export function buildCoverageReport(
       fidelityRisk: p.fidelityRisk,
     })
   }
-  for (const s of article.sections) {
-    for (const p of s.paragraphs) {
-      paragraphMap.push({
-        paragraphId: p.id,
-        sourceBlockIds: p.sourceBlockIds,
-        transformationType: p.transformationType,
-        fidelityRisk: p.fidelityRisk,
-      })
-    }
+  const mapBlock = (b: ArticleBlock) => {
+    paragraphMap.push({
+      paragraphId: b.id,
+      sourceBlockIds: b.sourceBlockIds,
+      transformationType: b.transformationType,
+      fidelityRisk: b.fidelityRisk,
+    })
   }
+  const mapSection = (s: ArticleSectionV2) => {
+    for (const b of s.blocks) mapBlock(b)
+    for (const sub of s.subsections ?? []) mapSection(sub)
+  }
+  for (const s of article.sections) mapSection(s)
 
   return {
     totalBlocks: total,

@@ -90,3 +90,242 @@ export interface CoverageReport {
     fidelityRisk: FidelityRisk
   }[]
 }
+
+/* ===========================================================================
+ * Article JSON v2 contract (DET-277) — the structured, typed-block evolution.
+ * ===========================================================================
+ *
+ * WHY v2 exists. v1 (`SourcePreservingArticle` above) models a section as a flat
+ * `ArticleParagraph[]`. The product needs richer, source-faithful structure:
+ * lists, quotes, tables, code, pull-quotes, figure anchors and inline callouts,
+ * nested subsections, heading provenance, and (in later waves) reading aids,
+ * callout placement, genre shape, and audited reorderings. v2 captures all of
+ * that as an ADDITIVE SUPERSET so a v1 article maps onto v2 losslessly.
+ *
+ * THE CONTRACT.
+ *  - `schemaVersion: 'v2'` is the discriminator. Absence ⇒ legacy v1.
+ *  - `mode` stays `'source_preserving_article'` (unchanged from v1).
+ *  - A section's body is `blocks: ArticleBlock[]` (replacing v1 `paragraphs`),
+ *    plus optional one-level `subsections`.
+ *  - Heading provenance uses v2 naming `HeadingSourceV2`
+ *    ('original' | 'cleanedOriginal' | 'inferred'); the adapter maps v1
+ *    'original'→'original', 'light_reword'→'cleanedOriginal',
+ *    'inferred_from_source'→'inferred'.
+ *  - Top-level `abstract` stays `ArticleParagraph[]` (NOT blocks): it is summary
+ *    matter, never carries lists/tables/figures, and keeping it as paragraphs
+ *    keeps the v1→v2 adapter trivial (no abstract block-wrapping). End-matter
+ *    (`keyTerms`/`sourceExamples`/`caveats`) and `originalStructure` are RETAINED
+ *    verbatim from v1 — they are placement input for later waves and the compact
+ *    end index.
+ *
+ * THE INVARIANT (unchanged from v1). Every represented fragment is traceable to
+ * source blocks: every `ArticleBlock` carries a `sourceBlockIds` array (non-empty
+ * for real source content). v2 widens the SHAPE of the article, never its
+ * SUBSTANCE — no field here lets the AI add meaning the source did not contain.
+ *
+ * READ-TIME ADAPTATION. The server is the single adaptation boundary: stored v1
+ * JSON is NEVER rewritten; `getArticle` adapts v1→v2 via `article-compat.util.ts`
+ * (`toArticleV2`, idempotent, discriminated on `schemaVersion`) so the web only
+ * ever sees v2. The generator keeps emitting v1 in this wave (DET-277); it emits
+ * v2 natively from DET-271.
+ *
+ * FORWARD-RESERVED FIELDS. Optional top-level fields land in later waves but are
+ * TYPED now so the contract is complete: `readingAids` (DET-274),
+ * `calloutPlacements` (DET-272), `shape` (DET-273), `reorderings` (DET-275).
+ * They are placeholder shapes — minimal but real — so schema tests can cover
+ * them; their producers/consumers arrive in their waves.
+ */
+
+/** v2 article schema version discriminator. */
+export const ARTICLE_SCHEMA_VERSION = 'v2' as const
+export type ArticleSchemaVersion = typeof ARTICLE_SCHEMA_VERSION
+
+/**
+ * v2 heading provenance. Distinct from v1 `HeadingSource`: 'cleanedOriginal'
+ * replaces 'light_reword', 'inferred' replaces 'inferred_from_source'.
+ */
+export type HeadingSourceV2 = 'original' | 'cleanedOriginal' | 'inferred'
+
+/** Optional semantic role of a section (typed now, populated from DET-273). */
+export type SectionRole =
+  | 'intro'
+  | 'background'
+  | 'body'
+  | 'method'
+  | 'evidence'
+  | 'example'
+  | 'caveat'
+  | 'conclusion'
+  | 'reference'
+
+/** The block-type discriminator for `ArticleBlock`. */
+export type ArticleBlockType =
+  | 'paragraph'
+  | 'list'
+  | 'quote'
+  | 'pullQuote'
+  | 'table'
+  | 'code'
+  | 'figureAnchor'
+  | 'callout'
+
+/** Fields every v2 block carries (the traceability + provenance primitive). */
+export interface ArticleBlockBase {
+  id: string
+  type: ArticleBlockType
+  sourceBlockIds: string[]
+  transformationType: TransformationType
+  fidelityRisk: FidelityRisk
+}
+
+/** A prose paragraph — the v2 equivalent of a v1 `ArticleParagraph`. */
+export interface ArticleParagraphBlock extends ArticleBlockBase {
+  type: 'paragraph'
+  text: string
+}
+
+/** An ordered or unordered list. */
+export interface ArticleListBlock extends ArticleBlockBase {
+  type: 'list'
+  ordered: boolean
+  items: string[]
+}
+
+/** A block quotation, optionally attributed. */
+export interface ArticleQuoteBlock extends ArticleBlockBase {
+  type: 'quote'
+  text: string
+  attribution?: string
+}
+
+/** A pull-quote (display excerpt of real source text). */
+export interface ArticlePullQuoteBlock extends ArticleBlockBase {
+  type: 'pullQuote'
+  text: string
+}
+
+/** A table — optional caption, optional header row, then body rows. */
+export interface ArticleTableBlock extends ArticleBlockBase {
+  type: 'table'
+  caption?: string
+  header?: string[]
+  rows: string[][]
+}
+
+/** A fenced code block. */
+export interface ArticleCodeBlock extends ArticleBlockBase {
+  type: 'code'
+  text: string
+  language?: string
+}
+
+/** An anchor where an illustration suggestion may be placed inline. */
+export interface ArticleFigureAnchorBlock extends ArticleBlockBase {
+  type: 'figureAnchor'
+  suggestionId?: string
+  caption?: string
+}
+
+/** An inline aside that exists as distinct source content (e.g. a note box). */
+export interface ArticleCalloutBlock extends ArticleBlockBase {
+  type: 'callout'
+  calloutType?: string
+  title?: string
+  text: string
+}
+
+/** The discriminated union of every v2 block. */
+export type ArticleBlock =
+  | ArticleParagraphBlock
+  | ArticleListBlock
+  | ArticleQuoteBlock
+  | ArticlePullQuoteBlock
+  | ArticleTableBlock
+  | ArticleCodeBlock
+  | ArticleFigureAnchorBlock
+  | ArticleCalloutBlock
+
+/** A v2 section: typed blocks, heading provenance, optional one-level nesting. */
+export interface ArticleSectionV2 {
+  id: string
+  heading: string
+  headingSource: HeadingSourceV2
+  /** Blocks grounding the heading text (provenance for the inspector). */
+  headingSourceBlockIds?: string[]
+  /** Optional semantic role (typed now, unused until DET-273). */
+  sectionRole?: SectionRole
+  sourceBlockIds: string[]
+  blocks: ArticleBlock[]
+  /** One level of nesting (H2→H3); typed now, exercised by fixtures. */
+  subsections?: ArticleSectionV2[]
+}
+
+/* --- Forward-reserved top-level v2 fields (typed now; producers land later) --- */
+
+/** A reading-aid entry (DET-274): TOC node, source highlight, or reading time. */
+export interface ArticleReadingAids {
+  /** Flat or nested table-of-contents derived from the heading hierarchy. */
+  toc?: { sectionId: string; heading: string; level: number }[]
+  /** Estimated reading time of the article body, in minutes. */
+  readingTimeMinutes?: number
+  /** Source-grounded highlights, each traceable. */
+  sourceHighlights?: { text: string; sourceBlockIds: string[] }[]
+}
+
+/** One callout placed inline against a section (DET-272). */
+export interface ArticleCalloutPlacement {
+  /** Reference to the placed item (end-matter index / callout block id). */
+  refId: string
+  sectionId: string
+  placementReason: string
+}
+
+/** Where inline callouts were placed + what could not be placed (DET-272). */
+export interface ArticleCalloutPlacements {
+  bySection: Record<string, ArticleCalloutPlacement[]>
+  unplaced: ArticleCalloutPlacement[]
+}
+
+/** Genre/shape of the article (DET-273). */
+export type ArticleShape =
+  | 'explainer'
+  | 'argument'
+  | 'procedure'
+  | 'reference'
+  | 'report'
+  | 'narrative'
+  | 'hybrid'
+
+/** One audited reading-order move (DET-275). */
+export interface ArticleReorderingAudit {
+  sourceBlockId: string
+  fromIndex: number
+  toIndex: number
+  movedWithClusterIds?: string[]
+  reason: string
+  risk: FidelityRisk
+}
+
+/**
+ * Article JSON v2 — the structured superset of `SourcePreservingArticle`.
+ * Discriminated on `schemaVersion: 'v2'`.
+ */
+export interface ArticleJsonV2 {
+  schemaVersion: ArticleSchemaVersion
+  mode: 'source_preserving_article'
+  title: { text: string; source: HeadingSourceV2 }
+  subtitle?: { text: string; source: HeadingSourceV2; sourceBlockIds: string[] }
+  /** Source summary; kept as paragraphs (not blocks) — see contract notes. */
+  abstract: ArticleParagraph[]
+  sections: ArticleSectionV2[]
+  keyTerms: { term: string; sourceBlockIds: string[] }[]
+  sourceExamples: { text: string; sourceBlockIds: string[] }[]
+  caveats: { text: string; sourceBlockIds: string[] }[]
+  /** Source outline reference (unchanged from v1). */
+  originalStructure: { blockId: string; blockType: string; preview: string }[]
+  /* Forward-reserved optional fields (typed now; producers land later). */
+  readingAids?: ArticleReadingAids
+  calloutPlacements?: ArticleCalloutPlacements
+  shape?: ArticleShape
+  reorderings?: ArticleReorderingAudit[]
+}

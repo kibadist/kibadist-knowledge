@@ -1012,6 +1012,166 @@ export interface CoverageReport {
   }[]
 }
 
+// --- Article JSON v2 contract (DET-277) ---
+// MIRROR of the v2 contract in server/src/transformer/transformer.types.ts — the
+// SERVER is the single adaptation boundary (`getArticle` adapts legacy v1 → v2),
+// so the web ONLY ever receives v2. These types are byte-for-byte the same shape
+// as that file — do NOT diverge.
+
+export type ArticleSchemaVersion = 'v2'
+
+export type HeadingSourceV2 = 'original' | 'cleanedOriginal' | 'inferred'
+
+export type SectionRole =
+  | 'intro'
+  | 'background'
+  | 'body'
+  | 'method'
+  | 'evidence'
+  | 'example'
+  | 'caveat'
+  | 'conclusion'
+  | 'reference'
+
+export type ArticleBlockType =
+  | 'paragraph'
+  | 'list'
+  | 'quote'
+  | 'pullQuote'
+  | 'table'
+  | 'code'
+  | 'figureAnchor'
+  | 'callout'
+
+export interface ArticleBlockBase {
+  id: string
+  type: ArticleBlockType
+  sourceBlockIds: string[]
+  transformationType: TransformationType
+  fidelityRisk: FidelityRisk
+}
+
+export interface ArticleParagraphBlock extends ArticleBlockBase {
+  type: 'paragraph'
+  text: string
+}
+
+export interface ArticleListBlock extends ArticleBlockBase {
+  type: 'list'
+  ordered: boolean
+  items: string[]
+}
+
+export interface ArticleQuoteBlock extends ArticleBlockBase {
+  type: 'quote'
+  text: string
+  attribution?: string
+}
+
+export interface ArticlePullQuoteBlock extends ArticleBlockBase {
+  type: 'pullQuote'
+  text: string
+}
+
+export interface ArticleTableBlock extends ArticleBlockBase {
+  type: 'table'
+  caption?: string
+  header?: string[]
+  rows: string[][]
+}
+
+export interface ArticleCodeBlock extends ArticleBlockBase {
+  type: 'code'
+  text: string
+  language?: string
+}
+
+export interface ArticleFigureAnchorBlock extends ArticleBlockBase {
+  type: 'figureAnchor'
+  suggestionId?: string
+  caption?: string
+}
+
+export interface ArticleCalloutBlock extends ArticleBlockBase {
+  type: 'callout'
+  calloutType?: string
+  title?: string
+  text: string
+}
+
+export type ArticleBlock =
+  | ArticleParagraphBlock
+  | ArticleListBlock
+  | ArticleQuoteBlock
+  | ArticlePullQuoteBlock
+  | ArticleTableBlock
+  | ArticleCodeBlock
+  | ArticleFigureAnchorBlock
+  | ArticleCalloutBlock
+
+export interface ArticleSectionV2 {
+  id: string
+  heading: string
+  headingSource: HeadingSourceV2
+  headingSourceBlockIds?: string[]
+  sectionRole?: SectionRole
+  sourceBlockIds: string[]
+  blocks: ArticleBlock[]
+  subsections?: ArticleSectionV2[]
+}
+
+export interface ArticleReadingAids {
+  toc?: { sectionId: string; heading: string; level: number }[]
+  readingTimeMinutes?: number
+  sourceHighlights?: { text: string; sourceBlockIds: string[] }[]
+}
+
+export interface ArticleCalloutPlacement {
+  refId: string
+  sectionId: string
+  placementReason: string
+}
+
+export interface ArticleCalloutPlacements {
+  bySection: Record<string, ArticleCalloutPlacement[]>
+  unplaced: ArticleCalloutPlacement[]
+}
+
+export type ArticleShape =
+  | 'explainer'
+  | 'argument'
+  | 'procedure'
+  | 'reference'
+  | 'report'
+  | 'narrative'
+  | 'hybrid'
+
+export interface ArticleReorderingAudit {
+  sourceBlockId: string
+  fromIndex: number
+  toIndex: number
+  movedWithClusterIds?: string[]
+  reason: string
+  risk: FidelityRisk
+}
+
+export interface ArticleJsonV2 {
+  schemaVersion: ArticleSchemaVersion
+  mode: 'source_preserving_article'
+  title: { text: string; source: HeadingSourceV2 }
+  subtitle?: { text: string; source: HeadingSourceV2; sourceBlockIds: string[] }
+  abstract: ArticleParagraph[]
+  sections: ArticleSectionV2[]
+  keyTerms: { term: string; sourceBlockIds: string[] }[]
+  sourceExamples: { text: string; sourceBlockIds: string[] }[]
+  caveats: { text: string; sourceBlockIds: string[] }[]
+  originalStructure: { blockId: string; blockType: string; preview: string }[]
+  readingAids?: ArticleReadingAids
+  calloutPlacements?: ArticleCalloutPlacements
+  shape?: ArticleShape
+  reorderings?: ArticleReorderingAudit[]
+}
+
 // --- Source DTOs (mirror transformer.service.ts) ---
 // Extraction/segmentation metadata persisted on the source. `truncated`/`degraded`
 // drive the warning chips the UI must surface (spec §Pipeline 2).
@@ -1135,7 +1295,8 @@ export interface TransformedArticle {
   id: string
   sourceId: string
   status: TransformedArticleStatus
-  articleJson: SourcePreservingArticle | null
+  // Always v2 — the server adapts legacy v1 at the read boundary (DET-277).
+  articleJson: ArticleJsonV2 | null
   fidelityReport: FidelityReport | null
   fidelityScore: number | null
   coverageReport: CoverageReport | null

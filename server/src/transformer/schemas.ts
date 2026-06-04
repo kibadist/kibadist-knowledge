@@ -1,8 +1,10 @@
 import { z } from 'zod'
 
 import type {
+  ArticleJsonV2,
   ArticleParagraph,
   ArticleSection,
+  ArticleSectionV2,
   FidelityFinding,
   FidelityReport,
   SourcePreservingArticle,
@@ -173,6 +175,195 @@ export const ArticleSchema: z.ZodType<SourcePreservingArticle> = z.object({
       preview: z.string(),
     }),
   ),
+})
+
+// --- Article JSON v2 (DET-277) ---------------------------------------------
+
+/**
+ * Zod schema for the v2 article contract (`ArticleJsonV2`). Used for VALIDATION
+ * and tests in this wave — the generator keeps emitting v1 (`ArticleSchema`)
+ * until DET-271. Every typed block carries a non-empty `sourceBlockIds`; heading
+ * provenance, nested subsections, reading aids, callout placement and reorder
+ * audits are all covered so the contract is complete per the ticket's acceptance
+ * criteria.
+ */
+
+const headingSourceV2 = z.enum(['original', 'cleanedOriginal', 'inferred'])
+
+const sectionRole = z.enum([
+  'intro',
+  'background',
+  'body',
+  'method',
+  'evidence',
+  'example',
+  'caveat',
+  'conclusion',
+  'reference',
+])
+
+/** Fields shared by every v2 block. */
+const blockBase = {
+  id: z.string().min(1),
+  sourceBlockIds,
+  transformationType,
+  fidelityRisk,
+}
+
+const paragraphBlock = z.object({
+  ...blockBase,
+  type: z.literal('paragraph'),
+  text: z.string().min(1),
+})
+
+const listBlock = z.object({
+  ...blockBase,
+  type: z.literal('list'),
+  ordered: z.boolean(),
+  items: z.array(z.string().min(1)),
+})
+
+const quoteBlock = z.object({
+  ...blockBase,
+  type: z.literal('quote'),
+  text: z.string().min(1),
+  attribution: z.string().min(1).optional(),
+})
+
+const pullQuoteBlock = z.object({
+  ...blockBase,
+  type: z.literal('pullQuote'),
+  text: z.string().min(1),
+})
+
+const tableBlock = z.object({
+  ...blockBase,
+  type: z.literal('table'),
+  caption: z.string().min(1).optional(),
+  header: z.array(z.string()).optional(),
+  rows: z.array(z.array(z.string())),
+})
+
+const codeBlock = z.object({
+  ...blockBase,
+  type: z.literal('code'),
+  text: z.string().min(1),
+  language: z.string().min(1).optional(),
+})
+
+const figureAnchorBlock = z.object({
+  ...blockBase,
+  type: z.literal('figureAnchor'),
+  suggestionId: z.string().min(1).optional(),
+  caption: z.string().min(1).optional(),
+})
+
+const calloutBlock = z.object({
+  ...blockBase,
+  type: z.literal('callout'),
+  calloutType: z.string().min(1).optional(),
+  title: z.string().min(1).optional(),
+  text: z.string().min(1),
+})
+
+const articleBlock = z.discriminatedUnion('type', [
+  paragraphBlock,
+  listBlock,
+  quoteBlock,
+  pullQuoteBlock,
+  tableBlock,
+  codeBlock,
+  figureAnchorBlock,
+  calloutBlock,
+])
+
+// Sections nest one level; declared via z.lazy so subsections reuse the schema.
+const articleSectionV2: z.ZodType<ArticleSectionV2> = z.lazy(() =>
+  z.object({
+    id: z.string().min(1),
+    heading: z.string().min(1),
+    headingSource: headingSourceV2,
+    headingSourceBlockIds: z.array(z.string().min(1)).optional(),
+    sectionRole: sectionRole.optional(),
+    sourceBlockIds,
+    blocks: z.array(articleBlock),
+    subsections: z.array(articleSectionV2).optional(),
+  }),
+)
+
+const readingAids = z.object({
+  toc: z
+    .array(
+      z.object({
+        sectionId: z.string().min(1),
+        heading: z.string().min(1),
+        level: z.number(),
+      }),
+    )
+    .optional(),
+  readingTimeMinutes: z.number().optional(),
+  sourceHighlights: z
+    .array(z.object({ text: z.string().min(1), sourceBlockIds }))
+    .optional(),
+})
+
+const calloutPlacement = z.object({
+  refId: z.string().min(1),
+  sectionId: z.string().min(1),
+  placementReason: z.string().min(1),
+})
+
+const calloutPlacements = z.object({
+  bySection: z.record(z.string(), z.array(calloutPlacement)),
+  unplaced: z.array(calloutPlacement),
+})
+
+const articleShape = z.enum([
+  'explainer',
+  'argument',
+  'procedure',
+  'reference',
+  'report',
+  'narrative',
+  'hybrid',
+])
+
+const reorderingAudit = z.object({
+  sourceBlockId: z.string().min(1),
+  fromIndex: z.number(),
+  toIndex: z.number(),
+  movedWithClusterIds: z.array(z.string().min(1)).optional(),
+  reason: z.string().min(1),
+  risk: fidelityRisk,
+})
+
+export const ArticleJsonV2Schema: z.ZodType<ArticleJsonV2> = z.object({
+  schemaVersion: z.literal('v2'),
+  mode: z.literal('source_preserving_article'),
+  title: z.object({ text: z.string().min(1), source: headingSourceV2 }),
+  subtitle: z
+    .object({
+      text: z.string().min(1),
+      source: headingSourceV2,
+      sourceBlockIds,
+    })
+    .optional(),
+  abstract: z.array(articleParagraphSchema),
+  sections: z.array(articleSectionV2),
+  keyTerms: z.array(z.object({ term: z.string().min(1), sourceBlockIds })),
+  sourceExamples: z.array(z.object({ text: z.string().min(1), sourceBlockIds })),
+  caveats: z.array(z.object({ text: z.string().min(1), sourceBlockIds })),
+  originalStructure: z.array(
+    z.object({
+      blockId: z.string().min(1),
+      blockType: z.string().min(1),
+      preview: z.string(),
+    }),
+  ),
+  readingAids: readingAids.optional(),
+  calloutPlacements: calloutPlacements.optional(),
+  shape: articleShape.optional(),
+  reorderings: z.array(reorderingAudit).optional(),
 })
 
 // --- Fidelity report (step 9) ----------------------------------------------

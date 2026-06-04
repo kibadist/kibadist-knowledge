@@ -1,12 +1,15 @@
 import { Injectable } from '@nestjs/common'
 
 import { AiService } from '../ai/ai.service'
+import { toArticleV2 } from './article-compat.util'
 import { buildFidelityPrompt } from './fidelity-checker.prompt'
 import { completeJson } from './llm-json.util'
 import type { SourceStructureModel } from './schemas'
 import { FidelityReportSchema } from './schemas'
 import type { ClassifiedBlockInput } from './structure-model.service'
 import type {
+  ArticleJsonV2,
+  ArticleSectionV2,
   FidelityFinding,
   FidelityReport,
   SourcePreservingArticle,
@@ -19,9 +22,9 @@ const MIN_FIDELITY_SCORE = 95
  * Fidelity-checker service (DET-254, step 9). The LLM report is MERGED with
  * deterministic code checks, then the binding `approved` is recomputed in code:
  *
- *  - paragraphs with no sourceBlockIds OR with unknown block ids → high-severity
+ *  - blocks with no sourceBlockIds OR with unknown block ids → high-severity
  *    `lostInformation` findings (a traceability violation).
- *  - section headings with headingSource 'inferred_from_source' whose section
+ *  - section headings with headingSource 'inferred' whose section
  *    sourceBlockIds are empty → `unsupportedHeadings` findings.
  *  - `approved = false` if ANY high-severity addedInformation OR high-severity
  *    lostInformation OR fidelityScore < 95 OR any traceability violation.
@@ -69,54 +72,56 @@ export class FidelityCheckerService {
  */
 export function mergeDeterministicChecks(
   report: FidelityReport,
-  article: SourcePreservingArticle,
+  input: SourcePreservingArticle | ArticleJsonV2,
   known: ReadonlySet<string>,
 ): FidelityReport {
+  // Adapt v1 → v2 so the traversal is uniform; idempotent for native v2.
+  const article = toArticleV2(input)
   let traceabilityViolation = false
   const lost: FidelityFinding[] = [...report.lostInformation]
   const unsupportedHeadings: FidelityFinding[] = [...report.unsupportedHeadings]
 
-  const checkParagraph = (
-    para: { id: string; sourceBlockIds: string[] },
+  const checkFragment = (
+    fragment: { id: string; sourceBlockIds: string[] },
     where: string,
   ) => {
-    if (para.sourceBlockIds.length === 0) {
+    if (fragment.sourceBlockIds.length === 0) {
       traceabilityViolation = true
       lost.push({
         severity: 'high',
-        description: `Paragraph ${para.id} (${where}) has no sourceBlockIds — untraceable.`,
-        articleRef: para.id,
+        description: `Block ${fragment.id} (${where}) has no sourceBlockIds — untraceable.`,
+        articleRef: fragment.id,
       })
       return
     }
-    const unknown = para.sourceBlockIds.filter((id) => !known.has(id))
+    const unknown = fragment.sourceBlockIds.filter((id) => !known.has(id))
     if (unknown.length > 0) {
       traceabilityViolation = true
       lost.push({
         severity: 'high',
-        description: `Paragraph ${para.id} (${where}) references unknown block ids: ${unknown.join(', ')}.`,
-        articleRef: para.id,
+        description: `Block ${fragment.id} (${where}) references unknown block ids: ${unknown.join(', ')}.`,
+        articleRef: fragment.id,
         sourceBlockIds: unknown,
       })
     }
   }
 
-  for (const p of article.abstract) checkParagraph(p, 'abstract')
-  for (const s of article.sections) {
-    for (const p of s.paragraphs) checkParagraph(p, `section ${s.id}`)
+  const checkSection = (s: ArticleSectionV2) => {
+    for (const b of s.blocks) checkFragment(b, `section ${s.id}`)
     // Inferred headings must be grounded in the section's source blocks.
-    if (
-      s.headingSource === 'inferred_from_source' &&
-      s.sourceBlockIds.length === 0
-    ) {
+    if (s.headingSource === 'inferred' && s.sourceBlockIds.length === 0) {
       traceabilityViolation = true
       unsupportedHeadings.push({
         severity: 'high',
-        description: `Section "${s.heading}" heading is inferred_from_source but has no section sourceBlockIds.`,
+        description: `Section "${s.heading}" heading is inferred but has no section sourceBlockIds.`,
         articleRef: s.id,
       })
     }
+    for (const sub of s.subsections ?? []) checkSection(sub)
   }
+
+  for (const p of article.abstract) checkFragment(p, 'abstract')
+  for (const s of article.sections) checkSection(s)
 
   const hasHighAdded = report.addedInformation.some(
     (f) => f.severity === 'high',

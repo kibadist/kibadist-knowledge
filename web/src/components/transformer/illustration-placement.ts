@@ -1,7 +1,8 @@
 import type {
+  ArticleJsonV2,
+  ArticleSectionV2,
   IllustrationPlan,
   IllustrationSuggestion,
-  SourcePreservingArticle,
 } from '@/lib/api'
 
 /**
@@ -26,12 +27,11 @@ export interface IllustrationPlacement {
   unplaced: IllustrationSuggestion[]
 }
 
-function sectionBlockIds(
-  section: SourcePreservingArticle['sections'][number],
-): Set<string> {
+function sectionBlockIds(section: ArticleSectionV2): Set<string> {
   const ids = new Set<string>(section.sourceBlockIds)
-  for (const p of section.paragraphs)
-    for (const id of p.sourceBlockIds) ids.add(id)
+  for (const b of section.blocks) for (const id of b.sourceBlockIds) ids.add(id)
+  for (const sub of section.subsections ?? [])
+    for (const id of sectionBlockIds(sub)) ids.add(id)
   return ids
 }
 
@@ -42,7 +42,7 @@ function overlap(ids: Set<string>, suggestion: IllustrationSuggestion): number {
 }
 
 export function placeIllustrations(
-  article: SourcePreservingArticle,
+  article: ArticleJsonV2,
   plan: IllustrationPlan | null,
 ): IllustrationPlacement {
   const empty: IllustrationPlacement = {

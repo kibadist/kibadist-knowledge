@@ -15,9 +15,10 @@ import {
 } from '@/components/transformer/source-inspector-panel'
 import {
   api,
+  type ArticleJsonV2,
+  type ArticleSectionV2,
   type FidelityFinding,
   type FidelityReport,
-  type SourcePreservingArticle,
   type TransformerBlockView,
 } from '@/lib/api'
 import {
@@ -242,17 +243,19 @@ export default function ArticlePage() {
 
 // Distinct source blocks cited anywhere in the article body — a byline signal
 // when coverage isn't available.
-function countSourceBlocks(article: SourcePreservingArticle): number {
+function countSourceBlocks(article: ArticleJsonV2): number {
   const ids = new Set<string>()
   const add = (arr: string[]) => {
     for (const id of arr) ids.add(id)
   }
+  const addSection = (s: ArticleSectionV2) => {
+    add(s.sourceBlockIds)
+    for (const b of s.blocks) add(b.sourceBlockIds)
+    for (const sub of s.subsections ?? []) addSection(sub)
+  }
   if (article.subtitle) add(article.subtitle.sourceBlockIds)
   for (const p of article.abstract) add(p.sourceBlockIds)
-  for (const s of article.sections) {
-    add(s.sourceBlockIds)
-    for (const p of s.paragraphs) add(p.sourceBlockIds)
-  }
+  for (const s of article.sections) addSection(s)
   for (const t of article.keyTerms) add(t.sourceBlockIds)
   for (const e of article.sourceExamples) add(e.sourceBlockIds)
   for (const c of article.caveats) add(c.sourceBlockIds)
@@ -261,7 +264,7 @@ function countSourceBlocks(article: SourcePreservingArticle): number {
 
 // The original-structure outline, relocated out of the article body into the
 // drawer (it's a reference appendix, not source-preserved reading matter).
-function OriginalStructure({ article }: { article: SourcePreservingArticle }) {
+function OriginalStructure({ article }: { article: ArticleJsonV2 }) {
   return (
     <section className='panel tf-original-structure'>
       <h3 className='panel-h'>Original structure reference</h3>

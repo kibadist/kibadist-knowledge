@@ -5,11 +5,13 @@ import type { ReactNode } from 'react'
 
 import {
   ApiError,
+  type ArticleBlock,
+  type ArticleJsonV2,
   type ArticleParagraph,
+  type ArticleParagraphBlock,
   api,
   type IllustrationPlan,
   type IllustrationSuggestion,
-  type SourcePreservingArticle,
 } from '@/lib/api'
 import { fidelityRiskChip } from '@/lib/transformer-format'
 import { placeIllustrations } from './illustration-placement'
@@ -47,7 +49,7 @@ export function ArticleView({
   masthead,
   onInspect,
 }: {
-  article: SourcePreservingArticle
+  article: ArticleJsonV2
   articleId: string
   illustrationPlan: IllustrationPlan | null
   /** Count of distinct source blocks, for the byline. Omitted if not derivable. */
@@ -159,13 +161,8 @@ export function ArticleView({
                   variant='column'
                 />
               )}
-              {section.paragraphs.map((p) => (
-                <Paragraph
-                  key={p.id}
-                  paragraph={p}
-                  kind='Paragraph'
-                  onInspect={onInspect}
-                />
+              {section.blocks.map((b) => (
+                <Block key={b.id} block={b} onInspect={onInspect} />
               ))}
             </section>
             {i === pullAt && pullCaveat && (
@@ -569,13 +566,89 @@ function IllustrationSlot({
   )
 }
 
+/**
+ * Render one v2 section block (DET-277). Paragraph blocks render exactly as the
+ * v1 paragraphs did — clickable → inspector, missing-source chip when
+ * untraceable. The remaining typed block kinds (list/quote/table/code/…) get
+ * their first-class rendering in W3 (DET-271); until the generator emits them,
+ * sections only ever contain paragraph blocks (the v1→v2 adapter produces only
+ * paragraph blocks), so the fallback below is a safety net, not a live path.
+ */
+function Block({
+  block,
+  onInspect,
+}: {
+  block: ArticleBlock
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  if (block.type === 'paragraph') {
+    return <Paragraph paragraph={block} kind='Paragraph' onInspect={onInspect} />
+  }
+  // Non-paragraph blocks: minimal source-grounded rendering until W3 styles each
+  // type. Still clickable into the inspector so traceability is preserved.
+  const text = blockText(block)
+  const missing = block.sourceBlockIds.length === 0
+  if (missing) {
+    return (
+      <p className='tf-paragraph tf-paragraph--missing'>
+        {text}
+        <span className='chip chip-contested tf-missing-chip'>
+          missing source reference
+        </span>
+      </p>
+    )
+  }
+  return (
+    <button
+      type='button'
+      className='tf-paragraph tf-paragraph--clickable'
+      onClick={() =>
+        onInspect({
+          kind: 'Paragraph',
+          transformedText: text,
+          sourceBlockIds: block.sourceBlockIds,
+          transformationType: block.transformationType,
+          fidelityRisk: block.fidelityRisk,
+        })
+      }
+    >
+      {text}
+    </button>
+  )
+}
+
+/** A plain-text rendering of any non-paragraph block (W1 fallback). */
+function blockText(block: Exclude<ArticleBlock, ArticleParagraphBlock>): string {
+  switch (block.type) {
+    case 'list':
+      return block.items.join('\n')
+    case 'quote':
+      return block.attribution
+        ? `“${block.text}” — ${block.attribution}`
+        : `“${block.text}”`
+    case 'pullQuote':
+      return `“${block.text}”`
+    case 'table':
+      return [block.caption, ...(block.header ? [block.header.join(' | ')] : [])]
+        .filter(Boolean)
+        .concat(block.rows.map((r) => r.join(' | ')))
+        .join('\n')
+    case 'code':
+      return block.text
+    case 'figureAnchor':
+      return block.caption ?? ''
+    case 'callout':
+      return block.title ? `${block.title}: ${block.text}` : block.text
+  }
+}
+
 function Paragraph({
   paragraph,
   kind,
   lede = false,
   onInspect,
 }: {
-  paragraph: ArticleParagraph
+  paragraph: ArticleParagraph | ArticleParagraphBlock
   kind: string
   lede?: boolean
   onInspect: (selection: InspectorSelection) => void
