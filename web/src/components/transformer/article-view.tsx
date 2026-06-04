@@ -501,62 +501,74 @@ function IllustrationSlot({
           )}
         </div>
       ) : (
-        /* --- Not approved: the proposal awaiting Approve / Reject --- */
-        <div className='tf-proposal'>
-          <div className='tf-proposal-top'>
-            <span className='tf-fig-aichip'>✦ AI illustration</span>
-            <span className='chip chip-info'>
-              {ILLUSTRATION_TYPE_LABEL[s.illustrationType] ??
-                s.illustrationType}
+        /* --- Not approved: a QUIET collapsible strip. Default state is a single
+           muted line ("✦ Illustration suggested — review") that keeps the AI
+           provenance visible (DET-258) without a heavy card in every section;
+           it expands to the full proposal + Approve / Reject on click. --- */
+        <details className='tf-proposal-strip'>
+          <summary className='tf-proposal-summary'>
+            <span className='tf-proposal-mark' aria-hidden='true'>
+              ✦
             </span>
+            <span className='tf-proposal-label'>Illustration suggested</span>
             <span className={`chip ${fidelityRiskChip(s.fidelityRisk)}`}>
               {s.fidelityRisk} risk
             </span>
-          </div>
-          <p className='tf-proposal-purpose'>{s.purpose}</p>
-          <p className='tf-proposal-desc'>{s.visualDescription}</p>
-          {s.caption && <p className='tf-proposal-caption'>“{s.caption}”</p>}
-          {isHighRisk && s.reason && (
-            <p className='tf-illus-reason'>{s.reason}</p>
-          )}
-          <div className='tf-proposal-foot'>
-            <button
-              type='button'
-              className='tf-ref-btn'
-              onClick={() =>
-                onInspect({
-                  kind: 'Illustration',
-                  transformedText: `${s.purpose} — ${s.visualDescription}`,
-                  sourceBlockIds: s.sourceBlockIds,
-                })
-              }
-            >
-              source refs ({s.sourceBlockIds.length})
-            </button>
-            <div className='tf-proposal-actions'>
+            <span className='tf-proposal-review'>review</span>
+          </summary>
+          <div className='tf-proposal-body'>
+            <div className='tf-proposal-top'>
+              <span className='tf-fig-aichip'>✦ AI illustration</span>
+              <span className='chip chip-info'>
+                {ILLUSTRATION_TYPE_LABEL[s.illustrationType] ??
+                  s.illustrationType}
+              </span>
+            </div>
+            <p className='tf-proposal-purpose'>{s.purpose}</p>
+            <p className='tf-proposal-desc'>{s.visualDescription}</p>
+            {s.caption && <p className='tf-proposal-caption'>“{s.caption}”</p>}
+            {isHighRisk && s.reason && (
+              <p className='tf-illus-reason'>{s.reason}</p>
+            )}
+            <div className='tf-proposal-foot'>
               <button
                 type='button'
-                className='btn-ghost-xs'
-                disabled={approve.isPending}
+                className='tf-ref-btn'
                 onClick={() =>
-                  approve.mutate({ suggestionId: s.id, approval: 'approved' })
+                  onInspect({
+                    kind: 'Illustration',
+                    transformedText: `${s.purpose} — ${s.visualDescription}`,
+                    sourceBlockIds: s.sourceBlockIds,
+                  })
                 }
               >
-                Approve
+                source refs ({s.sourceBlockIds.length})
               </button>
-              <button
-                type='button'
-                className='btn-ghost-xs'
-                disabled={approve.isPending}
-                onClick={() =>
-                  approve.mutate({ suggestionId: s.id, approval: 'rejected' })
-                }
-              >
-                Reject
-              </button>
+              <div className='tf-proposal-actions'>
+                <button
+                  type='button'
+                  className='btn-ghost-xs'
+                  disabled={approve.isPending}
+                  onClick={() =>
+                    approve.mutate({ suggestionId: s.id, approval: 'approved' })
+                  }
+                >
+                  Approve
+                </button>
+                <button
+                  type='button'
+                  className='btn-ghost-xs'
+                  disabled={approve.isPending}
+                  onClick={() =>
+                    approve.mutate({ suggestionId: s.id, approval: 'rejected' })
+                  }
+                >
+                  Reject
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </details>
       )}
     </div>
   )

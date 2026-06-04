@@ -1153,10 +1153,62 @@
 
 /* The proposal (not yet approved) — purpose/description/caption + Approve/Reject,
    inside a quiet indigo-tinted card so it reads as an AI offer, not source. */
-.kbapp .tf-proposal {
-  border: 1px solid rgba(31, 58, 77, 0.3);
+/* Quiet pending-suggestion strip: a single muted hairline row per section that
+   keeps AI provenance visible (✦, indigo) and expands to the full proposal on
+   click — so an un-actioned suggestion no longer plants a heavy card in the flow. */
+.kbapp .tf-proposal-strip {
+  margin: 8px 0 4px;
+}
+.kbapp .tf-proposal-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 2px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-top: 1px dashed rgba(31, 58, 77, 0.28);
+  border-bottom: 1px dashed rgba(31, 58, 77, 0.28);
+  transition:
+    color 0.2s,
+    background 0.2s;
+}
+.kbapp .tf-proposal-summary::-webkit-details-marker {
+  display: none;
+}
+.kbapp .tf-proposal-summary:hover {
+  color: #1f3a4d;
+  background: rgba(31, 58, 77, 0.03);
+}
+.kbapp .tf-proposal-mark {
+  color: #1f3a4d;
+  font-size: 12px;
+}
+.kbapp .tf-proposal-label {
+  color: var(--ink-muted);
+}
+.kbapp .tf-proposal-summary .chip {
+  font-size: 8.5px;
+  padding: 3px 6px;
+}
+.kbapp .tf-proposal-review {
+  margin-left: auto;
+  color: #1f3a4d;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.kbapp .tf-proposal-strip[open] .tf-proposal-review::after {
+  content: " ↑";
+}
+.kbapp .tf-proposal-body {
+  border: 1px solid rgba(31, 58, 77, 0.25);
   background: rgba(31, 58, 77, 0.04);
-  padding: 18px;
+  padding: 16px;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 10px;
