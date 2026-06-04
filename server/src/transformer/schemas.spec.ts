@@ -116,7 +116,7 @@ describe('ArticleJsonV2Schema (DET-277)', () => {
         heading: 'Original heading',
         headingSource: 'original',
         headingSourceBlockIds: ['b1'],
-        sectionRole: 'intro',
+        sectionRole: 'definition',
         sourceBlockIds: ['b1'],
         blocks: [
           {

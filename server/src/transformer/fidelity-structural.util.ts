@@ -3,6 +3,7 @@ import type {
   ArticleBlock,
   ArticleJsonV2,
   ArticleSectionV2,
+  ArticleShape,
   FidelityFinding,
   SourcePreservingArticle,
 } from './transformer.types'
@@ -400,5 +401,79 @@ export function checkUnsupportedHighlights(
         sourceBlockIds: unknown,
       })
   })
+  return findings
+}
+
+/** A source block as the procedure check consumes it (id + type + text). */
+export interface SourceBlockTyped {
+  id: string
+  type: string
+  text: string
+}
+
+// Ordered-list markers at a line start: "1." / "1)" / "a." / "a)" / "i." etc.
+const ORDERED_MARKER_RE = /^\s*(?:\d+|[a-zA-Z]|[ivxlcdmIVXLCDM]+)[.)]\s+/
+
+/**
+ * Is a source LIST block an ORDERED list? The source block type is only "LIST"
+ * (no ordered flag — see the generator prompt), so we detect ordering from the
+ * text: two or more lines that start with a numeric/lettered/roman marker.
+ */
+function isOrderedSourceList(block: SourceBlockTyped): boolean {
+  if (block.type !== 'LIST') return false
+  const marked = block.text
+    .split('\n')
+    .filter((line) => ORDERED_MARKER_RE.test(line)).length
+  return marked >= 2
+}
+
+/**
+ * PROCEDURE ordered-steps preservation (DET-273, HIGH, blocks). Only runs when
+ * `shape === 'procedure'`. For every source ORDERED-list block the article cites,
+ * at least one `list` article block must carry it: if an ordered source list was
+ * cited ONLY by non-list (prose/paragraph) blocks, the steps were flattened into
+ * prose — a high `structuralFinding` that blocks approval. Non-procedure shapes
+ * are not flagged by this check (it returns nothing).
+ *
+ * Deterministic: ordering itself is the reshaping-plan warning's job; this check
+ * enforces only that the ordered source LIST stays a list block, in source order
+ * is preserved within the list block by the generator's verbatim-items rule.
+ */
+export function checkProcedureListPreservation(
+  input: SourcePreservingArticle | ArticleJsonV2,
+  shape: ArticleShape | undefined,
+  sourceBlocks: readonly SourceBlockTyped[],
+): FidelityFinding[] {
+  if (shape !== 'procedure') return []
+  const article = toArticleV2(input)
+  const orderedListIds = new Set(
+    sourceBlocks.filter(isOrderedSourceList).map((b) => b.id),
+  )
+  if (orderedListIds.size === 0) return []
+
+  // For each ordered source-list id: did ANY article `list` block cite it, and
+  // was it cited by any block at all?
+  const citedByList = new Set<string>()
+  const citedAtAll = new Set<string>()
+  for (const block of allBlocks(article)) {
+    for (const id of block.sourceBlockIds) {
+      if (!orderedListIds.has(id)) continue
+      citedAtAll.add(id)
+      if (block.type === 'list') citedByList.add(id)
+    }
+  }
+
+  const findings: FidelityFinding[] = []
+  for (const id of orderedListIds) {
+    // Only flag a list the article actually used — an unused source list is a
+    // coverage concern, not a flattening one.
+    if (citedAtAll.has(id) && !citedByList.has(id)) {
+      findings.push({
+        severity: 'high',
+        description: `Procedure shape: source ordered list ${id} was flattened into prose — it must stay an ordered list block so the steps keep their order.`,
+        sourceBlockIds: [id],
+      })
+    }
+  }
   return findings
 }

@@ -1028,15 +1028,15 @@ export type ArticleSchemaVersion = 'v2'
 export type HeadingSourceV2 = 'original' | 'cleanedOriginal' | 'inferred'
 
 export type SectionRole =
-  | 'intro'
-  | 'background'
-  | 'body'
-  | 'method'
+  | 'definition'
+  | 'claim'
   | 'evidence'
   | 'example'
+  | 'step'
   | 'caveat'
-  | 'conclusion'
-  | 'reference'
+  | 'background'
+  | 'referenceEntry'
+  | 'chronology'
 
 export type ArticleBlockType =
   | 'paragraph'

@@ -180,6 +180,230 @@ describe('ReshapingPlanService guards', () => {
   })
 })
 
+describe('ReshapingPlanService genre shape + roles (DET-273)', () => {
+  // A source with a MAIN_ARGUMENT, a DEFINITION and an ordered LIST so the role
+  // grounding guard has real classifications/types to check against.
+  const genreBlocks: ClassifiedBlockInput[] = [
+    {
+      id: 'b1',
+      type: 'PARAGRAPH',
+      classification: 'MAIN_ARGUMENT',
+      text: 'the claim',
+      removable: false,
+    },
+    {
+      id: 'b2',
+      type: 'PARAGRAPH',
+      classification: 'DEFINITION',
+      text: 'the definition',
+      removable: false,
+    },
+    {
+      id: 'b3',
+      type: 'LIST',
+      classification: 'METHOD',
+      text: '1. first\n2. second',
+      removable: false,
+    },
+    {
+      id: 'b4',
+      type: 'LIST',
+      classification: 'METHOD',
+      text: '3. third\n4. fourth',
+      removable: false,
+    },
+  ]
+
+  it("defaults shape to 'hybrid' when the model omits it", async () => {
+    const { service } = makeService({
+      titleProposal: { text: 'T', source: 'inferred' },
+      sections: [
+        {
+          heading: 'H',
+          headingSource: 'inferred',
+          headingInferenceReason: 'no heading',
+          sourceBlockIds: ['b1'],
+          allowedTransformations: [],
+        },
+      ],
+      removedBlocks: [],
+      warnings: [],
+    })
+    const plan = await service.build(structureModel, genreBlocks)
+    expect(plan.shape).toBe('hybrid')
+  })
+
+  it('keeps the model shape when valid', async () => {
+    const { service } = makeService({
+      titleProposal: { text: 'T', source: 'inferred' },
+      shape: 'argument',
+      sections: [
+        {
+          heading: 'Claim',
+          headingSource: 'inferred',
+          headingInferenceReason: 'no heading',
+          sectionRole: 'claim',
+          sourceBlockIds: ['b1'],
+          allowedTransformations: [],
+        },
+      ],
+      removedBlocks: [],
+      warnings: [],
+    })
+    const plan = await service.build(structureModel, genreBlocks)
+    expect(plan.shape).toBe('argument')
+    // 'claim' cites a MAIN_ARGUMENT block → the role is kept.
+    expect(plan.sections[0].sectionRole).toBe('claim')
+  })
+
+  it('strips a step role whose section cites no LIST/METHOD block + warns', async () => {
+    const { service } = makeService({
+      titleProposal: { text: 'T', source: 'inferred' },
+      shape: 'procedure',
+      sections: [
+        {
+          // 'step' but cites only a DEFINITION block — not grounded → stripped.
+          heading: 'Not really steps',
+          headingSource: 'inferred',
+          headingInferenceReason: 'no heading',
+          sectionRole: 'step',
+          sourceBlockIds: ['b2'],
+          allowedTransformations: [],
+        },
+      ],
+      removedBlocks: [],
+      warnings: [],
+    })
+    const plan = await service.build(structureModel, genreBlocks)
+    expect(plan.sections[0].sectionRole).toBeUndefined()
+    expect(
+      plan.warnings.some((w) => /Stripped sectionRole "step"/.test(w)),
+    ).toBe(true)
+  })
+
+  it('keeps a step role that cites a LIST block', async () => {
+    const { service } = makeService({
+      titleProposal: { text: 'T', source: 'inferred' },
+      shape: 'procedure',
+      sections: [
+        {
+          heading: 'Steps',
+          headingSource: 'inferred',
+          headingInferenceReason: 'no heading',
+          sectionRole: 'step',
+          sourceBlockIds: ['b3'],
+          allowedTransformations: [],
+        },
+      ],
+      removedBlocks: [],
+      warnings: [],
+    })
+    const plan = await service.build(structureModel, genreBlocks)
+    expect(plan.sections[0].sectionRole).toBe('step')
+  })
+
+  it('warns when procedure step sections cite source LIST blocks out of source order', async () => {
+    const { service } = makeService({
+      titleProposal: { text: 'T', source: 'inferred' },
+      shape: 'procedure',
+      // b4 (later in source) cited BEFORE b3 (earlier) → out of source order.
+      sections: [
+        {
+          heading: 'Steps part two',
+          headingSource: 'inferred',
+          headingInferenceReason: 'no heading',
+          sectionRole: 'step',
+          sourceBlockIds: ['b4'],
+          allowedTransformations: [],
+        },
+        {
+          heading: 'Steps part one',
+          headingSource: 'inferred',
+          headingInferenceReason: 'no heading',
+          sectionRole: 'step',
+          sourceBlockIds: ['b3'],
+          allowedTransformations: [],
+        },
+      ],
+      removedBlocks: [],
+      warnings: [],
+    })
+    const plan = await service.build(structureModel, genreBlocks)
+    expect(plan.warnings.some((w) => /out of source order/.test(w))).toBe(true)
+  })
+
+  it('does NOT warn when procedure step sections keep source LIST order', async () => {
+    const { service } = makeService({
+      titleProposal: { text: 'T', source: 'inferred' },
+      shape: 'procedure',
+      sections: [
+        {
+          heading: 'Steps part one',
+          headingSource: 'inferred',
+          headingInferenceReason: 'no heading',
+          sectionRole: 'step',
+          sourceBlockIds: ['b3'],
+          allowedTransformations: [],
+        },
+        {
+          heading: 'Steps part two',
+          headingSource: 'inferred',
+          headingInferenceReason: 'no heading',
+          sectionRole: 'step',
+          sourceBlockIds: ['b4'],
+          allowedTransformations: [],
+        },
+      ],
+      removedBlocks: [],
+      warnings: [],
+    })
+    const plan = await service.build(structureModel, genreBlocks)
+    expect(plan.warnings.some((w) => /out of source order/.test(w))).toBe(false)
+  })
+})
+
+describe('ReshapingPlanSchema genre shape (DET-273)', () => {
+  const baseSection = {
+    heading: 'H',
+    headingSource: 'original' as const,
+    sourceBlockIds: ['b1'],
+    allowedTransformations: [],
+  }
+
+  it('rejects an unknown shape value', () => {
+    const result = ReshapingPlanSchema.safeParse({
+      titleProposal: { text: 'T', source: 'original' },
+      shape: 'listicle',
+      sections: [baseSection],
+      removedBlocks: [],
+      warnings: [],
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it("defaults shape to 'hybrid' when omitted", () => {
+    const result = ReshapingPlanSchema.safeParse({
+      titleProposal: { text: 'T', source: 'original' },
+      sections: [baseSection],
+      removedBlocks: [],
+      warnings: [],
+    })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.shape).toBe('hybrid')
+  })
+
+  it('rejects an illegal sectionRole', () => {
+    const result = ReshapingPlanSchema.safeParse({
+      titleProposal: { text: 'T', source: 'original' },
+      shape: 'argument',
+      sections: [{ ...baseSection, sectionRole: 'thesis' }],
+      removedBlocks: [],
+      warnings: [],
+    })
+    expect(result.success).toBe(false)
+  })
+})
+
 describe('ReshapingPlanSchema heading vocabulary (DET-276)', () => {
   const baseSection = {
     heading: 'H',

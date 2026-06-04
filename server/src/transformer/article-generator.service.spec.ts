@@ -23,10 +23,14 @@ function makeService(response: unknown) {
 
 const plan: ReshapingPlan = {
   titleProposal: { text: 'T', source: 'original' },
+  // Genre shape + a source-grounded role on the section (DET-273). The generator
+  // copies shape from the plan and syncs the article section's role from here.
+  shape: 'reference',
   sections: [
     {
-      heading: 'S',
+      heading: 'Storage tiers',
       headingSource: 'original',
+      sectionRole: 'referenceEntry',
       sourceBlockIds: ['b1'],
       allowedTransformations: ['grammar_cleanup'],
     },
@@ -93,6 +97,9 @@ function validLlmArticle() {
         heading: 'Storage tiers',
         headingSource: 'original',
         headingSourceBlockIds: ['b1'],
+        // The model proposes its OWN role; the service overwrites it from the
+        // plan ('referenceEntry'), proving the plan is the role authority.
+        sectionRole: 'claim',
         sourceBlockIds: ['b1', 'b2', 'b3', 'b4'],
         blocks: [
           {
@@ -128,10 +135,13 @@ function validLlmArticle() {
     sourceExamples: [],
     caveats: [],
     // Forward-reserved later-wave fields the model must NOT own; even if present,
-    // they are dropped because the LLM schema cannot carry them.
+    // they are dropped because the LLM schema cannot carry them. The injected
+    // `shape` here is DIFFERENT from the plan's ('procedure' vs the plan's
+    // 'reference') so the test proves the article's shape comes from the PLAN, not
+    // the model.
     schemaVersion: 'v2',
     readingAids: { readingTimeMinutes: 9 },
-    shape: 'reference',
+    shape: 'procedure',
     reorderings: [{ sourceBlockId: 'b2', fromIndex: 0, toIndex: 1 }],
   }
 }
@@ -142,11 +152,19 @@ describe('ArticleGeneratorService', () => {
     const article = await service.generate(plan, blocks)
 
     expect(article.schemaVersion).toBe('v2')
-    // Later-wave fields are NOT carried into the generated artifact.
+    // readingAids/calloutPlacements/reorderings are owned by other waves and are
+    // NOT carried into the generated artifact.
     expect(article.readingAids).toBeUndefined()
-    expect(article.shape).toBeUndefined()
     expect(article.reorderings).toBeUndefined()
     expect(article.calloutPlacements).toBeUndefined()
+
+    // GENRE shape (DET-273) is COPIED FROM THE PLAN in code — NOT from the model.
+    // The model injected shape 'procedure'; the plan's 'reference' wins.
+    expect(article.shape).toBe('reference')
+
+    // The section role is SYNCED FROM THE PLAN ('referenceEntry'), overwriting
+    // the role the model proposed on the section ('claim').
+    expect(article.sections[0].sectionRole).toBe('referenceEntry')
 
     // originalStructure is re-derived deterministically from KEPT blocks in order
     // (removable bX excluded), never trusted from the model.
@@ -199,5 +217,20 @@ describe('ArticleGeneratorService', () => {
     await expect(service.generate(plan, blocks)).rejects.toThrow(
       /unknown block ids: nope/i,
     )
+  })
+
+  it('drops a model-proposed role when the plan assigns none (DET-273)', async () => {
+    // Plan with NO sectionRole on its section → the article must NOT carry the
+    // role the model tried to set.
+    const planNoRole: ReshapingPlan = {
+      ...plan,
+      shape: 'explainer',
+      sections: [{ ...plan.sections[0], sectionRole: undefined }],
+    }
+    const service = makeService(validLlmArticle())
+    const article = await service.generate(planNoRole, blocks)
+
+    expect(article.shape).toBe('explainer')
+    expect(article.sections[0].sectionRole).toBeUndefined()
   })
 })

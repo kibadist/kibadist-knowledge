@@ -81,6 +81,7 @@ describe('StructureModelService traceability guard', () => {
 describe('ArticleGeneratorService traceability guard', () => {
   const plan: ReshapingPlan = {
     titleProposal: { text: 'T', source: 'original' },
+    shape: 'hybrid',
     sections: [
       {
         heading: 'H',

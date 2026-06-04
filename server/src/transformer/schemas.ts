@@ -118,6 +118,39 @@ const allowedTransformation = z.enum([
  */
 const planHeadingSource = z.enum(['original', 'cleanedOriginal', 'inferred'])
 
+/**
+ * Genre/shape of the article (DET-273). The reshaping plan picks the shape from
+ * the source-derived block classifications; it must match `ArticleShape` in
+ * transformer.types.ts. Declared here so the plan schema can require it.
+ */
+const planShape = z.enum([
+  'explainer',
+  'argument',
+  'procedure',
+  'reference',
+  'report',
+  'narrative',
+  'hybrid',
+])
+
+/**
+ * Per-section semantic role (DET-273), mirroring `SectionRole` in
+ * transformer.types.ts. A role is GROUNDED in the source-derived classifications
+ * of the section's cited blocks; the service strips any role the cited blocks do
+ * not justify (deterministic, post-LLM). Declared here so the plan can carry it.
+ */
+const planSectionRole = z.enum([
+  'definition',
+  'claim',
+  'evidence',
+  'example',
+  'step',
+  'caveat',
+  'background',
+  'referenceEntry',
+  'chronology',
+])
+
 const planSection = z
   .object({
     heading: z.string().min(1),
@@ -129,6 +162,9 @@ const planSection = z
     /** REQUIRED when headingSource === 'inferred': why a heading had to be
      *  synthesized rather than taken from the source. Enforced by refine below. */
     headingInferenceReason: z.string().min(1).optional(),
+    /** Optional source-grounded semantic role (DET-273); stripped by the service
+     *  when the cited blocks' classifications do not justify it. */
+    sectionRole: planSectionRole.optional(),
     sourceBlockIds,
     allowedTransformations: z.array(allowedTransformation),
     /** One level of nesting (H2→H3), present when the source carried depth. */
@@ -147,6 +183,7 @@ const planSubsection = z
     headingSource: planHeadingSource,
     headingSourceBlockIds: z.array(z.string().min(1)).optional(),
     headingInferenceReason: z.string().min(1).optional(),
+    sectionRole: planSectionRole.optional(),
     sourceBlockIds,
     allowedTransformations: z.array(allowedTransformation),
   })
@@ -171,6 +208,15 @@ export const ReshapingPlanSchema = z.object({
     text: z.string().min(1),
     source: planHeadingSource,
   }),
+  /**
+   * Genre-adaptive shape of the article (DET-273), derived from the source's
+   * block classifications. REQUIRED for new plans, but `.default('hybrid')` keeps
+   * the safe option for any plan that omits it (and old stored `reshapingPlan`
+   * JSON is never re-validated against this schema — only fresh LLM output is).
+   */
+  shape: planShape.default('hybrid'),
+  /** One-sentence, source-grounded justification of the shape choice (optional). */
+  shapeReason: z.string().min(1).optional(),
   sections: z.array(planSection).min(1),
   removedBlocks: z.array(removedBlock),
   warnings: z.array(z.string().min(1)),
@@ -238,15 +284,15 @@ export const ArticleSchema: z.ZodType<SourcePreservingArticle> = z.object({
 const headingSourceV2 = z.enum(['original', 'cleanedOriginal', 'inferred'])
 
 const sectionRole = z.enum([
-  'intro',
-  'background',
-  'body',
-  'method',
+  'definition',
+  'claim',
   'evidence',
   'example',
+  'step',
   'caveat',
-  'conclusion',
-  'reference',
+  'background',
+  'referenceEntry',
+  'chronology',
 ])
 
 /** Fields shared by every v2 block. */
@@ -427,6 +473,9 @@ const llmArticleSectionV2: z.ZodType<LlmArticleSectionV2> = z.lazy(() =>
     heading: z.string().min(1),
     headingSource: headingSourceV2,
     headingSourceBlockIds: z.array(z.string().min(1)).optional(),
+    // The generator may carry a section role copied from the plan (DET-273); the
+    // service re-syncs roles from the plan in code, so this is never trusted.
+    sectionRole: sectionRole.optional(),
     sourceBlockIds,
     blocks: z.array(llmArticleBlock),
     subsections: z.array(llmArticleSectionV2).optional(),
@@ -442,6 +491,7 @@ export interface LlmArticleSectionV2 {
   heading: string
   headingSource: z.infer<typeof headingSourceV2>
   headingSourceBlockIds?: string[]
+  sectionRole?: z.infer<typeof sectionRole>
   sourceBlockIds: string[]
   blocks: LlmArticleBlock[]
   subsections?: LlmArticleSectionV2[]

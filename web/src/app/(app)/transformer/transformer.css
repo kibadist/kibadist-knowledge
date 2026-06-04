@@ -263,6 +263,10 @@
 .kbapp .tf-byline-dot {
   color: var(--rule-soft);
 }
+/* Genre shape label in the byline (DET-273) — a quiet reading aid. */
+.kbapp .tf-article-shape {
+  color: var(--ink-faint);
+}
 .kbapp .tf-hero-rule {
   height: 1px;
   background: var(--rule);
@@ -350,6 +354,25 @@
   color: var(--ink);
   margin: 0 0 20px;
   padding-top: 4px;
+}
+
+/* A subtle small-caps role label beside a section heading (DET-273), rendered
+   only when the section carries a source-grounded sectionRole. It sits in a row
+   wrapper beside the heading so the heading keeps its own accessible name. */
+.kbapp .tf-heading-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-section-role {
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+  white-space: nowrap;
 }
 
 /* One level of nested heading (H2→H3), preserving the source's hierarchy
@@ -1018,6 +1041,41 @@
   flex-shrink: 0;
 }
 .kbapp .tf-outline-preview {
+  font-family: var(--font-body), serif;
+  font-size: 14.5px;
+  color: var(--ink-muted);
+  line-height: 1.45;
+}
+
+/* ---------------- article shape provenance (DET-273) ---------------- */
+.kbapp .tf-shape-summary {
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  color: var(--ink-muted);
+  margin: 0 0 14px;
+}
+.kbapp .tf-shape-roles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.kbapp .tf-shape-roles li {
+  display: flex;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px dotted var(--rule-soft);
+  align-items: baseline;
+}
+.kbapp .tf-shape-role-kind {
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  min-width: 120px;
+  flex-shrink: 0;
+}
+.kbapp .tf-shape-role-heading {
   font-family: var(--font-body), serif;
   font-size: 14.5px;
   color: var(--ink-muted);

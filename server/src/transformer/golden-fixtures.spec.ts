@@ -4,7 +4,10 @@ import {
   v1Fixture,
   v2Fixtures,
 } from './__fixtures__'
+import { argumentEssay } from './__fixtures__/argument-essay'
 import { caveatHeavy } from './__fixtures__/caveat-heavy'
+import { glossaryReference } from './__fixtures__/glossary-reference'
+import { howtoProcedure } from './__fixtures__/howto-procedure'
 import { UNSUPPORTED_HIGHLIGHT_UNKNOWN_ID } from './__fixtures__/unsupported-highlight'
 import {
   collectArticleSourceBlockIds,
@@ -14,6 +17,7 @@ import {
 import { placeCallouts } from './callout-placement.util'
 import { buildCoverageReport } from './coverage.util'
 import { mergeDeterministicChecks } from './fidelity-checker.service'
+import { checkProcedureListPreservation } from './fidelity-structural.util'
 import { buildReadingAids } from './reading-aids.util'
 import { ArticleJsonV2Schema } from './schemas'
 import type { FidelityReport } from './transformer.types'
@@ -272,6 +276,57 @@ describe('golden fixture: inline callout placement (DET-272)', () => {
   it('is deterministic and idempotent over the fixture', () => {
     const { article } = caveatHeavy
     expect(placeCallouts(article)).toEqual(placeCallouts(article))
+  })
+})
+
+describe('golden fixture: genre shape + roles (DET-273)', () => {
+  it('every fixture that declares a shape validates and carries a legal shape', () => {
+    const shaped = v2Fixtures.filter((f) => f.article.shape != null)
+    expect(shaped.length).toBeGreaterThan(0)
+    for (const { article } of shaped) {
+      expect(ArticleJsonV2Schema.safeParse(article).success).toBe(true)
+    }
+  })
+
+  it('per-genre fixtures carry the expected shape', () => {
+    expect(howtoProcedure.article.shape).toBe('procedure')
+    expect(argumentEssay.article.shape).toBe('argument')
+    expect(glossaryReference.article.shape).toBe('reference')
+  })
+
+  it('section roles, where present, are still fully traceable (no substance added)', () => {
+    for (const { article, blocks } of v2Fixtures) {
+      const known = knownBlockIds(blocks)
+      const roled = article.sections.filter((s) => s.sectionRole != null)
+      for (const s of roled) {
+        for (const id of s.sourceBlockIds) expect(known.has(id)).toBe(true)
+      }
+      // The enriched article still approves under the deterministic merge.
+      const merged = mergeDeterministicChecks(cleanReport(), article, known)
+      expect(merged.approved).toBe(true)
+    }
+  })
+
+  it('procedure fixture keeps its ordered source list as a list block (no flattening)', () => {
+    const { article, blocks } = howtoProcedure
+    const sourceBlocks = blocks.map((b) => ({
+      id: b.id,
+      type: b.type,
+      text: b.text,
+    }))
+    // Under the procedure shape the ordered source list must stay a list block —
+    // the howto fixture does keep it, so the check finds nothing.
+    expect(
+      checkProcedureListPreservation(article, 'procedure', sourceBlocks),
+    ).toEqual([])
+    // And it still passes the full deterministic merge.
+    const merged = mergeDeterministicChecks(
+      cleanReport(),
+      article,
+      knownBlockIds(blocks),
+      { blocks },
+    )
+    expect(merged.approved).toBe(true)
   })
 })
 

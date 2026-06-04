@@ -16,9 +16,11 @@ import {
 import {
   type ArticleJsonV2,
   type ArticleSectionV2,
+  type ArticleShape,
   api,
   type FidelityFinding,
   type FidelityReport,
+  type SectionRole,
   type TransformerBlockView,
 } from '@/lib/api'
 import {
@@ -201,6 +203,10 @@ export default function ArticlePage() {
               </summary>
 
               <div className='tf-behind-body'>
+                {article.articleJson?.shape && (
+                  <ArticleShapePanel article={article.articleJson} />
+                )}
+
                 {article.coverageReport && (
                   <CoveragePanel
                     coverage={article.coverageReport}
@@ -260,6 +266,55 @@ function countSourceBlocks(article: ArticleJsonV2): number {
   for (const e of article.sourceExamples) add(e.sourceBlockIds)
   for (const c of article.caveats) add(c.sourceBlockIds)
   return ids.size
+}
+
+// Editorial label for each genre shape + section role (DET-273), mirrored from
+// the article-view maps so the drawer reads consistently with the body labels.
+const SHAPE_LABEL: Record<ArticleShape, string> = {
+  explainer: 'Explainer — concept first',
+  argument: 'Argument — claim, evidence, caveats',
+  procedure: 'Procedure — ordered steps preserved',
+  reference: 'Reference — term-led entries',
+  report: 'Report — source order',
+  narrative: 'Narrative — chronological',
+  hybrid: 'Hybrid — mixed structure',
+}
+const SECTION_ROLE_LABEL: Record<SectionRole, string> = {
+  definition: 'Definition',
+  claim: 'Claim',
+  evidence: 'Evidence',
+  example: 'Example',
+  step: 'Steps',
+  caveat: 'Caveat',
+  background: 'Background',
+  referenceEntry: 'Reference entry',
+  chronology: 'Chronology',
+}
+
+// "Article shape" provenance (DET-273): the detected genre shape + the
+// source-grounded role of each section. Surfaced in the drawer so the reader can
+// see how the source was reorganized (form only — never new substance).
+function ArticleShapePanel({ article }: { article: ArticleJsonV2 }) {
+  if (!article.shape) return null
+  const roled = article.sections.filter((s) => s.sectionRole != null)
+  return (
+    <section className='panel tf-shape-panel'>
+      <h3 className='panel-h'>Article shape</h3>
+      <p className='tf-shape-summary'>{SHAPE_LABEL[article.shape]}</p>
+      {roled.length > 0 && (
+        <ul className='tf-shape-roles'>
+          {roled.map((s) => (
+            <li key={s.id}>
+              <span className='tf-shape-role-kind'>
+                {s.sectionRole ? SECTION_ROLE_LABEL[s.sectionRole] : ''}
+              </span>
+              <span className='tf-shape-role-heading'>{s.heading}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
 }
 
 // The original-structure outline, relocated out of the article body into the

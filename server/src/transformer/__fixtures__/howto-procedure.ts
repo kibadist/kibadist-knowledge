@@ -4,7 +4,9 @@ import type { V2Fixture } from './index'
 
 /**
  * Fixture 2 — howto-procedure. A task with ordered steps. Exercises: an ORDERED
- * list block (steps must stay ordered), an intro paragraph, a closing caveat.
+ * list block (steps must stay ordered), an intro paragraph, a closing caveat, and
+ * the genre shape 'procedure' with a 'step'-role section (DET-273). The procedure
+ * fidelity check requires the source ORDERED list to stay a list block in order.
  */
 const blocks: ClassifiedBlockInput[] = [
   {
@@ -40,6 +42,7 @@ const blocks: ClassifiedBlockInput[] = [
 const article: ArticleJsonV2 = {
   schemaVersion: 'v2',
   mode: 'source_preserving_article',
+  shape: 'procedure',
   title: { text: 'How to brew pour-over coffee', source: 'original' },
   abstract: [
     {
@@ -56,6 +59,7 @@ const article: ArticleJsonV2 = {
       heading: 'How to brew pour-over coffee',
       headingSource: 'original',
       headingSourceBlockIds: ['b1'],
+      sectionRole: 'step',
       sourceBlockIds: ['b1', 'b2', 'b3', 'b4'],
       blocks: [
         {

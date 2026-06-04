@@ -8,6 +8,8 @@ import type { V2Fixture } from './index'
  * inline CALLOUT block, an ordered list, plus a valid readingAids block (toc +
  * reading time + a source-grounded highlight) so the highlight traceability
  * path is covered positively (the negative case lives in unsupported-highlight).
+ * Genre shape is 'hybrid' (no forced global skeleton) with a 'step'-role section
+ * (it carries the ordered procedure list) (DET-273).
  */
 const blocks: ClassifiedBlockInput[] = [
   {
@@ -50,6 +52,7 @@ const blocks: ClassifiedBlockInput[] = [
 const article: ArticleJsonV2 = {
   schemaVersion: 'v2',
   mode: 'source_preserving_article',
+  shape: 'hybrid',
   title: { text: 'Setting up continuous deployment', source: 'original' },
   abstract: [
     {
@@ -66,6 +69,7 @@ const article: ArticleJsonV2 = {
       heading: 'Setting up continuous deployment',
       headingSource: 'original',
       headingSourceBlockIds: ['b1'],
+      sectionRole: 'step',
       sourceBlockIds: ['b1', 'b2', 'b3', 'b4', 'b5'],
       blocks: [
         {

@@ -17,10 +17,12 @@ import {
   type ArticleQuoteBlock,
   type ArticleReadingAids,
   type ArticleSectionV2,
+  type ArticleShape,
   type ArticleTableBlock,
   api,
   type IllustrationPlan,
   type IllustrationSuggestion,
+  type SectionRole,
   type TocEntry,
 } from '@/lib/api'
 import { fidelityRiskChip } from '@/lib/transformer-format'
@@ -51,6 +53,34 @@ import type { InspectorSelection } from './source-inspector-panel'
  * source text, a "✦ AI illustration" chip, and an "AI · grounded in …" caption.
  * Only source text is citable in the source inspector; art never is.
  */
+/**
+ * Editorial label + one-line gloss for each genre shape (DET-273). The shape is
+ * DETECTED from the source's block classifications and only reorganizes form —
+ * it never adds substance — so the label reads as a reading aid, not a claim.
+ */
+const SHAPE_LABEL: Record<ArticleShape, string> = {
+  explainer: 'Explainer — concept first',
+  argument: 'Argument — claim, evidence, caveats',
+  procedure: 'Procedure — ordered steps preserved',
+  reference: 'Reference — term-led entries',
+  report: 'Report — source order',
+  narrative: 'Narrative — chronological',
+  hybrid: 'Hybrid — mixed structure',
+}
+
+/** Small-caps label for each source-grounded section role (DET-273). */
+const SECTION_ROLE_LABEL: Record<SectionRole, string> = {
+  definition: 'Definition',
+  claim: 'Claim',
+  evidence: 'Evidence',
+  example: 'Example',
+  step: 'Steps',
+  caveat: 'Caveat',
+  background: 'Background',
+  referenceEntry: 'Reference entry',
+  chronology: 'Chronology',
+}
+
 export function ArticleView({
   article,
   articleId,
@@ -151,6 +181,16 @@ export function ArticleView({
                 ·
               </span>
               <span>{readingAids.readingTime.minutes} min read</span>
+            </>
+          )}
+          {article.shape && (
+            <>
+              <span className='tf-byline-dot' aria-hidden='true'>
+                ·
+              </span>
+              <span className='tf-article-shape'>
+                {SHAPE_LABEL[article.shape]}
+              </span>
             </>
           )}
         </div>
@@ -500,25 +540,44 @@ function SectionHeading({
   const className = level === 2 ? 'tf-article-heading' : 'tf-article-subheading'
   const sourceBlockIds = section.headingSourceBlockIds ?? []
   const Tag = level === 2 ? 'h2' : 'h3'
+  // A subtle small-caps role label (DET-273), rendered only when the section
+  // carries a source-grounded sectionRole. It is a reading aid beside the
+  // heading — never a separate clickable surface.
+  const roleLabel = section.sectionRole
+    ? SECTION_ROLE_LABEL[section.sectionRole]
+    : null
+  // The role label sits in a wrapper BESIDE the heading element (not inside it),
+  // so the heading keeps its own accessible name and the label stays a quiet aid.
+  const role = roleLabel ? (
+    <span className='tf-section-role'>{roleLabel}</span>
+  ) : null
   if (sourceBlockIds.length === 0) {
-    return <Tag className={className}>{section.heading}</Tag>
+    return (
+      <div className='tf-heading-row'>
+        <Tag className={className}>{section.heading}</Tag>
+        {role}
+      </div>
+    )
   }
   return (
-    <Tag className={className}>
-      <button
-        type='button'
-        className='tf-heading-btn'
-        onClick={() =>
-          onInspect({
-            kind: 'Section heading',
-            transformedText: section.heading,
-            sourceBlockIds,
-          })
-        }
-      >
-        {section.heading}
-      </button>
-    </Tag>
+    <div className='tf-heading-row'>
+      <Tag className={className}>
+        <button
+          type='button'
+          className='tf-heading-btn'
+          onClick={() =>
+            onInspect({
+              kind: 'Section heading',
+              transformedText: section.heading,
+              sourceBlockIds,
+            })
+          }
+        >
+          {section.heading}
+        </button>
+      </Tag>
+      {role}
+    </div>
   )
 }
 

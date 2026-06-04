@@ -1,10 +1,12 @@
 import {
   checkDuplicateRendering,
   checkFullTraceability,
+  checkProcedureListPreservation,
   checkQuoteAttribution,
   checkUnsupportedHighlights,
   normalizeText,
   type SourceBlockText,
+  type SourceBlockTyped,
 } from './fidelity-structural.util'
 import type { ArticleBlock, ArticleJsonV2 } from './transformer.types'
 
@@ -255,5 +257,65 @@ describe('checkDuplicateRendering', () => {
     const out = checkDuplicateRendering(a)
     expect(out.findings).toHaveLength(1)
     expect(out.findings[0].severity).toBe('medium')
+  })
+})
+
+describe('checkProcedureListPreservation (DET-273)', () => {
+  // An ORDERED source LIST block (numeric markers across 2+ lines).
+  const orderedList: SourceBlockTyped = {
+    id: 'b1',
+    type: 'LIST',
+    text: '1. Rinse the filter.\n2. Add the coffee.\n3. Pour the water.',
+  }
+  const listBlock = (ids: string[]): ArticleBlock => ({
+    id: 'l1',
+    type: 'list',
+    ordered: true,
+    items: ['Rinse the filter.', 'Add the coffee.', 'Pour the water.'],
+    sourceBlockIds: ids,
+    transformationType: 'formatting_only',
+    fidelityRisk: 'low',
+  })
+
+  it('returns nothing for a non-procedure shape (not its concern)', () => {
+    // The ordered source list was flattened to prose, but shape is 'explainer'.
+    const a = article([para('p1', 'Rinse, add coffee, then pour.', ['b1'])])
+    expect(
+      checkProcedureListPreservation(a, 'explainer', [orderedList]),
+    ).toEqual([])
+  })
+
+  it('flags a procedure whose ordered source list became prose (high, blocking)', () => {
+    const a = article([para('p1', 'Rinse, add coffee, then pour.', ['b1'])])
+    const out = checkProcedureListPreservation(a, 'procedure', [orderedList])
+    expect(out).toHaveLength(1)
+    expect(out[0].severity).toBe('high')
+    expect(out[0].sourceBlockIds).toEqual(['b1'])
+  })
+
+  it('does NOT flag a procedure that keeps the ordered source list as a list block', () => {
+    const a = article([listBlock(['b1'])])
+    expect(
+      checkProcedureListPreservation(a, 'procedure', [orderedList]),
+    ).toEqual([])
+  })
+
+  it('does NOT flag an UNORDERED source list flattened to prose (only ordered lists)', () => {
+    const unordered: SourceBlockTyped = {
+      id: 'b1',
+      type: 'LIST',
+      text: '- apples\n- pears\n- plums',
+    }
+    const a = article([para('p1', 'apples, pears and plums', ['b1'])])
+    expect(checkProcedureListPreservation(a, 'procedure', [unordered])).toEqual(
+      [],
+    )
+  })
+
+  it('does NOT flag an ordered source list the article never cites (coverage, not flattening)', () => {
+    const a = article([para('p1', 'Unrelated prose.', ['b2'])])
+    expect(
+      checkProcedureListPreservation(a, 'procedure', [orderedList]),
+    ).toEqual([])
   })
 })

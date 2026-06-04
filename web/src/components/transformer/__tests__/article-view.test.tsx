@@ -339,6 +339,36 @@ describe('ArticleView (v2 renderer)', () => {
     )
   })
 
+  // --- DET-273: genre shape + section roles ---------------------------------
+
+  it('shows the genre shape label in the hero byline (DET-273)', () => {
+    renderArticleView(vi.fn())
+    expect(
+      screen.getByText('Procedure — ordered steps preserved'),
+    ).toBeInTheDocument()
+  })
+
+  it('renders a small-caps section role label beside a heading when present (DET-273)', () => {
+    const { container } = renderArticleView(vi.fn())
+    const role = container.querySelector('.tf-section-role')
+    expect(role).toBeInTheDocument()
+    expect(role?.textContent).toBe('Steps')
+  })
+
+  it('omits the shape label and section role when absent (old article)', () => {
+    const noShape: ArticleJsonV2 = {
+      ...fixtureArticle,
+      shape: undefined,
+      sections: fixtureArticle.sections.map((s) => ({
+        ...s,
+        sectionRole: undefined,
+      })),
+    }
+    const { container } = renderArticleView(vi.fn(), noShape)
+    expect(screen.queryByText(/Procedure — ordered steps preserved/)).toBeNull()
+    expect(container.querySelector('.tf-section-role')).toBeNull()
+  })
+
   it('omits TOC, reading time and Source Highlights when readingAids is absent (old article)', () => {
     const { container } = renderArticleView(vi.fn(), fixtureArticleNoAids)
     // No crash, and none of the DET-274 affordances render.

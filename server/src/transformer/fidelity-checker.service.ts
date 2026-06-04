@@ -7,6 +7,7 @@ import { validateClusters } from './fidelity-clusters.util'
 import {
   checkDuplicateRendering,
   checkEndMatterTraceability,
+  checkProcedureListPreservation,
   checkQuoteAttribution,
   checkUnsupportedHighlights,
 } from './fidelity-structural.util'
@@ -175,6 +176,14 @@ export function mergeDeterministicChecks(
   // Duplicate full rendering (medium; high for a duplicated caveat).
   const dup = checkDuplicateRendering(article)
   structuralFindings.push(...dup.findings)
+
+  // Procedure ordered-steps preservation (DET-273, high, blocking) — only fires
+  // when the article's shape is 'procedure' and a source ordered list was
+  // flattened into prose. Needs block type + text.
+  if (inputs.blocks)
+    structuralFindings.push(
+      ...checkProcedureListPreservation(article, article.shape, inputs.blocks),
+    )
 
   // Cluster + attribution checks need block text + the structure model.
   if (inputs.blocks)

@@ -48,6 +48,7 @@ const blocks: ClassifiedBlockInput[] = [
 const article: ArticleJsonV2 = {
   schemaVersion: 'v2',
   mode: 'source_preserving_article',
+  shape: 'explainer',
   title: { text: 'Photosynthesis', source: 'original' },
   abstract: [
     {
@@ -64,6 +65,7 @@ const article: ArticleJsonV2 = {
       heading: 'Photosynthesis',
       headingSource: 'original',
       headingSourceBlockIds: ['b1'],
+      sectionRole: 'definition',
       sourceBlockIds: ['b1', 'b2', 'b3', 'b4'],
       blocks: [
         {

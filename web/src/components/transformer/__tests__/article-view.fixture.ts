@@ -13,6 +13,9 @@ import type { ArticleJsonV2 } from '@/lib/api'
 export const fixtureArticle: ArticleJsonV2 = {
   schemaVersion: 'v2',
   mode: 'source_preserving_article',
+  // Genre shape + a source-grounded section role (DET-273) so the renderer's
+  // shape byline label and small-caps role label paths are covered.
+  shape: 'procedure',
   title: { text: 'Every block type', source: 'original' },
   subtitle: {
     text: 'A renderer smoke fixture',
@@ -34,6 +37,7 @@ export const fixtureArticle: ArticleJsonV2 = {
       heading: 'All blocks',
       headingSource: 'original',
       headingSourceBlockIds: ['b1'],
+      sectionRole: 'step',
       sourceBlockIds: ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8'],
       blocks: [
         {

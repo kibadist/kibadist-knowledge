@@ -4,8 +4,9 @@ import type { V2Fixture } from './index'
 
 /**
  * Fixture 3 — argument-essay. A claim supported by evidence and qualified by a
- * caveat. Exercises: claim/evidence paragraphs, a caveat carried in the
- * top-level caveats array (the unit a later reorder check must keep adjacent).
+ * caveat. Exercises: the genre shape 'argument' with a 'claim'-role section and an
+ * 'evidence'-role section, and a caveat carried in the top-level caveats array
+ * (the unit a later reorder check must keep adjacent) (DET-273).
  */
 const blocks: ClassifiedBlockInput[] = [
   {
@@ -41,6 +42,7 @@ const blocks: ClassifiedBlockInput[] = [
 const article: ArticleJsonV2 = {
   schemaVersion: 'v2',
   mode: 'source_preserving_article',
+  shape: 'argument',
   title: { text: 'Remote work raises focus time', source: 'original' },
   abstract: [
     {
@@ -56,6 +58,7 @@ const article: ArticleJsonV2 = {
       id: 's1',
       heading: 'The claim',
       headingSource: 'inferred',
+      sectionRole: 'claim',
       sourceBlockIds: ['b1', 'b2'],
       blocks: [
         {
@@ -72,6 +75,7 @@ const article: ArticleJsonV2 = {
       id: 's2',
       heading: 'The evidence',
       headingSource: 'inferred',
+      sectionRole: 'evidence',
       sourceBlockIds: ['b3'],
       blocks: [
         {

@@ -41,6 +41,7 @@ const blocks: ClassifiedBlockInput[] = [
 const article: ArticleJsonV2 = {
   schemaVersion: 'v2',
   mode: 'source_preserving_article',
+  shape: 'hybrid',
   title: { text: 'Quarterly product update', source: 'inferred' },
   abstract: [
     {

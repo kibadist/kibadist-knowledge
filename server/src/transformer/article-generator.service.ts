@@ -6,7 +6,11 @@ import { completeJson } from './llm-json.util'
 import type { ArticleLlmV2, ReshapingPlan } from './schemas'
 import { ArticleLlmV2Schema } from './schemas'
 import type { ClassifiedBlockInput } from './structure-model.service'
-import type { ArticleJsonV2, ArticleSectionV2 } from './transformer.types'
+import type {
+  ArticleJsonV2,
+  ArticleSectionV2,
+  SectionRole,
+} from './transformer.types'
 import { ARTICLE_SCHEMA_VERSION } from './transformer.types'
 
 /** Max chars of a block shown in the originalStructure preview. */
@@ -22,7 +26,12 @@ const PREVIEW_CHARS = 120
  *  - `originalStructure` is re-derived deterministically from the blocks
  *    (blockId, blockType, ≤120-char preview) — never trusted from the model.
  *  - `schemaVersion: 'v2'` is stamped in code after validation (not prompt-trusted).
- *  - later-wave fields (readingAids/calloutPlacements/shape/reorderings) are never
+ *  - GENRE shape + roles (DET-273): the article's `shape` is COPIED from the plan
+ *    in code (the LLM schema cannot carry it), and each section's `sectionRole` is
+ *    OVERWRITTEN from the matching plan section (by heading, falling back to
+ *    document order) — the LLM's own role is discarded, so a role the plan did not
+ *    assign can never survive. Subsections are synced one level the same way.
+ *  - other later-wave fields (readingAids/calloutPlacements/reorderings) are never
  *    requested and the LLM schema cannot carry them, so the artifact is clean by
  *    construction.
  */
@@ -65,21 +74,60 @@ export class ArticleGeneratorService {
         preview: b.text.slice(0, PREVIEW_CHARS),
       }))
 
-    // Stamp the version in code AFTER validation; later-wave fields are never
-    // present on the LLM artifact, so the result is a clean native v2 article.
+    // Sync each section's role FROM THE PLAN (DET-273) — the LLM's own role is
+    // discarded so only plan-assigned roles survive. Match by heading, falling
+    // back to document order.
+    const sections = syncSectionRoles(llm.sections, plan.sections)
+
+    // Stamp the version in code AFTER validation; copy `shape` from the plan
+    // (never prompt-trusted); other later-wave fields are absent on the LLM
+    // artifact, so the result is a clean native v2 article.
     return {
       schemaVersion: ARTICLE_SCHEMA_VERSION,
       mode: llm.mode,
       title: llm.title,
       ...(llm.subtitle ? { subtitle: llm.subtitle } : {}),
       abstract: llm.abstract,
-      sections: llm.sections,
+      sections,
       keyTerms: llm.keyTerms,
       sourceExamples: llm.sourceExamples,
       caveats: llm.caveats,
       originalStructure,
+      ...(plan.shape ? { shape: plan.shape } : {}),
     }
   }
+}
+
+/**
+ * Overwrite each article section's `sectionRole` with the matching plan section's
+ * role (DET-273). The plan is the single authority for roles: the generator's own
+ * sectionRole is dropped and replaced by the plan's (or removed when the plan
+ * assigned none). Plan sections are matched by heading first, then by document
+ * order; subsections are synced one level the same way.
+ */
+function syncSectionRoles(
+  sections: ArticleLlmV2['sections'],
+  planSections: ReshapingPlan['sections'],
+): ArticleSectionV2[] {
+  const byHeading = new Map(planSections.map((p) => [p.heading, p]))
+  return sections.map((section, i) => {
+    const planSection = byHeading.get(section.heading) ?? planSections[i]
+    const role = planSection?.sectionRole as SectionRole | undefined
+    const next: ArticleSectionV2 = {
+      ...(section as ArticleSectionV2),
+      ...(planSection?.subsections && section.subsections
+        ? {
+            subsections: syncSectionRoles(
+              section.subsections,
+              planSection.subsections,
+            ),
+          }
+        : {}),
+    }
+    if (role) next.sectionRole = role
+    else delete next.sectionRole
+    return next
+  })
 }
 
 /**

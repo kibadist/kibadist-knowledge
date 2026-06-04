@@ -4,8 +4,8 @@ import type { V2Fixture } from './index'
 
 /**
  * Fixture 11 — glossary-reference. A reference list of defined terms. Exercises:
- * an UNORDERED list block, many keyTerms (each traceable), a reference section
- * role is implied but left untyped (sectionRole lands in DET-273).
+ * an UNORDERED list block, many keyTerms (each traceable), and the genre shape
+ * 'reference' with a term-led section carrying the 'referenceEntry' role (DET-273).
  */
 const blocks: ClassifiedBlockInput[] = [
   {
@@ -34,6 +34,7 @@ const blocks: ClassifiedBlockInput[] = [
 const article: ArticleJsonV2 = {
   schemaVersion: 'v2',
   mode: 'source_preserving_article',
+  shape: 'reference',
   title: { text: 'Glossary of caching terms', source: 'original' },
   abstract: [
     {
@@ -50,7 +51,7 @@ const article: ArticleJsonV2 = {
       heading: 'Glossary of caching terms',
       headingSource: 'original',
       headingSourceBlockIds: ['b1'],
-      sectionRole: 'reference',
+      sectionRole: 'referenceEntry',
       sourceBlockIds: ['b1', 'b2', 'b3'],
       blocks: [
         {

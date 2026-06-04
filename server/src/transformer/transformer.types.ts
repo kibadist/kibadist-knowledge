@@ -160,17 +160,32 @@ export type ArticleSchemaVersion = typeof ARTICLE_SCHEMA_VERSION
  */
 export type HeadingSourceV2 = 'original' | 'cleanedOriginal' | 'inferred'
 
-/** Optional semantic role of a section (typed now, populated from DET-273). */
+/**
+ * Semantic role of a section (DET-273). A section's role is DERIVED from the
+ * source-derived classifications of the blocks it cites — never invented. The
+ * vocabulary mirrors the source content classes the reshaping plan can ground a
+ * section in:
+ *  - 'definition' / 'referenceEntry' — anchored on a DEFINITION-classified block;
+ *  - 'claim' — anchored on a MAIN_ARGUMENT block;
+ *  - 'evidence' — anchored on an EVIDENCE block;
+ *  - 'example' — anchored on an EXAMPLE block;
+ *  - 'step' — anchored on an ordered LIST block (or a METHOD-classified block);
+ *  - 'caveat' — qualifies a claim (a caveat from the source);
+ *  - 'background' — BACKGROUND/context matter;
+ *  - 'chronology' — chronological/narrative ordering.
+ * The reshaping-plan service strips any role a section's cited blocks do not
+ * ground (deterministic guard, post-LLM); the article copies roles from the plan.
+ */
 export type SectionRole =
-  | 'intro'
-  | 'background'
-  | 'body'
-  | 'method'
+  | 'definition'
+  | 'claim'
   | 'evidence'
   | 'example'
+  | 'step'
   | 'caveat'
-  | 'conclusion'
-  | 'reference'
+  | 'background'
+  | 'referenceEntry'
+  | 'chronology'
 
 /** The block-type discriminator for `ArticleBlock`. */
 export type ArticleBlockType =
