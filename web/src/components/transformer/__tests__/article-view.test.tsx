@@ -24,6 +24,8 @@ function renderArticleView(
   extra?: {
     onExtractConcepts?: (sectionId: string) => void
     extractingSectionId?: string | null
+    extractedSectionId?: string | null
+    extractError?: { sectionId: string; message: string } | null
   },
 ) {
   const client = new QueryClient({
@@ -42,6 +44,8 @@ function renderArticleView(
       onInspect={onInspect}
       onExtractConcepts={extra?.onExtractConcepts}
       extractingSectionId={extra?.extractingSectionId ?? null}
+      extractedSectionId={extra?.extractedSectionId ?? null}
+      extractError={extra?.extractError ?? null}
     />,
     { wrapper },
   )
@@ -404,6 +408,31 @@ describe('ArticleView (v2 renderer)', () => {
     })
     const extracting = screen.getByRole('button', { name: 'Extracting…' })
     expect(extracting).toBeDisabled()
+  })
+
+  it('shows an extraction error beside the section it failed on (and only there)', () => {
+    renderArticleView(vi.fn(), fixtureArticle, {
+      onExtractConcepts: vi.fn(),
+      extractError: { sectionId: 's1', message: 'Too many AI requests' },
+    })
+    const error = screen.getByText('Too many AI requests')
+    expect(error).toBeInTheDocument()
+    // It renders within the heading row of s1, not the subsection's.
+    expect(error.closest('.tf-heading-row')).toBe(
+      screen.getAllByRole('button', { name: /Extract concepts/ })[0].closest(
+        '.tf-heading-row',
+      ),
+    )
+  })
+
+  it('confirms a completed extraction beside the section with a link to the learning tools', () => {
+    renderArticleView(vi.fn(), fixtureArticle, {
+      onExtractConcepts: vi.fn(),
+      extractedSectionId: 's1',
+    })
+    // The button flips to a quiet confirmation linking to the appendix panel.
+    const done = screen.getByRole('link', { name: /candidates ready/i })
+    expect(done).toHaveAttribute('href', '#learning-tools')
   })
 
   it('omits TOC, reading time and Source Highlights when readingAids is absent (old article)', () => {

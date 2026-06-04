@@ -61,7 +61,9 @@ export function LearningToolsPanel({
       candidates.length > 0)
 
   return (
-    <section className='panel tf-ai-panel'>
+    // The stable id is the target of the per-section "Candidates ready" link in
+    // the article body (DET-283 feedback): it must open/scroll to this panel.
+    <section id='learning-tools' className='panel tf-ai-panel'>
       <div className='tf-ai-head'>
         <span className='chip chip-ai'>AI-assisted</span>
         <h3 className='panel-h'>Learning tools</h3>

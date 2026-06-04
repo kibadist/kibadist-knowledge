@@ -1488,6 +1488,34 @@
   }
 }
 
+/* Post-extraction feedback (DET-283): unlike the quiet button, the confirmation
+   link and the error are ALWAYS visible — they are the answer to the click, not
+   an affordance waiting to be discovered. */
+.kbapp .tf-section-extracted {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--indigo);
+  border: 1px solid var(--rule-soft);
+  border-radius: 2px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.kbapp .tf-section-extracted:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.kbapp .tf-extract-error {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--danger, #a33);
+  white-space: nowrap;
+}
+
 .kbapp .tf-candidates {
   margin-top: 22px;
   border-top: 1px solid var(--rule-soft);

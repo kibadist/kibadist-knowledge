@@ -15,6 +15,7 @@ import {
   SourceInspectorPanel,
 } from '@/components/transformer/source-inspector-panel'
 import {
+  ApiError,
   type ArticleJsonV2,
   type ArticleSectionV2,
   type ArticleShape,
@@ -49,16 +50,30 @@ export default function ArticlePage() {
   const [selection, setSelection] = useState<InspectorSelection | null>(null)
   const queryClient = useQueryClient()
 
+  // The "Behind the article" drawer is controlled so a successful extraction
+  // can open it — the candidates render inside it, and with the drawer closed
+  // the click would read as a no-op (the original DET-283 feedback bug).
+  const [behindOpen, setBehindOpen] = useState(false)
+
   // Per-section concept-extraction (DET-283). The mutation appends AI-assisted
   // candidates to the article's learning layer; on success we invalidate the
-  // article query so the learning panel re-renders with the new candidates.
+  // article query, open the appendix drawer and scroll the learning panel into
+  // view so the result is visible at the point of interaction.
   const extractConcepts = useMutation({
     mutationFn: (sectionId: string) =>
       api.extractSectionConcepts(articleId, sectionId),
-    onSuccess: () =>
+    onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ['transformer-article', articleId],
-      }),
+      })
+      setBehindOpen(true)
+      // Defer until the drawer has rendered open before scrolling to it.
+      setTimeout(() => {
+        document
+          .getElementById('learning-tools')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 100)
+    },
   })
 
   const articleQuery = useQuery({
@@ -207,13 +222,33 @@ export default function ArticlePage() {
                   ? (extractConcepts.variables ?? null)
                   : null
               }
+              extractedSectionId={
+                extractConcepts.isSuccess
+                  ? (extractConcepts.variables ?? null)
+                  : null
+              }
+              extractError={
+                extractConcepts.isError && extractConcepts.variables
+                  ? {
+                      sectionId: extractConcepts.variables,
+                      message:
+                        extractConcepts.error instanceof ApiError
+                          ? extractConcepts.error.message
+                          : 'Could not extract concepts — try again.',
+                    }
+                  : null
+              }
             />
           )}
 
           {/* "Behind the article": the appendix drawer — coverage, original
               structure, learning tools, and the illustration management grid. */}
           {showBody && (
-            <details className='tf-behind'>
+            <details
+              className='tf-behind'
+              open={behindOpen}
+              onToggle={(e) => setBehindOpen(e.currentTarget.open)}
+            >
               <summary className='tf-behind-summary'>
                 <span className='tf-behind-kicker'>Behind the article</span>
                 <span className='tf-behind-hint'>

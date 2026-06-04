@@ -90,6 +90,8 @@ export function ArticleView({
   onInspect,
   onExtractConcepts,
   extractingSectionId,
+  extractedSectionId,
+  extractError,
 }: {
   article: ArticleJsonV2
   articleId: string
@@ -104,6 +106,10 @@ export function ArticleView({
   onExtractConcepts?: (sectionId: string) => void
   /** The section id currently extracting (disables + labels its button). */
   extractingSectionId?: string | null
+  /** The section id whose extraction just completed (shows the confirmation link). */
+  extractedSectionId?: string | null
+  /** The last extraction failure, surfaced beside the section it failed on. */
+  extractError?: { sectionId: string; message: string } | null
 }) {
   const queryClient = useQueryClient()
 
@@ -252,6 +258,12 @@ export function ArticleView({
                 onInspect={onInspect}
                 onExtractConcepts={onExtractConcepts}
                 extracting={extractingSectionId === section.id}
+                extracted={extractedSectionId === section.id}
+                extractError={
+                  extractError?.sectionId === section.id
+                    ? extractError.message
+                    : null
+                }
               />
               {slot && (
                 <IllustrationSlot
@@ -273,6 +285,12 @@ export function ArticleView({
                     onInspect={onInspect}
                     onExtractConcepts={onExtractConcepts}
                     extracting={extractingSectionId === sub.id}
+                    extracted={extractedSectionId === sub.id}
+                    extractError={
+                      extractError?.sectionId === sub.id
+                        ? extractError.message
+                        : null
+                    }
                   />
                   {sub.blocks.map((b) => (
                     <Block key={b.id} block={b} onInspect={onInspect} />
@@ -544,6 +562,8 @@ function SectionHeading({
   onInspect,
   onExtractConcepts,
   extracting = false,
+  extracted = false,
+  extractError = null,
 }: {
   section: ArticleSectionV2
   level: 2 | 3
@@ -551,6 +571,10 @@ function SectionHeading({
   /** Extract concept candidates for this section (DET-283). Omitted → no button. */
   onExtractConcepts?: (sectionId: string) => void
   extracting?: boolean
+  /** Extraction for this section just completed → show the confirmation link. */
+  extracted?: boolean
+  /** Extraction for this section failed → show the message beside the button. */
+  extractError?: string | null
 }) {
   const className = level === 2 ? 'tf-article-heading' : 'tf-article-subheading'
   const sourceBlockIds = section.headingSourceBlockIds ?? []
@@ -570,16 +594,33 @@ function SectionHeading({
   // (revealed on hover via CSS), it asks the server to extract AI-assisted
   // concept candidates grounded in THIS section's source blocks — proposals the
   // reader validates later in the learning panel, never auto-saved concepts.
+  // After a successful extraction the action flips to a quiet confirmation that
+  // links into the learning-tools panel (inside the "Behind the article"
+  // drawer) — without it, the candidates land off-screen and the click reads
+  // as a no-op. A failure renders its message right beside the button.
   const extract = onExtractConcepts ? (
-    <button
-      type='button'
-      className='tf-section-extract'
-      disabled={extracting}
-      onClick={() => onExtractConcepts(section.id)}
-      title='Extract concept candidates from this section (AI-assisted)'
-    >
-      {extracting ? 'Extracting…' : '✦ Extract concepts'}
-    </button>
+    extracted ? (
+      <a className='tf-section-extracted' href='#learning-tools'>
+        ✓ Candidates ready — view in Learning tools
+      </a>
+    ) : (
+      <>
+        <button
+          type='button'
+          className='tf-section-extract'
+          disabled={extracting}
+          onClick={() => onExtractConcepts(section.id)}
+          title='Extract concept candidates from this section (AI-assisted)'
+        >
+          {extracting ? 'Extracting…' : '✦ Extract concepts'}
+        </button>
+        {extractError && (
+          <span className='tf-extract-error' role='alert'>
+            {extractError}
+          </span>
+        )}
+      </>
+    )
   ) : null
   const heading =
     sourceBlockIds.length === 0 ? (
