@@ -14,6 +14,7 @@ import {
 import { fidelityRiskChip } from '@/lib/transformer-format'
 import { placeIllustrations } from './illustration-placement'
 import {
+  AiFigureCaption,
   ILLUSTRATION_TYPE_LABEL,
   IllustrationThumbnail,
   useIllustrationActions,
@@ -356,16 +357,10 @@ function IllustrationSlot({
   const isApproved = s.approval === 'approved'
 
   // The AI-assisted caption (DET-258): always prefaced "AI · grounded in …" so
-  // a rendered figure can never read as source matter.
+  // a rendered figure can never read as source matter. Shared with the
+  // management grid so the labeling can never drift between the two surfaces.
   const aiCaption = (
-    <figcaption className='tf-fig-caption'>
-      <span className='tf-fig-aichip'>✦ AI illustration</span>
-      <span className='tf-fig-grounded'>
-        AI · grounded in {s.sourceBlockIds.length} source block
-        {s.sourceBlockIds.length === 1 ? '' : 's'}
-      </span>
-      {s.caption && <span className='tf-fig-text'>“{s.caption}”</span>}
-    </figcaption>
+    <AiFigureCaption sourceBlockIds={s.sourceBlockIds} caption={s.caption} />
   )
 
   return (

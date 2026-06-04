@@ -42,12 +42,26 @@ function makeHarness(suggestions: IllustrationSuggestion[]) {
     `${articleId}:${suggestionId}`
 
   const prisma = {
-    // The service batches the image-row write + plan patch in $transaction([...]);
-    // the mocked ops already run when the array is built, so just await them.
-    $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
+    // Plan mutations run inside an interactive `$transaction(async (tx) => …)`
+    // that locks + re-reads the article row (withLockedPlan). The mock runs the
+    // callback with itself as `tx`; the array form is still supported for any
+    // batched callers.
+    $transaction: (arg: unknown) =>
+      typeof arg === 'function'
+        ? (arg as (tx: unknown) => Promise<unknown>)(prisma)
+        : Promise.all(arg as Promise<unknown>[]),
+    // The FOR UPDATE row lock — a no-op in the stub.
+    $queryRaw: jest.fn(async () => []),
     transformedArticle: {
       findFirst: jest.fn(async ({ where }: { where: { id: string } }) =>
         where.id === 'a1' ? { ...article } : null,
+      ),
+      // The re-read inside withLockedPlan — returns the current (possibly
+      // already-patched) plan so each mutation derives from the latest copy.
+      findUnique: jest.fn(async ({ where }: { where: { id: string } }) =>
+        where.id === 'a1'
+          ? { illustrationPlan: article.illustrationPlan }
+          : null,
       ),
       update: jest.fn(
         async ({ data }: { data: { illustrationPlan: unknown } }) => {
@@ -210,5 +224,25 @@ describe('TransformerService illustration render (DET-261)', () => {
     const plan = await service.deleteIllustrationImage('u1', 'a1', 's1')
     expect(images.has(key('a1', 's1'))).toBe(false)
     expect(plan.suggestions[0].image).toBeNull()
+  })
+
+  it('rendering two suggestions does not clobber the other (re-read merge)', async () => {
+    const { service, prisma, article } = makeHarness([
+      suggestion({ id: 's1' }),
+      suggestion({ id: 's2' }),
+    ])
+
+    // Each render re-reads the plan under the row lock (withLockedPlan → the
+    // FOR UPDATE $queryRaw + findUnique) and patches only its own suggestion, so
+    // the second render preserves the first's `image` instead of overwriting the
+    // whole array from a stale snapshot (the lost-update bug).
+    await service.renderIllustration('u1', 'a1', 's1', false)
+    await service.renderIllustration('u1', 'a1', 's2', false)
+
+    expect(prisma.$queryRaw).toHaveBeenCalled()
+    expect(prisma.transformedArticle.findUnique).toHaveBeenCalled()
+    const finalPlan = article.illustrationPlan as IllustrationPlan
+    expect(finalPlan.suggestions[0].image).not.toBeNull()
+    expect(finalPlan.suggestions[1].image).not.toBeNull()
   })
 })

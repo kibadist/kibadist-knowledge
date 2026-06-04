@@ -18,13 +18,13 @@ import { ArticlePipelineService } from './article-pipeline.service'
 import type { CreateTextSourceDto } from './dto/create-text-source.dto'
 import type { CreateUrlSourceDto } from './dto/create-url-source.dto'
 import { ARTICLE_IN_FLIGHT, PipelineService } from './pipeline.service'
-import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
   IllustrationPlan,
   IllustrationSuggestion,
   LearningConcept,
   LearningLayer,
 } from './schemas'
+import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
   CoverageReport,
   FidelityReport,
@@ -362,6 +362,42 @@ export class TransformerService {
     )
   }
 
+  /**
+   * Mutate an article's illustrationPlan JSON atomically. The plan is a single
+   * JSON blob, so every mutator does read-modify-write of the whole
+   * `suggestions[]` array — two concurrent mutations (e.g. rendering two
+   * suggestions, or a render racing an approval) would each write back only
+   * their own patch and silently drop the other's (lost update). Locking the
+   * article row with `FOR UPDATE` and re-reading the plan inside the transaction
+   * serialises them, so each patch derives from the latest committed plan.
+   * `apply` runs inside the tx (it may also write the image bytes table) and
+   * returns the next plan derived from the freshly-read one.
+   */
+  private async withLockedPlan(
+    articleId: string,
+    apply: (
+      plan: IllustrationPlan,
+      tx: Prisma.TransactionClient,
+    ) => Promise<IllustrationPlan>,
+  ): Promise<IllustrationPlan> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "transformed_articles" WHERE id = ${articleId} FOR UPDATE`
+      const row = await tx.transformedArticle.findUnique({
+        where: { id: articleId },
+        select: { illustrationPlan: true },
+      })
+      const plan: IllustrationPlan = (row?.illustrationPlan as IllustrationPlan | null) ?? {
+        suggestions: [],
+      }
+      const updated = await apply(plan, tx)
+      await tx.transformedArticle.update({
+        where: { id: articleId },
+        data: { illustrationPlan: updated as unknown as Prisma.InputJsonValue },
+      })
+      return updated
+    })
+  }
+
   /** Update one illustration suggestion's approval (DET-259). */
   async updateIllustrationApproval(
     userId: string,
@@ -370,20 +406,17 @@ export class TransformerService {
     approval: IllustrationSuggestion['approval'],
   ): Promise<IllustrationPlan> {
     const article = await this.findOwnedArticle(userId, articleId)
-    const plan = article.illustrationPlan as IllustrationPlan | null
-    if (!plan) throw new NotFoundException('No illustration plan')
-    const suggestion = plan.suggestions.find((s) => s.id === suggestionId)
-    if (!suggestion) throw new NotFoundException('Suggestion not found')
-    const updated: IllustrationPlan = {
-      suggestions: plan.suggestions.map((s) =>
-        s.id === suggestionId ? { ...s, approval } : s,
-      ),
-    }
-    await this.prisma.transformedArticle.update({
-      where: { id: article.id },
-      data: { illustrationPlan: updated as unknown as Prisma.InputJsonValue },
+    if (!article.illustrationPlan)
+      throw new NotFoundException('No illustration plan')
+    return this.withLockedPlan(article.id, async (plan) => {
+      if (!plan.suggestions.some((s) => s.id === suggestionId))
+        throw new NotFoundException('Suggestion not found')
+      return {
+        suggestions: plan.suggestions.map((s) =>
+          s.id === suggestionId ? { ...s, approval } : s,
+        ),
+      }
     })
-    return updated
   }
 
   /**
@@ -422,7 +455,10 @@ export class TransformerService {
 
     // Prompt uses ONLY the approved suggestion text — never the source blocks.
     const prompt = `${suggestion.visualDescription}\n\nCaption: ${suggestion.caption}`
-    const result = await this.ai.image({ prompt, size: ILLUSTRATION_IMAGE_SIZE })
+    const result = await this.ai.image({
+      prompt,
+      size: ILLUSTRATION_IMAGE_SIZE,
+    })
     const generatedAt = new Date().toISOString()
 
     const bytes = new Uint8Array(Buffer.from(result.base64, 'base64'))
@@ -436,38 +472,31 @@ export class TransformerService {
       model: result.model,
       prompt,
     }
-    const updated: IllustrationPlan = {
-      suggestions: plan.suggestions.map((s) =>
-        s.id === suggestionId
-          ? {
-              ...s,
-              image: {
-                width: result.width,
-                height: result.height,
-                provider: this.ai.providerName,
-                model: result.model,
-                generatedAt,
-              },
-            }
-          : s,
-      ),
+    const imageMeta = {
+      width: result.width,
+      height: result.height,
+      provider: this.ai.providerName,
+      model: result.model,
+      generatedAt,
     }
-    // Atomic: the image bytes and the plan's `image` metadata must never desync
-    // (an orphan row with a null plan field, or vice-versa).
-    await this.prisma.$transaction([
-      this.prisma.transformerIllustrationImage.upsert({
+    // Atomic + race-safe: lock the article row, re-read the plan, and patch only
+    // this suggestion's `image` from the latest committed plan — so a concurrent
+    // render/approval of another suggestion is never clobbered, and the image
+    // bytes + the plan's `image` metadata can never desync.
+    return this.withLockedPlan(article.id, async (fresh, tx) => {
+      await tx.transformerIllustrationImage.upsert({
         where: {
           articleId_suggestionId: { articleId: article.id, suggestionId },
         },
         create: { articleId: article.id, suggestionId, ...imageRow },
         update: imageRow,
-      }),
-      this.prisma.transformedArticle.update({
-        where: { id: article.id },
-        data: { illustrationPlan: updated as unknown as Prisma.InputJsonValue },
-      }),
-    ])
-    return updated
+      })
+      return {
+        suggestions: fresh.suggestions.map((s) =>
+          s.id === suggestionId ? { ...s, image: imageMeta } : s,
+        ),
+      }
+    })
   }
 
   /**
@@ -504,25 +533,21 @@ export class TransformerService {
     const article = await this.findOwnedArticle(userId, articleId)
     const plan = article.illustrationPlan as IllustrationPlan | null
     if (!plan) throw new NotFoundException('No illustration plan')
-    const suggestion = plan.suggestions.find((s) => s.id === suggestionId)
-    if (!suggestion) throw new NotFoundException('Suggestion not found')
+    if (!plan.suggestions.some((s) => s.id === suggestionId))
+      throw new NotFoundException('Suggestion not found')
 
-    const updated: IllustrationPlan = {
-      suggestions: plan.suggestions.map((s) =>
-        s.id === suggestionId ? { ...s, image: null } : s,
-      ),
-    }
-    // Atomic: drop the bytes and clear the plan's `image` field together.
-    await this.prisma.$transaction([
-      this.prisma.transformerIllustrationImage.deleteMany({
+    // Atomic + race-safe: drop the bytes and clear the plan's `image` field
+    // together, under the article-row lock + re-read (see withLockedPlan).
+    return this.withLockedPlan(article.id, async (fresh, tx) => {
+      await tx.transformerIllustrationImage.deleteMany({
         where: { articleId: article.id, suggestionId },
-      }),
-      this.prisma.transformedArticle.update({
-        where: { id: article.id },
-        data: { illustrationPlan: updated as unknown as Prisma.InputJsonValue },
-      }),
-    ])
-    return updated
+      })
+      return {
+        suggestions: fresh.suggestions.map((s) =>
+          s.id === suggestionId ? { ...s, image: null } : s,
+        ),
+      }
+    })
   }
 
   /** Generate the learning layer for an article (DET-258, on demand). */

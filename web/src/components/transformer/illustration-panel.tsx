@@ -11,6 +11,7 @@ import {
 import { fidelityRiskChip } from '@/lib/transformer-format'
 
 import {
+  AiFigureCaption,
   ILLUSTRATION_TYPE_LABEL,
   IllustrationThumbnail,
   useIllustrationActions,
@@ -183,11 +184,21 @@ function IllustrationCard({
       {isApproved && (
         <div className='tf-illus-image'>
           {s.image ? (
-            <IllustrationThumbnail
-              articleId={articleId}
-              suggestionId={s.id}
-              meta={s.image}
-            />
+            <>
+              <IllustrationThumbnail
+                articleId={articleId}
+                suggestionId={s.id}
+                meta={s.image}
+                framed
+                alt={`AI illustration · ${s.purpose}`}
+              />
+              {/* DET-258: the management grid must label its AI image too, never
+                  present it as plain/source content. */}
+              <AiFigureCaption
+                sourceBlockIds={s.sourceBlockIds}
+                caption={s.caption}
+              />
+            </>
           ) : null}
 
           {renderError && (

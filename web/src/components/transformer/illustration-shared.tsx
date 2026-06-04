@@ -26,6 +26,31 @@ export const ILLUSTRATION_TYPE_LABEL: Record<IllustrationType, string> = {
 }
 
 /**
+ * The AI-assisted figure caption (DET-258). EVERY rendered illustration — in the
+ * inline article slots AND the management grid — carries this, so an AI image
+ * can never read as source matter: the "✦ AI illustration" chip, the "grounded
+ * in N source blocks" provenance, and the (optional) suggestion caption.
+ */
+export function AiFigureCaption({
+  sourceBlockIds,
+  caption,
+}: {
+  sourceBlockIds: string[]
+  caption?: string
+}) {
+  return (
+    <figcaption className='tf-fig-caption'>
+      <span className='tf-fig-aichip'>✦ AI illustration</span>
+      <span className='tf-fig-grounded'>
+        AI · grounded in {sourceBlockIds.length} source block
+        {sourceBlockIds.length === 1 ? '' : 's'}
+      </span>
+      {caption && <span className='tf-fig-text'>“{caption}”</span>}
+    </figcaption>
+  )
+}
+
+/**
  * The render + remove mutations and their derived state for one suggestion.
  * `confirmHighRisk` is the local "render anyway?" gate state; callers wire it
  * into whichever confirm UI they render. Both surfaces share this so the
