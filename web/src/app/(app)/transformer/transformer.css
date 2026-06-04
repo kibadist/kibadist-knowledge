@@ -173,8 +173,21 @@
 /* ============================================================================
    The rich article body — the centerpiece. Magazine-level editorial typography.
    ============================================================================ */
+/* The article is the product's centerpiece and reads like a magazine page, so
+   it breaks out wider than the shared 980px `.page` shell. The negative inline
+   margins expand the block symmetrically and recenter it in the viewport; the
+   `min(…, 94vw)` cap keeps it from ever overflowing on narrower windows. */
 .kbapp .tf-article-screen {
   position: relative;
+  width: min(1180px, 94vw);
+  margin-inline: calc((min(1180px, 94vw) - 100%) / -2);
+}
+@media (max-width: 1024px) {
+  /* Below the breakout's useful range, fall back to the plain page column. */
+  .kbapp .tf-article-screen {
+    width: 100%;
+    margin-inline: 0;
+  }
 }
 .kbapp .tf-article-badges {
   display: flex;
@@ -184,15 +197,78 @@
 }
 
 .kbapp .tf-article {
-  max-width: 65ch;
+  max-width: 68ch;
   margin: 0 auto;
   width: 100%;
 }
-.kbapp .tf-article-head {
-  border-bottom: 2px solid var(--rule);
-  padding-bottom: 28px;
-  margin-bottom: 36px;
+
+/* ---------------- masthead rule ---------------- */
+/* A thin top rule: kicker on the left, the demoted status/fidelity chips on the
+   right. The reading experience — not the machinery — leads the page. */
+.kbapp .tf-masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  margin-bottom: 30px;
+  border-bottom: 1px solid var(--rule);
 }
+.kbapp .tf-masthead-kicker {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--ink-muted);
+}
+.kbapp .tf-masthead-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* The masthead chips are page furniture, not headline matter — shrink them. */
+.kbapp .tf-masthead-chips .chip {
+  font-size: 8.5px;
+  padding: 4px 7px;
+  letter-spacing: 0.12em;
+}
+
+/* ---------------- hero ---------------- */
+.kbapp .tf-hero {
+  margin-bottom: 40px;
+}
+.kbapp .tf-hero-standfirst {
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 23px;
+  line-height: 1.42;
+  color: var(--ink-soft);
+  margin: 22px 0 0;
+  max-width: 52ch;
+}
+.kbapp .tf-hero-byline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+}
+.kbapp .tf-byline-dot {
+  color: var(--rule-soft);
+}
+.kbapp .tf-hero-rule {
+  height: 1px;
+  background: var(--rule);
+  margin: 22px 0 0;
+}
+
 .kbapp .tf-article-title {
   font-family: var(--font-display), serif;
   font-weight: 400;
@@ -224,9 +300,9 @@
   text-align: left;
   font-family: var(--font-body), serif;
   font-size: 19px;
-  line-height: 1.65;
+  line-height: 1.7;
   color: var(--ink);
-  margin: 0 0 22px;
+  margin: 0 0 24px;
 }
 .kbapp .tf-paragraph--clickable {
   background: transparent;
@@ -264,16 +340,77 @@
 }
 
 .kbapp .tf-article-section {
-  margin-bottom: 36px;
+  margin-bottom: 40px;
 }
 .kbapp .tf-article-heading {
   font-family: var(--font-display), serif;
   font-weight: 600;
-  font-size: 28px;
+  font-size: 29px;
   letter-spacing: -0.015em;
   color: var(--ink);
-  margin: 0 0 18px;
-  padding-top: 8px;
+  margin: 0 0 20px;
+  padding-top: 4px;
+}
+
+/* ---------------- section-break ornament ---------------- */
+/* A small centered glyph + flanking hairlines between sections — magazine
+   breathing room without new content. */
+.kbapp .tf-ornament {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 4px auto 36px;
+  max-width: 16ch;
+}
+.kbapp .tf-ornament::before,
+.kbapp .tf-ornament::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule-soft);
+}
+.kbapp .tf-ornament-mark {
+  font-family: var(--font-display), serif;
+  font-size: 13px;
+  color: var(--accent);
+  line-height: 1;
+}
+
+/* ---------------- pull-quote ---------------- */
+/* A source-grounded pull-quote (real source text, cited) breaking a long run.
+   Accent rule on the left; never confused with AI matter (that's indigo). */
+.kbapp .tf-pullquote {
+  margin: 8px 0 40px;
+  padding: 6px 0 6px 26px;
+  border-left: 3px solid var(--accent);
+}
+.kbapp .tf-pullquote-text {
+  margin: 0;
+  font-family: var(--font-display), serif;
+  font-weight: 400;
+  font-style: italic;
+  font-size: 27px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.kbapp .tf-pullquote-cite {
+  margin-top: 12px;
+}
+.kbapp .tf-pullquote-ref {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid currentColor;
+  padding: 0 0 1px;
+  cursor: pointer;
+}
+.kbapp .tf-pullquote-ref:hover {
+  color: var(--ink);
 }
 
 /* Auxiliary sections — key terms, examples, caveats, original structure. */
@@ -889,9 +1026,297 @@
   }
 }
 
+/* ============================================================================
+   Inline illustration slots (DET-259/261 + magazine redesign). Block-anchored
+   figures living IN the text flow. INVARIANT (DET-258): every inline AI image
+   stays unmistakably AI-assisted — an indigo (accent-blue) hairline frame that
+   is visually distinct from the ink/rule used for source text, a "✦ AI
+   illustration" chip, and an "AI · grounded in …" caption. The source inspector
+   still treats only the text as citable; art is never source.
+   ============================================================================ */
+.kbapp .tf-slot {
+  margin: 4px 0 28px;
+}
+.kbapp .tf-slot--hero {
+  /* The hero figure breaks slightly wider than the text measure, Quanta-style. */
+  margin: 6px 0 4px;
+  width: 100%;
+}
+.kbapp .tf-slot--column {
+  margin: 2px 0 26px;
+}
+
+/* The rendered figure. */
+.kbapp .tf-fig {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kbapp .tf-fig-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono), monospace;
+}
+.kbapp .tf-fig-aichip {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--indigo);
+  background: rgba(31, 58, 77, 0.1);
+  border: 1px solid rgba(31, 58, 77, 0.4);
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.kbapp .tf-fig-grounded {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--indigo);
+}
+.kbapp .tf-fig-text {
+  flex-basis: 100%;
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 14.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-muted);
+}
+.kbapp .tf-fig-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-fig-ref {
+  margin-left: auto;
+}
+
+/* The AI-assisted accent-blue (indigo) hairline frame around inline images —
+   distinct from the source ink/rule. The hero gets a heavier offset shadow. */
+.kbapp .tf-illus-figure--framed .tf-illus-thumb {
+  border: 1px solid var(--indigo);
+  box-shadow: 6px 6px 0 rgba(31, 58, 77, 0.18);
+}
+.kbapp .tf-slot--hero .tf-illus-figure--framed .tf-illus-thumb {
+  box-shadow: 10px 10px 0 rgba(31, 58, 77, 0.18);
+}
+
+/* Approved-but-unrendered: a dashed indigo magazine figure-frame. */
+.kbapp .tf-frame {
+  border: 1.5px dashed var(--indigo);
+  background: rgba(31, 58, 77, 0.03);
+  padding: 26px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  min-height: 120px;
+  justify-content: center;
+}
+.kbapp .tf-slot--hero .tf-frame {
+  min-height: 180px;
+  align-items: center;
+  text-align: center;
+}
+.kbapp .tf-frame-aichip {
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--indigo);
+}
+.kbapp .tf-frame-grounded {
+  margin: 0;
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+.kbapp .tf-frame-actions,
+.kbapp .tf-frame-confirm {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.kbapp .tf-frame-confirm {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* The proposal (not yet approved) — purpose/description/caption + Approve/Reject,
+   inside a quiet indigo-tinted card so it reads as an AI offer, not source. */
+.kbapp .tf-proposal {
+  border: 1px solid rgba(31, 58, 77, 0.3);
+  background: rgba(31, 58, 77, 0.04);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kbapp .tf-proposal-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-proposal-purpose {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--ink);
+  margin: 0;
+}
+.kbapp .tf-proposal-desc {
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin: 0;
+}
+.kbapp .tf-proposal-caption {
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-muted);
+  margin: 0;
+}
+.kbapp .tf-proposal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.kbapp .tf-proposal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ============================================================================
+   Fidelity ribbon — a slim one-line "held back" bar that expands to the full
+   findings list (replaces the wall-of-red banner so the story leads).
+   ============================================================================ */
+.kbapp .tf-ribbon {
+  border: 1px solid var(--accent);
+  background: rgba(138, 42, 31, 0.06);
+  margin-bottom: 28px;
+}
+.kbapp .tf-ribbon-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.kbapp .tf-ribbon-summary::-webkit-details-marker {
+  display: none;
+}
+.kbapp .tf-ribbon-mark {
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1;
+}
+.kbapp .tf-ribbon-line {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-deep);
+}
+.kbapp .tf-ribbon-cta {
+  margin-left: auto;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 1px;
+}
+.kbapp .tf-ribbon-caret {
+  color: var(--accent);
+  font-size: 11px;
+  transition: transform 0.2s var(--ease);
+}
+.kbapp .tf-ribbon[open] .tf-ribbon-caret {
+  transform: rotate(180deg);
+}
+.kbapp .tf-ribbon-body {
+  padding: 4px 18px 20px;
+  border-top: 1px solid rgba(138, 42, 31, 0.25);
+}
+.kbapp .tf-ribbon-body .block-sub {
+  margin: 14px 0 4px;
+}
+
+/* ============================================================================
+   "Behind the article" — the appendix drawer (coverage, original structure,
+   learning tools, illustration management). Demoted below the piece, collapsed.
+   ============================================================================ */
+.kbapp .tf-behind {
+  margin-top: 48px;
+  border-top: 2px solid var(--rule);
+  padding-top: 18px;
+}
+.kbapp .tf-behind-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 6px 0;
+}
+.kbapp .tf-behind-summary::-webkit-details-marker {
+  display: none;
+}
+.kbapp .tf-behind-kicker {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 22px;
+  color: var(--ink);
+}
+.kbapp .tf-behind-hint {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-faint);
+}
+.kbapp .tf-behind-caret {
+  margin-left: auto;
+  color: var(--ink-muted);
+  font-size: 13px;
+  transition: transform 0.2s var(--ease);
+}
+.kbapp .tf-behind[open] .tf-behind-caret {
+  transform: rotate(180deg);
+}
+.kbapp .tf-behind-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: 24px;
+}
+
 @media (max-width: 720px) {
   .kbapp .tf-concept-grid,
   .kbapp .tf-illus-grid {
     grid-template-columns: 1fr;
+  }
+  .kbapp .tf-pullquote-text {
+    font-size: 23px;
   }
 }

@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react'
 import { ArticleView } from '@/components/transformer/article-view'
 import { CoveragePanel } from '@/components/transformer/coverage-panel'
 import { IllustrationPanel } from '@/components/transformer/illustration-panel'
+import { placeIllustrations } from '@/components/transformer/illustration-placement'
 import { LearningToolsPanel } from '@/components/transformer/learning-tools-panel'
 import {
   type InspectorSelection,
@@ -16,6 +17,7 @@ import {
   api,
   type FidelityFinding,
   type FidelityReport,
+  type SourcePreservingArticle,
   type TransformerBlockView,
 } from '@/lib/api'
 import {
@@ -30,11 +32,13 @@ import {
 import '../../transformer.css'
 
 /**
- * The rich article experience (DET-256/257/258/259). Polls every 1.5s while the
- * article is still generating, then renders the full source-preserving view:
- * header badges, in-progress / FAILED / BLOCKED / FINAL states, the editorial
- * article body with a clickable source inspector, the coverage panel, and the
- * (clearly separated, AI-assisted) learning + illustration panels.
+ * The rich article experience (DET-256/257/258/259), rebuilt as a
+ * science-magazine page. Polls every 1.5s while the article is still
+ * generating, then renders: an in-progress / FAILED state, a slim fidelity
+ * ribbon for BLOCKED, the editorial article body (masthead + hero + inline
+ * illustration slots + the clickable source inspector), and a collapsible
+ * "Behind the article" appendix drawer holding coverage, learning tools, and
+ * the illustration management grid.
  */
 export default function ArticlePage() {
   const { articleId } = useParams<{ articleId: string }>()
@@ -73,6 +77,28 @@ export default function ArticlePage() {
 
   const sourceUrl = sourceQuery.data?.url ?? null
 
+  // Distinct source blocks the article actually cites — drives the hero byline.
+  // Coverage's totalBlocks (the whole source) is the better number when present;
+  // fall back to counting distinct sourceBlockIds across the article body.
+  const sourceBlockCount = useMemo(() => {
+    if (article?.coverageReport) return article.coverageReport.totalBlocks
+    if (!article?.articleJson) return null
+    return countSourceBlocks(article.articleJson)
+  }, [article?.coverageReport, article?.articleJson])
+
+  // Suggestions not anchored inline → the drawer's management grid, so nothing
+  // renders twice. Computed against the same placement the article view uses.
+  const unplacedSuggestions = useMemo(() => {
+    if (!article?.articleJson)
+      return article?.illustrationPlan?.suggestions ?? []
+    return placeIllustrations(article.articleJson, article.illustrationPlan)
+      .unplaced
+  }, [article?.articleJson, article?.illustrationPlan])
+
+  const showBody =
+    article?.articleJson &&
+    (article.status === 'FINAL' || article.status === 'BLOCKED')
+
   return (
     <div className='screen tf-article-screen'>
       <Link
@@ -89,24 +115,6 @@ export default function ArticlePage() {
 
       {article && (
         <>
-          <header className='tf-article-badges'>
-            <span className='chip chip-info'>Source-preserving mode</span>
-            <span className={`chip ${articleStatusChip(article.status)}`}>
-              {articleStatusLabel(article.status)}
-            </span>
-            {article.fidelityReport && (
-              <span
-                className={`chip ${
-                  article.fidelityReport.fidelityScore >= 95
-                    ? 'chip-cleared'
-                    : 'chip-pending'
-                }`}
-              >
-                Fidelity {article.fidelityReport.fidelityScore}
-              </span>
-            )}
-          </header>
-
           {/* In-progress: elegant step progress. */}
           {!isArticleTerminal(article.status) && (
             <section className='panel panel-raised tf-progress'>
@@ -141,44 +149,83 @@ export default function ArticlePage() {
             </section>
           )}
 
-          {/* BLOCKED: artifacts exist but the fidelity gate rejected them. The
-              article still renders, under a prominent banner of WHY. */}
+          {/* BLOCKED: a slim ribbon that expands to today's full findings. The
+              article still renders below — the story leads, not the apparatus. */}
           {article.status === 'BLOCKED' && article.fidelityReport && (
-            <BlockedBanner report={article.fidelityReport} />
+            <BlockedRibbon report={article.fidelityReport} />
           )}
 
-          {/* The article body renders for FINAL and BLOCKED (with the banner). */}
-          {article.articleJson &&
-            (article.status === 'FINAL' || article.status === 'BLOCKED') && (
-              <ArticleView
-                article={article.articleJson}
-                onInspect={setSelection}
-              />
-            )}
+          {/* The article body renders for FINAL and BLOCKED. */}
+          {showBody && article.articleJson && (
+            <ArticleView
+              article={article.articleJson}
+              articleId={article.id}
+              illustrationPlan={article.illustrationPlan}
+              sourceBlockCount={sourceBlockCount}
+              masthead={
+                <>
+                  <span className='chip chip-info'>Source-preserving</span>
+                  <span className={`chip ${articleStatusChip(article.status)}`}>
+                    {articleStatusLabel(article.status)}
+                  </span>
+                  {article.fidelityReport && (
+                    <span
+                      className={`chip ${
+                        article.fidelityReport.fidelityScore >= 95
+                          ? 'chip-cleared'
+                          : 'chip-pending'
+                      }`}
+                    >
+                      Fidelity {article.fidelityReport.fidelityScore}
+                    </span>
+                  )}
+                </>
+              }
+              onInspect={setSelection}
+            />
+          )}
 
-          {/* Coverage (DET-255). */}
-          {article.coverageReport &&
-            (article.status === 'FINAL' || article.status === 'BLOCKED') && (
-              <CoveragePanel
-                coverage={article.coverageReport}
-                blocksById={blocksById}
-              />
-            )}
+          {/* "Behind the article": the appendix drawer — coverage, original
+              structure, learning tools, and the illustration management grid. */}
+          {showBody && (
+            <details className='tf-behind'>
+              <summary className='tf-behind-summary'>
+                <span className='tf-behind-kicker'>Behind the article</span>
+                <span className='tf-behind-hint'>
+                  Source coverage · structure · learning tools · illustrations
+                </span>
+                <span className='tf-behind-caret' aria-hidden='true'>
+                  ▾
+                </span>
+              </summary>
 
-          {/* AI-assisted layers — only meaningful once an article body exists. */}
-          {(article.status === 'FINAL' || article.status === 'BLOCKED') && (
-            <div className='tf-ai-layers'>
-              <LearningToolsPanel
-                articleId={article.id}
-                layer={article.learningLayer}
-                onInspect={setSelection}
-              />
-              <IllustrationPanel
-                articleId={article.id}
-                plan={article.illustrationPlan}
-                onInspect={setSelection}
-              />
-            </div>
+              <div className='tf-behind-body'>
+                {article.coverageReport && (
+                  <CoveragePanel
+                    coverage={article.coverageReport}
+                    blocksById={blocksById}
+                  />
+                )}
+
+                {article.articleJson &&
+                  article.articleJson.originalStructure.length > 0 && (
+                    <OriginalStructure article={article.articleJson} />
+                  )}
+
+                <LearningToolsPanel
+                  articleId={article.id}
+                  layer={article.learningLayer}
+                  onInspect={setSelection}
+                />
+
+                <IllustrationPanel
+                  articleId={article.id}
+                  plan={article.illustrationPlan}
+                  suggestions={unplacedSuggestions}
+                  onInspect={setSelection}
+                />
+              </div>
+            </details>
           )}
         </>
       )}
@@ -193,8 +240,45 @@ export default function ArticlePage() {
   )
 }
 
-// The blocked banner lists the high-severity findings explaining the rejection.
-function BlockedBanner({ report }: { report: FidelityReport }) {
+// Distinct source blocks cited anywhere in the article body — a byline signal
+// when coverage isn't available.
+function countSourceBlocks(article: SourcePreservingArticle): number {
+  const ids = new Set<string>()
+  const add = (arr: string[]) => {
+    for (const id of arr) ids.add(id)
+  }
+  if (article.subtitle) add(article.subtitle.sourceBlockIds)
+  for (const p of article.abstract) add(p.sourceBlockIds)
+  for (const s of article.sections) {
+    add(s.sourceBlockIds)
+    for (const p of s.paragraphs) add(p.sourceBlockIds)
+  }
+  for (const t of article.keyTerms) add(t.sourceBlockIds)
+  for (const e of article.sourceExamples) add(e.sourceBlockIds)
+  for (const c of article.caveats) add(c.sourceBlockIds)
+  return ids.size
+}
+
+// The original-structure outline, relocated out of the article body into the
+// drawer (it's a reference appendix, not source-preserved reading matter).
+function OriginalStructure({ article }: { article: SourcePreservingArticle }) {
+  return (
+    <section className='panel tf-original-structure'>
+      <h3 className='panel-h'>Original structure reference</h3>
+      <ol className='tf-outline'>
+        {article.originalStructure.map((o) => (
+          <li key={o.blockId}>
+            <span className='tf-outline-type'>{o.blockType}</span>
+            <span className='tf-outline-preview'>{o.preview}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+// The blocked findings, grouped + collapsed behind a slim one-line ribbon.
+function BlockedRibbon({ report }: { report: FidelityReport }) {
   const groups: { label: string; findings: FidelityFinding[] }[] = [
     { label: 'Added information', findings: report.addedInformation },
     { label: 'Lost information', findings: report.lostInformation },
@@ -213,34 +297,46 @@ function BlockedBanner({ report }: { report: FidelityReport }) {
   // Fall back to all findings if nothing is flagged high (score-threshold block).
   const shown =
     blocking.length > 0 ? blocking : groups.filter((g) => g.findings.length > 0)
+  const issueCount = shown.reduce((n, g) => n + g.findings.length, 0)
 
   return (
-    <section className='panel tf-blocked-banner'>
-      <div className='tf-blocked-head'>
-        <span className='chip chip-contested'>Blocked by fidelity gate</span>
-        <h3 className='panel-h'>This article was held back</h3>
+    <details className='tf-ribbon'>
+      <summary className='tf-ribbon-summary'>
+        <span className='tf-ribbon-mark' aria-hidden='true'>
+          ⚠
+        </span>
+        <span className='tf-ribbon-line'>
+          Held back · fidelity {report.fidelityScore} · {issueCount} issue
+          {issueCount === 1 ? '' : 's'}
+        </span>
+        <span className='tf-ribbon-cta'>review</span>
+        <span className='tf-ribbon-caret' aria-hidden='true'>
+          ▾
+        </span>
+      </summary>
+      <div className='tf-ribbon-body'>
+        <p className='block-sub'>
+          The article is shown below, but the fidelity check found issues that
+          must be reviewed. Fidelity score {report.fidelityScore}.
+        </p>
+        <div className='tf-blocked-findings'>
+          {shown.map((g) => (
+            <div key={g.label} className='tf-finding-group'>
+              <h4 className='tf-aux-h'>{g.label}</h4>
+              <ul className='tf-finding-list'>
+                {g.findings.map((f, i) => (
+                  <li key={`${g.label}-${i}`} className='tf-finding'>
+                    <span className={`chip ${severityChip(f.severity)}`}>
+                      {f.severity}
+                    </span>
+                    <span className='tf-finding-text'>{f.description}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       </div>
-      <p className='block-sub'>
-        The article is shown below, but the fidelity check found issues that
-        must be reviewed. Fidelity score {report.fidelityScore}.
-      </p>
-      <div className='tf-blocked-findings'>
-        {shown.map((g) => (
-          <div key={g.label} className='tf-finding-group'>
-            <h4 className='tf-aux-h'>{g.label}</h4>
-            <ul className='tf-finding-list'>
-              {g.findings.map((f, i) => (
-                <li key={`${g.label}-${i}`} className='tf-finding'>
-                  <span className={`chip ${severityChip(f.severity)}`}>
-                    {f.severity}
-                  </span>
-                  <span className='tf-finding-text'>{f.description}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-    </section>
+    </details>
   )
 }

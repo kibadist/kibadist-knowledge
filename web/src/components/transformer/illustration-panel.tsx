@@ -1,40 +1,43 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
 
 import {
   ApiError,
   api,
   type IllustrationPlan,
   type IllustrationSuggestion,
-  type IllustrationType,
 } from '@/lib/api'
 import { fidelityRiskChip } from '@/lib/transformer-format'
 
+import {
+  ILLUSTRATION_TYPE_LABEL,
+  IllustrationThumbnail,
+  useIllustrationActions,
+} from './illustration-shared'
 import type { InspectorSelection } from './source-inspector-panel'
 
-const TYPE_LABEL: Record<IllustrationType, string> = {
-  editorial_cover: 'Editorial cover',
-  decorative_section: 'Decorative section',
-  source_based_diagram: 'Source-based diagram',
-}
-
 /**
- * Illustration suggestions panel (DET-259 / DET-261). A separate, AI-assisted
- * card: "Suggest illustrations" generates suggestion cards (type, purpose,
- * visual description, caption, fidelity-risk badge, reason, source refs,
- * Approve/Reject). Once a suggestion is approved (DET-261) it can be rendered
- * into an image; the rendered thumbnail, Regenerate, and Remove actions live
- * here too — never in the article body.
+ * Illustration management grid (DET-259 / DET-261). Since the magazine redesign,
+ * the PRIMARY surface for illustrations is the inline, block-anchored slots in
+ * the article body (article-view.tsx). This panel is the secondary "manage all"
+ * grid that lives in the "Behind the article" drawer: it generates suggestions
+ * and renders any that aren't placed inline (passed via `suggestions`). The
+ * render/remove/approve logic is shared verbatim with the inline slots.
  */
 export function IllustrationPanel({
   articleId,
   plan,
+  suggestions,
   onInspect,
 }: {
   articleId: string
   plan: IllustrationPlan | null
+  /**
+   * The suggestions to show here. Defaults to the whole plan; the drawer passes
+   * only the unplaced ones so no suggestion renders in two places.
+   */
+  suggestions?: IllustrationSuggestion[]
   onInspect: (selection: InspectorSelection) => void
 }) {
   const queryClient = useQueryClient()
@@ -63,18 +66,20 @@ export function IllustrationPanel({
       }),
   })
 
-  const hasContent = plan && plan.suggestions.length > 0
+  const hasPlan = plan && plan.suggestions.length > 0
+  const shown = suggestions ?? plan?.suggestions ?? []
 
   return (
     <section className='panel tf-ai-panel'>
       <div className='tf-ai-head'>
         <span className='chip chip-ai'>AI-assisted</span>
-        <h3 className='panel-h'>Illustration suggestions</h3>
+        <h3 className='panel-h'>Illustrations</h3>
       </div>
       <p className='tf-ai-disclaimer'>
         Suggestions are grounded in source blocks and gated by your approval.
-        Approved suggestions can be rendered into AI images — kept here in the
-        illustration layer, never in the article body.
+        Approved suggestions are placed as inline figures in the article — those
+        not anchored to a section are managed here. AI imagery never reads as
+        source content.
       </p>
 
       {generate.isError && (
@@ -85,7 +90,7 @@ export function IllustrationPanel({
         </p>
       )}
 
-      {!hasContent ? (
+      {!hasPlan ? (
         <div className='tf-ai-empty'>
           <p className='block-sub'>
             No suggestions yet. Generate editorial illustration ideas — you stay
@@ -100,9 +105,13 @@ export function IllustrationPanel({
             {generate.isPending ? 'Suggesting…' : 'Suggest illustrations'}
           </button>
         </div>
+      ) : shown.length === 0 ? (
+        <p className='block-sub'>
+          All suggestions are placed as inline figures in the article above.
+        </p>
       ) : (
         <div className='tf-illus-grid'>
-          {plan?.suggestions.map((s) => (
+          {shown.map((s) => (
             <IllustrationCard
               key={s.id}
               articleId={articleId}
@@ -134,44 +143,18 @@ function IllustrationCard({
     >
   >
 }) {
-  const queryClient = useQueryClient()
-  const [confirmHighRisk, setConfirmHighRisk] = useState(false)
-
-  const invalidate = () =>
-    queryClient.invalidateQueries({
-      queryKey: ['transformer-article', articleId],
-    })
-
-  const render = useMutation({
-    mutationFn: (confirm: boolean) =>
-      api.renderIllustration(articleId, s.id, confirm),
-    onSuccess: () => {
-      setConfirmHighRisk(false)
-      return invalidate()
-    },
-  })
-
-  const remove = useMutation({
-    mutationFn: () => api.deleteIllustrationImage(articleId, s.id),
-    onSuccess: () => invalidate(),
-  })
+  const {
+    render,
+    remove,
+    renderError,
+    removeError,
+    confirmHighRisk,
+    setConfirmHighRisk,
+    busy,
+  } = useIllustrationActions(articleId, s.id)
 
   const isHighRisk = s.fidelityRisk === 'high'
   const isApproved = s.approval === 'approved'
-  const busy = render.isPending || remove.isPending
-
-  const renderError =
-    render.error instanceof ApiError
-      ? render.error.message
-      : render.isError
-        ? 'Could not render image.'
-        : null
-  const removeError =
-    remove.error instanceof ApiError
-      ? remove.error.message
-      : remove.isError
-        ? 'Could not remove image.'
-        : null
 
   return (
     <div
@@ -179,7 +162,7 @@ function IllustrationCard({
     >
       <div className='tf-illus-top'>
         <span className='chip chip-info'>
-          {TYPE_LABEL[s.illustrationType] ?? s.illustrationType}
+          {ILLUSTRATION_TYPE_LABEL[s.illustrationType] ?? s.illustrationType}
         </span>
         <span className={`chip ${fidelityRiskChip(s.fidelityRisk)}`}>
           {s.fidelityRisk} risk
@@ -337,70 +320,5 @@ function IllustrationCard({
         </div>
       </div>
     </div>
-  )
-}
-
-/**
- * Renders the stored PNG for a rendered suggestion. The bytes are served from
- * an authenticated endpoint (an <img src> can't send the bearer token), so we
- * fetch the blob and build an object URL, revoking it on cleanup. Keyed on
- * generatedAt so a regenerate refetches the fresh image.
- */
-function IllustrationThumbnail({
-  articleId,
-  suggestionId,
-  meta,
-}: {
-  articleId: string
-  suggestionId: string
-  meta: NonNullable<IllustrationSuggestion['image']>
-}) {
-  const [src, setSrc] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
-
-  useEffect(() => {
-    let url: string | null = null
-    let active = true
-    setFailed(false)
-    setSrc(null)
-
-    api
-      .getIllustrationImageBlob(articleId, suggestionId)
-      .then((blob) => {
-        if (!active) return
-        url = URL.createObjectURL(blob)
-        setSrc(url)
-      })
-      .catch(() => {
-        if (active) setFailed(true)
-      })
-
-    return () => {
-      active = false
-      if (url) URL.revokeObjectURL(url)
-    }
-  }, [articleId, suggestionId, meta.generatedAt])
-
-  return (
-    <figure className='tf-illus-figure'>
-      {failed ? (
-        <div className='tf-illus-thumb-fallback'>Could not load image.</div>
-      ) : src ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          className='tf-illus-thumb'
-          src={src}
-          alt='AI-rendered illustration'
-        />
-      ) : (
-        <div className='tf-illus-thumb-loading'>
-          <span className='tf-spinner' aria-hidden='true' />
-          Loading…
-        </div>
-      )}
-      <figcaption className='tf-illus-meta'>
-        {meta.width}×{meta.height} · {meta.model}
-      </figcaption>
-    </figure>
   )
 }
