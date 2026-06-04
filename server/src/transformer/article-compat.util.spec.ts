@@ -1,5 +1,8 @@
 import { isArticleV2, toArticleV2 } from './article-compat.util'
-import type { ArticleJsonV2, SourcePreservingArticle } from './transformer.types'
+import type {
+  ArticleJsonV2,
+  SourcePreservingArticle,
+} from './transformer.types'
 
 function v1(
   partial: Partial<SourcePreservingArticle> = {},
@@ -115,7 +118,9 @@ describe('article-compat: toArticleV2', () => {
       keyTerms: [{ term: 'K', sourceBlockIds: ['b1'] }],
       sourceExamples: [{ text: 'EX', sourceBlockIds: ['b2'] }],
       caveats: [{ text: 'CV', sourceBlockIds: ['b3'] }],
-      originalStructure: [{ blockId: 'b1', blockType: 'PARAGRAPH', preview: 'p' }],
+      originalStructure: [
+        { blockId: 'b1', blockType: 'PARAGRAPH', preview: 'p' },
+      ],
     })
     const out = toArticleV2(source)
     expect(out.abstract).toEqual(source.abstract)

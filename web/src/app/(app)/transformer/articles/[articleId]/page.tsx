@@ -14,9 +14,9 @@ import {
   SourceInspectorPanel,
 } from '@/components/transformer/source-inspector-panel'
 import {
-  api,
   type ArticleJsonV2,
   type ArticleSectionV2,
+  api,
   type FidelityFinding,
   type FidelityReport,
   type TransformerBlockView,

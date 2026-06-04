@@ -582,7 +582,9 @@ function Block({
   onInspect: (selection: InspectorSelection) => void
 }) {
   if (block.type === 'paragraph') {
-    return <Paragraph paragraph={block} kind='Paragraph' onInspect={onInspect} />
+    return (
+      <Paragraph paragraph={block} kind='Paragraph' onInspect={onInspect} />
+    )
   }
   // Non-paragraph blocks: minimal source-grounded rendering until W3 styles each
   // type. Still clickable into the inspector so traceability is preserved.
@@ -618,7 +620,9 @@ function Block({
 }
 
 /** A plain-text rendering of any non-paragraph block (W1 fallback). */
-function blockText(block: Exclude<ArticleBlock, ArticleParagraphBlock>): string {
+function blockText(
+  block: Exclude<ArticleBlock, ArticleParagraphBlock>,
+): string {
   switch (block.type) {
     case 'list':
       return block.items.join('\n')
@@ -629,7 +633,10 @@ function blockText(block: Exclude<ArticleBlock, ArticleParagraphBlock>): string 
     case 'pullQuote':
       return `“${block.text}”`
     case 'table':
-      return [block.caption, ...(block.header ? [block.header.join(' | ')] : [])]
+      return [
+        block.caption,
+        ...(block.header ? [block.header.join(' | ')] : []),
+      ]
         .filter(Boolean)
         .concat(block.rows.map((r) => r.join(' | ')))
         .join('\n')
@@ -639,7 +646,16 @@ function blockText(block: Exclude<ArticleBlock, ArticleParagraphBlock>): string 
       return block.caption ?? ''
     case 'callout':
       return block.title ? `${block.title}: ${block.text}` : block.text
+    default:
+      // Exhaustiveness guard: a new ArticleBlock member added without a case
+      // here is a compile error (the union is narrowed to `never`).
+      return assertNever(block)
   }
+}
+
+/** Compile-time exhaustiveness assertion for discriminated-union switches. */
+function assertNever(value: never): never {
+  throw new Error(`Unhandled block type: ${JSON.stringify(value)}`)
 }
 
 function Paragraph({

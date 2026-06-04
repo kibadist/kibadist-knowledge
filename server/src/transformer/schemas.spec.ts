@@ -96,7 +96,11 @@ describe('ArticleJsonV2Schema (DET-277)', () => {
     schemaVersion: 'v2',
     mode: 'source_preserving_article',
     title: { text: 'Title', source: 'original' },
-    subtitle: { text: 'Sub', source: 'cleanedOriginal', sourceBlockIds: ['b0'] },
+    subtitle: {
+      text: 'Sub',
+      source: 'cleanedOriginal',
+      sourceBlockIds: ['b0'],
+    },
     abstract: [
       {
         id: 'a1',
@@ -211,7 +215,9 @@ describe('ArticleJsonV2Schema (DET-277)', () => {
     keyTerms: [{ term: 'K', sourceBlockIds: ['b1'] }],
     sourceExamples: [{ text: 'EX', sourceBlockIds: ['b2'] }],
     caveats: [{ text: 'CV', sourceBlockIds: ['b3'] }],
-    originalStructure: [{ blockId: 'b1', blockType: 'PARAGRAPH', preview: 'p' }],
+    originalStructure: [
+      { blockId: 'b1', blockType: 'PARAGRAPH', preview: 'p' },
+    ],
     readingAids: {
       toc: [{ sectionId: 's1', heading: 'Original heading', level: 1 }],
       readingTimeMinutes: 3,
@@ -257,7 +263,10 @@ describe('ArticleJsonV2Schema (DET-277)', () => {
   })
 
   it('rejects a wrong schemaVersion', () => {
-    const result = ArticleJsonV2Schema.safeParse({ ...fullV2, schemaVersion: 'v1' })
+    const result = ArticleJsonV2Schema.safeParse({
+      ...fullV2,
+      schemaVersion: 'v1',
+    })
     expect(result.success).toBe(false)
   })
 

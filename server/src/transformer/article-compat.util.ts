@@ -93,3 +93,60 @@ export function toArticleV2(
     originalStructure: v1.originalStructure,
   }
 }
+
+/**
+ * Collect EVERY source block id cited anywhere in an article — across all v2
+ * block types, nested subsections, subtitle, keyTerms, sourceExamples, caveats,
+ * readingAids highlights — adapting v1 first so the walk is uniform.
+ *
+ * This is the read-only traceability primitive shared by the golden-fixture
+ * suite (DET-279): pass the result against the source block id set to find any
+ * fragment that references a block the source does not contain. Production
+ * guards (`assertKnownIds`, `mergeDeterministicChecks`) keep their own focused
+ * walks; this one is a complete inventory used to AUDIT a finished article.
+ */
+export function collectArticleSourceBlockIds(
+  input: SourcePreservingArticle | ArticleJsonV2,
+): string[] {
+  const article = toArticleV2(input)
+  const ids: string[] = []
+  const add = (xs: string[]) => {
+    for (const x of xs) ids.push(x)
+  }
+
+  if (article.subtitle) add(article.subtitle.sourceBlockIds)
+  for (const p of article.abstract) add(p.sourceBlockIds)
+
+  const walkSection = (s: ArticleSectionV2) => {
+    add(s.sourceBlockIds)
+    if (s.headingSourceBlockIds) add(s.headingSourceBlockIds)
+    for (const b of s.blocks) add(b.sourceBlockIds)
+    for (const sub of s.subsections ?? []) walkSection(sub)
+  }
+  for (const s of article.sections) walkSection(s)
+
+  for (const t of article.keyTerms) add(t.sourceBlockIds)
+  for (const e of article.sourceExamples) add(e.sourceBlockIds)
+  for (const c of article.caveats) add(c.sourceBlockIds)
+
+  for (const h of article.readingAids?.sourceHighlights ?? [])
+    add(h.sourceBlockIds)
+
+  return ids
+}
+
+/**
+ * Read-only traceability audit (DET-279): the cited block ids that DO NOT exist
+ * in the supplied source block id set. Empty ⇒ every fragment is traceable.
+ * Used by the golden-fixture suite to assert source-inspector mapping is intact
+ * for all block types, and to flag an unsupported readingAids highlight.
+ */
+export function findUnknownSourceBlockIds(
+  input: SourcePreservingArticle | ArticleJsonV2,
+  known: ReadonlySet<string>,
+): string[] {
+  const unknown = new Set<string>()
+  for (const id of collectArticleSourceBlockIds(input))
+    if (!known.has(id)) unknown.add(id)
+  return [...unknown]
+}

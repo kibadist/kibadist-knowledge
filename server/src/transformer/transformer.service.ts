@@ -14,6 +14,7 @@ import {
 import { AiService } from '../ai/ai.service'
 import { fetchReadable } from '../inbox/url-fetch.util'
 import { PrismaService } from '../prisma/prisma.service'
+import { toArticleV2 } from './article-compat.util'
 import { ArticlePipelineService } from './article-pipeline.service'
 import type { CreateTextSourceDto } from './dto/create-text-source.dto'
 import type { CreateUrlSourceDto } from './dto/create-url-source.dto'
@@ -24,7 +25,6 @@ import type {
   LearningConcept,
   LearningLayer,
 } from './schemas'
-import { toArticleV2 } from './article-compat.util'
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
   ArticleJsonV2,

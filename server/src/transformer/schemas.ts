@@ -351,7 +351,9 @@ export const ArticleJsonV2Schema: z.ZodType<ArticleJsonV2> = z.object({
   abstract: z.array(articleParagraphSchema),
   sections: z.array(articleSectionV2),
   keyTerms: z.array(z.object({ term: z.string().min(1), sourceBlockIds })),
-  sourceExamples: z.array(z.object({ text: z.string().min(1), sourceBlockIds })),
+  sourceExamples: z.array(
+    z.object({ text: z.string().min(1), sourceBlockIds }),
+  ),
   caveats: z.array(z.object({ text: z.string().min(1), sourceBlockIds })),
   originalStructure: z.array(
     z.object({
