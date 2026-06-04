@@ -1590,6 +1590,19 @@
   display: flex;
   gap: 8px;
 }
+/* Backlink to the INBOX "to learn" concept a validated candidate created
+   (DET-283) — replaces the Validate/Dismiss pair once promotion happened. */
+.kbapp .tf-candidate-inbox-link {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--indigo);
+  text-decoration: none;
+}
+.kbapp .tf-candidate-inbox-link:hover {
+  color: var(--accent);
+}
 
 /* ============================================================================
    Source inspector side panel (DET-257) — slide-in right rail.

@@ -300,26 +300,40 @@ function ConceptCandidates({
                       source refs ({c.sourceBlockIds.length})
                     </button>
                     <div className='tf-candidate-actions'>
-                      <button
-                        type='button'
-                        className='btn-ghost-xs'
-                        disabled={
-                          validating || c.validationStatus === 'validated'
-                        }
-                        onClick={() => onValidate(c.id, 'validated')}
-                      >
-                        Validate
-                      </button>
-                      <button
-                        type='button'
-                        className='btn-ghost-xs'
-                        disabled={
-                          validating || c.validationStatus === 'dismissed'
-                        }
-                        onClick={() => onValidate(c.id, 'dismissed')}
-                      >
-                        Dismiss
-                      </button>
+                      {c.conceptId ? (
+                        // Validation already created the "to learn" concept —
+                        // link to it in the capture inbox instead of offering
+                        // Validate again (creation is one-shot, DET-283).
+                        <a
+                          className='tf-candidate-inbox-link'
+                          href={`/inbox/${c.conceptId}`}
+                        >
+                          In inbox →
+                        </a>
+                      ) : (
+                        <>
+                          <button
+                            type='button'
+                            className='btn-ghost-xs'
+                            disabled={
+                              validating || c.validationStatus === 'validated'
+                            }
+                            onClick={() => onValidate(c.id, 'validated')}
+                          >
+                            Validate
+                          </button>
+                          <button
+                            type='button'
+                            className='btn-ghost-xs'
+                            disabled={
+                              validating || c.validationStatus === 'dismissed'
+                            }
+                            onClick={() => onValidate(c.id, 'dismissed')}
+                          >
+                            Dismiss
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </li>

@@ -111,4 +111,19 @@ describe('LearningToolsPanel concept candidates (DET-283)', () => {
     expect(screen.queryByText('AI-assisted · unvalidated')).toBeNull()
     expect(screen.getByText('validated')).toBeInTheDocument()
   })
+
+  it('a validated candidate with a conceptId links to its inbox concept', () => {
+    renderPanel({
+      concepts: [],
+      retrievalPrompts: [],
+      conceptCandidates: [
+        candidate({ validationStatus: 'validated', conceptId: 'con-1' }),
+      ],
+    })
+    // Validation created a real "to learn" concept in the capture inbox; the
+    // candidate now points at it instead of offering Validate again.
+    const link = screen.getByRole('link', { name: /in inbox/i })
+    expect(link).toHaveAttribute('href', '/inbox/con-1')
+    expect(screen.queryByRole('button', { name: 'Validate' })).toBeNull()
+  })
 })

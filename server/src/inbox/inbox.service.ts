@@ -29,6 +29,9 @@ export interface InboxItem {
   title: string
   captureSource: CaptureSource | null
   sourceUrl: string | null
+  /** Set when this capture was validated out of a source-preserving article
+   *  (DET-283) — drives the inbox's "from article" badge + backlink. */
+  originArticleId: string | null
   excerpt: string
   /** Word count of the raw material — a triage signal ("how long is this?").
    *  Derived from sourceText at read time; not persisted. */
@@ -136,6 +139,7 @@ export class InboxService {
         sourceText: true,
         captureSource: true,
         sourceUrl: true,
+        originArticleId: true,
         createdAt: true,
       },
     })
@@ -144,6 +148,7 @@ export class InboxService {
       title: r.title,
       captureSource: r.captureSource,
       sourceUrl: r.sourceUrl,
+      originArticleId: r.originArticleId,
       excerpt: excerpt(r.sourceText),
       wordCount: countWords(r.sourceText),
       createdAt: r.createdAt,
@@ -161,6 +166,7 @@ export class InboxService {
         sourceDocument: true,
         captureSource: true,
         sourceUrl: true,
+        originArticleId: true,
         createdAt: true,
       },
     })
@@ -170,6 +176,7 @@ export class InboxService {
       title: row.title,
       captureSource: row.captureSource,
       sourceUrl: row.sourceUrl,
+      originArticleId: row.originArticleId,
       sourceText: row.sourceText,
       sourceDocument: asSourceDocument(row.sourceDocument),
       excerpt: excerpt(row.sourceText),
@@ -310,6 +317,8 @@ export class InboxService {
       title: concept.title,
       captureSource: concept.captureSource,
       sourceUrl: concept.sourceUrl,
+      // A forge merges raw captures — never article-derived provenance.
+      originArticleId: null,
       excerpt: excerpt(concept.sourceText),
       wordCount: countWords(concept.sourceText),
       createdAt: concept.createdAt,
@@ -393,6 +402,9 @@ export class InboxService {
       title: concept.title,
       captureSource: concept.captureSource,
       sourceUrl: concept.sourceUrl,
+      // Fresh captures are raw material — article provenance only ever comes
+      // from validating an article concept candidate (DET-283).
+      originArticleId: null,
       excerpt: excerpt(concept.sourceText),
       wordCount: countWords(concept.sourceText),
       createdAt: concept.createdAt,

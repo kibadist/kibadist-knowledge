@@ -182,6 +182,9 @@ export interface InboxItem {
   title: string
   captureSource: CaptureSource | null
   sourceUrl: string | null
+  /** Set when this capture was validated out of a source-preserving article
+   *  (DET-283) — drives the "from article" badge + backlink. */
+  originArticleId: string | null
   excerpt: string
   /** Word count of the raw material — drives the row's read-time signal. */
   wordCount: number
@@ -1324,6 +1327,9 @@ export interface LearningConceptCandidate {
   sectionRole?: string
   aiAssisted: true
   validationStatus: LearningValidationStatus
+  /** The INBOX "to learn" Concept created when the user validated this
+   *  candidate (DET-283). Present ⇒ validation already promoted it. */
+  conceptId?: string
 }
 
 export interface LearningLayer {

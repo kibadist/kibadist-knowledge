@@ -10,9 +10,10 @@ import type { ArticleJsonV2 } from './transformer.types'
  * DET-283 per-section concept candidates at the service boundary. We verify the
  * persistence concurrency pattern (per-article row lock + re-read, mirroring the
  * illustration `withLockedPlan`), the replace-pending / keep-decided re-extraction
- * rule, that validating a candidate only flips its status (NEVER creating any
- * Concept row — there is no Concept-row write path here at all), and that the
- * extractor receives a v2 article (legacy v1 stored JSON is adapted first).
+ * rule, the validate→Concept promotion (the user's explicit "Validate" creates an
+ * INBOX Concept exactly once, with verbatim source-block provenance — dismissal
+ * and re-validation never duplicate it), and that the extractor receives a v2
+ * article (legacy v1 stored JSON is adapted first).
  */
 
 const v2Article: ArticleJsonV2 = {
@@ -68,6 +69,7 @@ function makeHarness(opts: {
   const article: Record<string, unknown> = {
     id: 'a1',
     sourceId: 'src1',
+    workspaceId: 'w1',
     blocksVersion: 1,
     articleJson: 'articleJson' in opts ? opts.articleJson : v2Article,
     learningLayer: opts.learningLayer ?? null,
@@ -93,6 +95,21 @@ function makeHarness(opts: {
         },
       ),
     },
+    transformerSource: {
+      findUnique: jest.fn(async () => ({
+        type: 'URL',
+        url: 'https://example.com/a',
+      })),
+    },
+    transformerSourceBlock: {
+      findMany: jest.fn(async () => [{ text: 'Verbatim source block text.' }]),
+    },
+    concept: {
+      create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'con-1',
+        ...data,
+      })),
+    },
   }
 
   const extractSectionConcepts = jest.fn(
@@ -107,13 +124,16 @@ function makeHarness(opts: {
     extractSectionConcepts,
   } as unknown as ArticlePipelineService
 
+  const conceptState = { recordCapture: jest.fn(async () => undefined) }
+
   const service = new TransformerService(
     prisma as never,
     {} as PipelineService,
     articlePipeline,
     {} as AiService,
+    conceptState as never,
   )
-  return { service, prisma, article, extractSectionConcepts }
+  return { service, prisma, article, extractSectionConcepts, conceptState }
 }
 
 describe('TransformerService concept candidates (DET-283)', () => {
@@ -178,8 +198,8 @@ describe('TransformerService concept candidates (DET-283)', () => {
     )
   })
 
-  it('updateLearningItem flips a candidate status without creating any Concept row', async () => {
-    const { service, prisma, article } = makeHarness({
+  it('validating a candidate creates an INBOX Concept with source provenance and stamps conceptId', async () => {
+    const { service, prisma, conceptState } = makeHarness({
       learningLayer: {
         concepts: [],
         retrievalPrompts: [],
@@ -193,17 +213,66 @@ describe('TransformerService concept candidates (DET-283)', () => {
       'validated',
     )
     expect(layer.conceptCandidates?.[0].validationStatus).toBe('validated')
-    // Only the learningLayer JSON was written — no other table touched.
-    const updateKeys = prisma.transformedArticle.update.mock.calls.flatMap(
-      (call) => Object.keys((call[0] as { data: object }).data),
+    expect(layer.conceptCandidates?.[0].conceptId).toBe('con-1')
+    // The Concept row carries the candidate + verbatim source-block provenance.
+    expect(prisma.concept.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        title: 'L',
+        summary: 'D',
+        sourceText: 'Verbatim source block text.',
+        sourceUrl: 'https://example.com/a',
+        captureSource: 'URL',
+        userId: 'u1',
+        workspaceId: 'w1',
+      }),
+    })
+    // Its cognitive history opens at capture, inside the same transaction.
+    expect(conceptState.recordCapture).toHaveBeenCalledWith(
+      'con-1',
+      'u1',
+      expect.anything(),
+      expect.any(String),
     )
-    expect(updateKeys).toEqual(['learningLayer'])
-    // The article object only ever carried a learningLayer mutation.
-    expect(Object.keys(article)).not.toContain('concept')
   })
 
-  it('updateLearningItem still flips a concept (untouched path)', async () => {
-    const { service } = makeHarness({
+  it('re-validating a candidate that already has a conceptId does NOT create a second Concept', async () => {
+    const { service, prisma } = makeHarness({
+      learningLayer: {
+        concepts: [],
+        retrievalPrompts: [],
+        conceptCandidates: [
+          candidate({
+            id: 'cc1',
+            validationStatus: 'dismissed',
+            conceptId: 'con-existing',
+          }),
+        ],
+      },
+    })
+    const layer = await service.updateLearningItem(
+      'u1',
+      'a1',
+      'cc1',
+      'validated',
+    )
+    expect(layer.conceptCandidates?.[0].conceptId).toBe('con-existing')
+    expect(prisma.concept.create).not.toHaveBeenCalled()
+  })
+
+  it('dismissing a candidate never creates a Concept', async () => {
+    const { service, prisma } = makeHarness({
+      learningLayer: {
+        concepts: [],
+        retrievalPrompts: [],
+        conceptCandidates: [candidate({ id: 'cc1' })],
+      },
+    })
+    await service.updateLearningItem('u1', 'a1', 'cc1', 'dismissed')
+    expect(prisma.concept.create).not.toHaveBeenCalled()
+  })
+
+  it('updateLearningItem still flips a DET-258 study concept without creating a Concept row', async () => {
+    const { service, prisma } = makeHarness({
       learningLayer: {
         concepts: [
           {
@@ -224,6 +293,7 @@ describe('TransformerService concept candidates (DET-283)', () => {
       'dismissed',
     )
     expect(layer.concepts[0].validationStatus).toBe('dismissed')
+    expect(prisma.concept.create).not.toHaveBeenCalled()
   })
 
   it('404 when the item id is in neither concepts nor candidates', async () => {

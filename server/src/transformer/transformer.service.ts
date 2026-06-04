@@ -1,4 +1,5 @@
 import {
+  type CaptureSource,
   type Prisma,
   TransformedArticleStatus,
   TransformerSourceStatus,
@@ -12,6 +13,7 @@ import {
 } from '@nestjs/common'
 
 import { AiService } from '../ai/ai.service'
+import { ConceptStateService } from '../concept-state/concept-state.service'
 import { fetchReadable } from '../inbox/url-fetch.util'
 import { PrismaService } from '../prisma/prisma.service'
 import { toArticleV2 } from './article-compat.util'
@@ -25,6 +27,7 @@ import type {
   IllustrationPlan,
   IllustrationSuggestion,
   LearningConcept,
+  LearningConceptCandidate,
   LearningLayer,
   SourceStructureModel,
 } from './schemas'
@@ -153,6 +156,7 @@ export class TransformerService {
     private readonly pipeline: PipelineService,
     private readonly articlePipeline: ArticlePipelineService,
     private readonly ai: AiService,
+    private readonly conceptState: ConceptStateService,
   ) {}
 
   async createTextSource(
@@ -640,7 +644,10 @@ export class TransformerService {
    */
   private async withLockedLearningLayer(
     articleId: string,
-    apply: (layer: LearningLayer) => LearningLayer,
+    apply: (
+      layer: LearningLayer,
+      tx: Prisma.TransactionClient,
+    ) => Promise<LearningLayer> | LearningLayer,
   ): Promise<LearningLayer> {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "transformed_articles" WHERE id = ${articleId} FOR UPDATE`
@@ -653,7 +660,7 @@ export class TransformerService {
           concepts: [],
           retrievalPrompts: [],
         }
-      const updated = apply(layer)
+      const updated = await apply(layer, tx)
       await tx.transformedArticle.update({
         where: { id: articleId },
         data: { learningLayer: updated as unknown as Prisma.InputJsonValue },
@@ -709,9 +716,17 @@ export class TransformerService {
   /**
    * Update one learning-layer item's validation status (DET-258/283). The item id
    * is looked up across `concepts` AND `conceptCandidates` (retrievalPrompts have
-   * no validation state). For a candidate this ONLY flips `validationStatus` — it
-   * never creates a library Concept row (mirrors the concept path, which has never
-   * persisted Concept rows). Atomic under the per-article row lock + re-read.
+   * no validation state).
+   *
+   * Validating a CANDIDATE is the explicit user action that turns an article
+   * extraction into a "to learn" concept: it creates a real Concept row (status
+   * INBOX, cognitive state SEEN — the same shape as a capture) carrying verbatim
+   * source-block provenance + `originArticleId`, then stamps the created id back
+   * onto the candidate as `conceptId`. The presence of `conceptId` makes this
+   * idempotent — re-validating never creates a second row. Dismissal never
+   * creates anything, and DET-258 study concepts only flip status (they are
+   * comprehension scaffolds, not extraction-to-learning flow). All of it runs
+   * atomically under the per-article row lock.
    */
   async updateLearningItem(
     userId: string,
@@ -729,15 +744,90 @@ export class TransformerService {
     if (!inConcepts && !inCandidates) {
       throw new NotFoundException('Learning item not found')
     }
-    return this.withLockedLearningLayer(article.id, (layer) => ({
-      ...layer,
-      concepts: layer.concepts.map((c) =>
-        c.id === itemId ? { ...c, validationStatus } : c,
-      ),
-      conceptCandidates: layer.conceptCandidates?.map((c) =>
-        c.id === itemId ? { ...c, validationStatus } : c,
-      ),
-    }))
+    return this.withLockedLearningLayer(article.id, async (layer, tx) => {
+      const candidate = layer.conceptCandidates?.find((c) => c.id === itemId)
+      let conceptId = candidate?.conceptId
+      if (candidate && validationStatus === 'validated' && !conceptId) {
+        conceptId = await this.createConceptFromCandidate(
+          tx,
+          userId,
+          article.workspaceId,
+          article.sourceId,
+          article.blocksVersion,
+          article.id,
+          candidate,
+        )
+      }
+      return {
+        ...layer,
+        concepts: layer.concepts.map((c) =>
+          c.id === itemId ? { ...c, validationStatus } : c,
+        ),
+        conceptCandidates: layer.conceptCandidates?.map((c) =>
+          c.id === itemId
+            ? { ...c, validationStatus, ...(conceptId ? { conceptId } : {}) }
+            : c,
+        ),
+      }
+    })
+  }
+
+  /**
+   * Create the INBOX "to learn" Concept for a validated candidate (DET-283),
+   * inside the caller's transaction. Source-preserving provenance: `sourceText`
+   * is the VERBATIM text of the cited source blocks (pinned blocksVersion, in
+   * source order) — the AI definition lives only in `summary`. The concept then
+   * flows through the normal inbox → articulation → promotion gate; nothing here
+   * touches the earned (PERMANENT) layer.
+   */
+  private async createConceptFromCandidate(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    workspaceId: string,
+    sourceId: string,
+    blocksVersion: number,
+    articleId: string,
+    candidate: LearningConceptCandidate,
+  ): Promise<string> {
+    const source = await tx.transformerSource.findUnique({
+      where: { id: sourceId },
+      select: { type: true, url: true },
+    })
+    const blocks = await tx.transformerSourceBlock.findMany({
+      where: {
+        sourceId,
+        version: blocksVersion,
+        id: { in: candidate.sourceBlockIds },
+      },
+      orderBy: { orderIndex: 'asc' },
+      select: { text: true },
+    })
+    const captureSource: Record<TransformerSourceType, CaptureSource> = {
+      TEXT: 'PASTE',
+      URL: 'URL',
+      PDF: 'PDF',
+    }
+    const created = await tx.concept.create({
+      data: {
+        title: candidate.label,
+        summary: candidate.definition,
+        sourceText: blocks.length
+          ? blocks.map((b) => b.text).join('\n\n')
+          : candidate.definition,
+        sourceUrl: source?.url ?? undefined,
+        captureSource: source ? captureSource[source.type] : undefined,
+        originArticleId: articleId,
+        userId,
+        workspaceId,
+      },
+    })
+    await this.conceptState.recordCapture(
+      created.id,
+      userId,
+      tx,
+      'Validated from article concept candidate (DET-283)',
+    )
+    return created.id
   }
 
   /** Load an article, asserting it belongs to the user (via the source). 404 otherwise. */

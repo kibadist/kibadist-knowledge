@@ -419,9 +419,9 @@ describe('ArticleView (v2 renderer)', () => {
     expect(error).toBeInTheDocument()
     // It renders within the heading row of s1, not the subsection's.
     expect(error.closest('.tf-heading-row')).toBe(
-      screen.getAllByRole('button', { name: /Extract concepts/ })[0].closest(
-        '.tf-heading-row',
-      ),
+      screen
+        .getAllByRole('button', { name: /Extract concepts/ })[0]
+        .closest('.tf-heading-row'),
     )
   })
 

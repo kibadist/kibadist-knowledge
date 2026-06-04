@@ -711,6 +711,10 @@ const learningConceptCandidate = z.object({
   sectionRole: z.string().min(1).optional(),
   aiAssisted: z.literal(true),
   validationStatus,
+  // Set when the user VALIDATES the candidate: the id of the INBOX "to learn"
+  // Concept that validation created (DET-283). Its presence makes promotion
+  // idempotent — re-validating never creates a second Concept row.
+  conceptId: z.string().min(1).optional(),
 })
 
 export type LearningConceptCandidate = z.infer<typeof learningConceptCandidate>

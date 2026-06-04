@@ -1120,6 +1120,25 @@ body {
   color: var(--rule);
 }
 
+/* Origin badge for inbox items validated out of a source-preserving article
+   (DET-283): a quiet mono backlink, visually a sibling of the source mark. */
+.kbapp .row-from-article {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--indigo);
+  text-decoration: none;
+}
+.kbapp .row-from-article::before {
+  content: "·";
+  margin-right: 8px;
+  color: var(--rule);
+}
+.kbapp .row-from-article:hover {
+  color: var(--accent);
+}
+
 /* Keyboard / hover focus cursor for j-k triage. */
 .kbapp .inbox-row {
   border-left: 2px solid transparent;

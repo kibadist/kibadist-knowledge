@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 
 import { AiModule } from '../ai/ai.module'
+import { ConceptStateModule } from '../concept-state/concept-state.module'
 import { WorkspacesModule } from '../workspaces/workspaces.module'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
@@ -24,7 +25,7 @@ import { TransformerService } from './transformer.service'
  * orphaned by a restart.
  */
 @Module({
-  imports: [AiModule, WorkspacesModule],
+  imports: [AiModule, WorkspacesModule, ConceptStateModule],
   controllers: [TransformerController],
   providers: [
     TransformerService,

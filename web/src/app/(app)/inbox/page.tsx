@@ -442,6 +442,16 @@ const InboxRow = ({
           <span className={`src-dot${domain ? ' is-link' : ''}`} />
           {mark}
         </span>
+        {item.originArticleId && (
+          // Validated out of a source-preserving article (DET-283): badge the
+          // origin and link back to the article it was learned from.
+          <Link
+            href={`/transformer/articles/${item.originArticleId}`}
+            className='row-from-article'
+          >
+            from article →
+          </Link>
+        )}
         {length && <span className='row-len'>{length}</span>}
         <time className='row-when'>
           {new Date(item.createdAt).toLocaleDateString(undefined, {
