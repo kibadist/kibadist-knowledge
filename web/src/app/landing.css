@@ -73,13 +73,6 @@
   color: var(--accent-deep);
 }
 
-.landing .mono {
-  font-family: "JetBrains Mono", monospace;
-}
-.landing .serif-display {
-  font-family: "Fraunces", Georgia, serif;
-}
-
 .landing .wrap {
   max-width: 1280px;
   margin: 0 auto;
@@ -133,13 +126,13 @@
 .landing .masthead {
   border-bottom: 3px double var(--rule);
   text-align: center;
-  padding: 32px 48px 24px;
+  padding: 16px 48px 12px;
   position: relative;
 }
 .landing .masthead .title {
   font-family: "Fraunces", Georgia, serif;
   font-weight: 900;
-  font-size: clamp(56px, 11vw, 144px);
+  font-size: clamp(48px, 6.5vw, 80px);
   line-height: 0.9;
   letter-spacing: -0.04em;
   margin: 0;
@@ -168,8 +161,8 @@
   text-transform: uppercase;
   letter-spacing: 0.18em;
   color: var(--ink-muted);
-  margin-top: 28px;
-  padding-top: 14px;
+  margin-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid var(--rule-soft);
 }
 
@@ -186,7 +179,7 @@
   display: flex;
   justify-content: center;
   gap: 44px;
-  padding: 14px 48px;
+  padding: 10px 48px;
   font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   text-transform: uppercase;
@@ -208,7 +201,7 @@
 
 /* ====================  HERO / ABSTRACT  ==================== */
 .landing .hero {
-  padding: 72px 0 96px;
+  padding: 40px 0 72px;
   border-bottom: 1px solid var(--rule);
   position: relative;
 }
@@ -229,7 +222,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 28px;
+  margin-bottom: 16px;
 }
 .landing .section-label::before {
   content: "";
@@ -241,10 +234,10 @@
 .landing .hero h1 {
   font-family: "Fraunces", Georgia, serif;
   font-weight: 400;
-  font-size: clamp(46px, 6vw, 88px);
-  line-height: 0.95;
+  font-size: clamp(40px, 5vw, 72px);
+  line-height: 0.97;
   letter-spacing: -0.03em;
-  margin: 0 0 32px;
+  margin: 0 0 20px;
   color: var(--ink);
   font-variation-settings:
     "SOFT" 50,
@@ -271,19 +264,30 @@
 
 .landing .hero-lede {
   font-family: "Newsreader", Georgia, serif;
-  font-size: 22px;
+  font-size: 19px;
   line-height: 1.45;
   color: var(--ink-soft);
-  margin: 0 0 36px;
+  margin: 0 0 22px;
   font-style: italic;
 }
 
-.landing .cta-row {
+/* Hero CTA: inline waitlist form + secondary anchor, above the fold. */
+.landing .hero-cta {
   display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  gap: 18px;
+  align-items: flex-start;
 }
+.landing .hero-aud {
+  margin-top: 28px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-muted);
+  line-height: 1.6;
+}
+
 .landing .btn-primary {
   background: var(--ink);
   color: var(--paper);
@@ -328,6 +332,110 @@
 .landing .btn-ghost:hover {
   background: var(--ink);
   color: var(--paper);
+}
+
+/* ====================  WAITLIST FORM  ==================== */
+.landing .waitlist {
+  width: 100%;
+  max-width: 480px;
+}
+.landing .waitlist-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+.landing .waitlist input {
+  flex: 1 1 220px;
+  min-width: 0;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  padding: 14px 16px;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 17px;
+  line-height: 1.2;
+}
+.landing .waitlist input::placeholder {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+.landing .waitlist input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 2px 2px 0 var(--rule);
+}
+.landing .waitlist input:disabled {
+  opacity: 0.6;
+}
+.landing .waitlist .btn-primary {
+  border: 1px solid var(--ink);
+  flex: 0 0 auto;
+}
+.landing .waitlist .btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.landing .waitlist .btn-primary:disabled::after {
+  transform: none;
+}
+.landing .waitlist-error {
+  margin: 12px 0 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.landing .waitlist-done {
+  max-width: 480px;
+  border: 1px solid var(--accent);
+  background: var(--paper-2);
+  padding: 22px 24px;
+  box-shadow: 4px 4px 0 var(--rule);
+}
+.landing .waitlist-done strong {
+  display: block;
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.landing .waitlist-done span {
+  font-family: "Newsreader", Georgia, serif;
+  font-style: italic;
+  font-size: 16px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+/* Dark variant (final CTA on the inked stamp-frame). */
+.landing .waitlist.on-dark input {
+  background: var(--paper);
+  border-color: var(--paper);
+}
+.landing .waitlist.on-dark .btn-primary {
+  background: var(--paper);
+  color: var(--ink);
+  border-color: var(--paper);
+}
+.landing .waitlist.on-dark .btn-primary:hover {
+  background: var(--highlight);
+  color: var(--ink);
+  box-shadow: 4px 4px 0 var(--accent);
+}
+.landing .waitlist-done.on-dark {
+  border-color: var(--highlight);
+  background: rgba(241, 235, 222, 0.06);
+}
+.landing .waitlist-done.on-dark strong {
+  color: var(--paper);
+}
+.landing .waitlist-done.on-dark span {
+  color: #d4ccbb;
 }
 
 /* Hero right: abstract block */
@@ -394,46 +502,6 @@
   background: var(--paper);
 }
 
-/* citations row */
-.landing .citations {
-  margin-top: 64px;
-  padding-top: 24px;
-  border-top: 1px solid var(--rule-soft);
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 32px;
-}
-.landing .cite {
-  padding-right: 24px;
-  border-right: 1px solid var(--rule-soft);
-}
-.landing .cite:last-child {
-  border-right: none;
-}
-.landing .cite .num {
-  font-family: "Fraunces", serif;
-  font-weight: 300;
-  font-size: 56px;
-  line-height: 1;
-  color: var(--ink);
-  font-variation-settings: "SOFT" 100;
-}
-.landing .cite .num sup {
-  font-size: 22px;
-  color: var(--accent);
-  font-weight: 600;
-  margin-left: 4px;
-}
-.landing .cite .desc {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ink-muted);
-  margin-top: 12px;
-  line-height: 1.5;
-}
-
 /* ====================  SECTION GENERIC  ==================== */
 .landing .section {
   padding: 96px 0;
@@ -493,288 +561,75 @@
   font-style: italic;
 }
 
-/* ====================  GATE DIAGRAM  ==================== */
-.landing .gate-grid {
-  display: grid;
-  grid-template-columns: 1fr 1.1fr;
-  gap: 80px;
-  align-items: center;
-}
-
-.landing .gate-svg-wrap {
-  position: relative;
-  padding: 32px;
-  border: 1px solid var(--rule);
-  background: var(--paper-2);
-  box-shadow: 10px 10px 0 var(--rule);
-}
-.landing .gate-svg-wrap::before {
-  content: "FIG. 1.1";
-  position: absolute;
-  top: -10px;
-  left: 32px;
-  background: var(--paper);
-  padding: 0 12px;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.22em;
-  color: var(--accent);
-}
-.landing .gate-svg-wrap::after {
-  content: "The Proof-of-Learning gate, in schematic form.";
-  position: absolute;
-  bottom: -10px;
-  right: 32px;
-  background: var(--paper);
-  padding: 0 12px;
-  font-family: "Fraunces", serif;
-  font-style: italic;
-  font-size: 13px;
-  color: var(--ink-muted);
-}
-
-.landing .gate-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-.landing .step {
-  padding: 28px 0;
-  border-top: 1px solid var(--rule-soft);
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 24px;
-}
-.landing .step:last-child {
-  border-bottom: 1px solid var(--rule-soft);
-}
-.landing .step-num {
-  font-family: "Fraunces", serif;
-  font-style: italic;
-  font-weight: 400;
-  font-size: 44px;
-  line-height: 1;
-  color: var(--accent);
-  font-variation-settings: "SOFT" 100;
-}
-.landing .step h4 {
-  font-family: "Fraunces", serif;
-  font-weight: 600;
-  font-size: 24px;
-  margin: 0 0 8px;
-  letter-spacing: -0.01em;
-}
-.landing .step p {
-  margin: 0;
-  font-size: 16.5px;
-  color: var(--ink-soft);
-  line-height: 1.55;
-}
-
-/* ====================  SOVEREIGNTY  ==================== */
-.landing .sov-grid {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 72px;
-  align-items: start;
-}
-
-.landing .pullquote {
-  padding: 48px 0;
-  border-top: 3px double var(--rule);
-  border-bottom: 3px double var(--rule);
-  margin: 0 0 48px;
-  text-align: left;
-}
-.landing .pullquote p {
-  font-family: "Fraunces", serif;
-  font-style: italic;
-  font-size: clamp(28px, 3.5vw, 44px);
-  line-height: 1.15;
-  margin: 0;
-  letter-spacing: -0.015em;
-  font-variation-settings: "SOFT" 100;
-}
-.landing .pullquote p::before {
-  content: "\201C";
-  font-size: 1.5em;
-  color: var(--accent);
-  line-height: 0;
-  vertical-align: -0.3em;
-  margin-right: 4px;
-}
-.landing .pullquote p::after {
-  content: "\201D";
-  color: var(--accent);
-}
-.landing .pullquote .attr {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
-  color: var(--ink-muted);
-  margin-top: 18px;
-}
-
-.landing .policy-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  counter-reset: policy;
-}
-.landing .policy-list li {
-  counter-increment: policy;
-  padding: 22px 0 22px 56px;
-  border-top: 1px solid var(--rule-soft);
-  position: relative;
-  font-size: 17px;
-  line-height: 1.5;
-  color: var(--ink-soft);
-}
-.landing .policy-list li:last-child {
-  border-bottom: 1px solid var(--rule-soft);
-}
-.landing .policy-list li::before {
-  content: counter(policy, decimal-leading-zero);
-  position: absolute;
-  left: 0;
-  top: 22px;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--accent);
-  letter-spacing: 0.1em;
-}
-.landing .policy-list strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-/* Policy card */
-.landing .policy-card {
-  background: var(--ink);
-  color: var(--paper);
-  padding: 36px;
-  position: relative;
-  box-shadow: 10px 10px 0 var(--rule);
-}
-.landing .policy-card::before {
-  content: "DOCUMENT 02 · WORKSPACE POLICY";
-  position: absolute;
-  top: -10px;
-  left: 24px;
-  background: var(--paper);
-  color: var(--accent);
-  padding: 0 12px;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.22em;
-}
-.landing .policy-card h3 {
-  font-family: "Fraunces", serif;
-  font-weight: 500;
-  font-size: 32px;
-  margin: 12px 0 4px;
-  letter-spacing: -0.01em;
-}
-.landing .policy-card .stamp {
-  display: inline-block;
-  border: 2px solid var(--olive);
-  color: var(--olive);
-  font-family: "JetBrains Mono", monospace;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  padding: 6px 14px;
-  transform: rotate(-3deg);
-  margin: 12px 0 24px;
-  font-weight: 600;
-}
-.landing .policy-row {
-  display: grid;
-  grid-template-columns: 100px 1fr;
-  gap: 24px;
-  padding: 18px 0;
-  border-top: 1px dashed rgba(241, 235, 222, 0.2);
-  align-items: baseline;
-}
-.landing .policy-row .k {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  color: #b5a896;
-}
-.landing .policy-row .v {
-  font-family: "Newsreader", serif;
-  font-size: 17px;
-  color: var(--paper);
-}
-.landing .policy-row.blocked {
-  border-color: rgba(138, 42, 31, 0.4);
-}
-.landing .policy-row.blocked .k {
-  color: var(--accent);
-}
-.landing .policy-row.blocked .v {
-  color: #d6a89e;
-  text-decoration: line-through;
-  text-decoration-color: var(--accent);
-}
-
-/* ====================  APPARATUS / FEATURES  ==================== */
-.landing .feature-grid {
+/* ====================  PROBLEM  ==================== */
+.landing .problem-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   border-top: 1px solid var(--rule);
   border-left: 1px solid var(--rule);
 }
-.landing .feat {
-  padding: 40px 36px;
+.landing .problem-card {
+  padding: 36px 32px;
   border-right: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
-  position: relative;
   transition: background 0.2s;
 }
-.landing .feat:hover {
+.landing .problem-card:hover {
   background: var(--paper-2);
 }
-.landing .feat .feat-num {
+.landing .problem-card .p-mono {
   font-family: "JetBrains Mono", monospace;
   font-size: 10.5px;
   color: var(--accent);
-  letter-spacing: 0.22em;
-  margin-bottom: 32px;
-}
-.landing .feat .feat-icon {
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
   margin-bottom: 24px;
-  color: var(--ink);
 }
-.landing .feat h3 {
+.landing .problem-card h4 {
   font-family: "Fraunces", serif;
   font-weight: 600;
-  font-size: 26px;
+  font-size: 24px;
   margin: 0 0 12px;
   letter-spacing: -0.01em;
 }
-.landing .feat p {
+.landing .problem-card p {
   margin: 0;
   font-size: 16px;
   line-height: 1.55;
   color: var(--ink-soft);
 }
-.landing .feat .feat-mono {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px dashed var(--rule-soft);
-  font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
-  color: var(--ink-muted);
-  letter-spacing: 0.05em;
+
+/* Differentiator: how we differ from notes / summaries / flashcards. */
+.landing .differentiator {
+  margin-top: 56px;
+}
+.landing .diff-row {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 32px;
+  padding: 24px 0;
+  border-top: 1px solid var(--rule-soft);
+  align-items: baseline;
+}
+.landing .diff-row:last-child {
+  border-bottom: 1px solid var(--rule-soft);
+}
+.landing .diff-row .k {
+  font-family: "Fraunces", serif;
+  font-style: italic;
+  font-weight: 600;
+  font-size: 22px;
+  color: var(--accent);
+  letter-spacing: -0.01em;
+}
+.landing .diff-row .v {
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--ink-soft);
 }
 
-/* ====================  METHODOLOGY  ==================== */
-.landing .method-wrap {
+/* ====================  PRODUCT DEMO NARRATIVE  ==================== */
+.landing .demo-wrap {
   background: var(--ink);
   color: var(--paper);
   margin: 0;
@@ -782,171 +637,382 @@
   border-bottom: 1px solid var(--rule);
   position: relative;
 }
-.landing .method-wrap .wrap {
-  color: var(--paper);
-}
-.landing .method-wrap .sec-num {
+.landing .demo-wrap .sec-num {
   color: var(--paper);
   opacity: 0.85;
 }
-.landing .method-wrap .sec-num small {
+.landing .demo-wrap .sec-num small {
   color: #b5a896;
 }
-.landing .method-wrap .sec-title {
+.landing .demo-wrap .sec-title {
   color: var(--paper);
 }
-.landing .method-wrap .sec-title em {
+.landing .demo-wrap .sec-title em {
   color: var(--highlight);
 }
-.landing .method-wrap .sec-lede {
+.landing .demo-wrap .sec-lede {
   color: #d4ccbb;
 }
-.landing .method-wrap .section-label {
+.landing .demo-wrap .section-label {
   color: var(--highlight);
 }
-.landing .method-wrap .section-label::before {
+.landing .demo-wrap .section-label::before {
   background: var(--highlight);
 }
 
-.landing .procedure {
+.landing .demo-steps {
+  list-style: none;
+  margin: 48px 0 0;
+  padding: 0;
+  counter-reset: demo;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  margin-top: 48px;
-  position: relative;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border-top: 1px solid rgba(241, 235, 222, 0.18);
+  border-left: 1px solid rgba(241, 235, 222, 0.18);
 }
-.landing .proc {
-  padding: 32px 24px 32px 0;
-  border-left: 1px solid rgba(241, 235, 222, 0.2);
-  padding-left: 24px;
-  position: relative;
+.landing .demo-step {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 20px;
+  padding: 32px 32px;
+  border-right: 1px solid rgba(241, 235, 222, 0.18);
+  border-bottom: 1px solid rgba(241, 235, 222, 0.18);
 }
-.landing .proc:first-child {
-  border-left: none;
-  padding-left: 0;
+/* The 7th step spans both columns so the grid stays balanced. */
+.landing .demo-step:last-child {
+  grid-column: 1 / -1;
 }
-.landing .proc::before {
-  content: "";
-  position: absolute;
-  left: -4px;
-  top: 32px;
-  width: 7px;
-  height: 7px;
-  background: var(--highlight);
-  border-radius: 50%;
-}
-.landing .proc:first-child::before {
-  left: -4px;
-}
-
-.landing .proc .proc-step {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
-  color: var(--highlight);
-  letter-spacing: 0.2em;
-  margin-bottom: 28px;
-  text-transform: uppercase;
-}
-.landing .proc h4 {
+.landing .demo-step .ds-num {
   font-family: "Fraunces", serif;
   font-style: italic;
-  font-weight: 400;
-  font-size: 38px;
-  margin: 0 0 16px;
-  letter-spacing: -0.01em;
-  color: var(--paper);
+  font-weight: 300;
+  font-size: 48px;
+  line-height: 0.9;
+  color: var(--highlight);
   font-variation-settings: "SOFT" 100;
 }
-.landing .proc p {
-  font-size: 15.5px;
-  color: #d4ccbb;
-  margin: 0;
-  line-height: 1.55;
+.landing .demo-step .ds-body h4 {
+  font-family: "Fraunces", serif;
+  font-weight: 600;
+  font-size: 21px;
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+  color: var(--paper);
 }
-
-.landing .method-trace {
-  margin-top: 72px;
-  padding-top: 32px;
-  border-top: 1px dashed rgba(241, 235, 222, 0.2);
+.landing .demo-step .ds-body p {
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: #d4ccbb;
+}
+.landing .ds-visual {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.landing .ds-visual .chip {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 5px 10px;
+  border: 1px dashed rgba(241, 235, 222, 0.35);
+  color: #d4ccbb;
+}
+.landing .node-chip {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 6px 12px;
+  border: 1px solid rgba(241, 235, 222, 0.3);
+  color: #d4ccbb;
+  border-radius: 999px;
+}
+.landing .node-chip.on,
+.landing .node-chip.selected {
+  border-color: var(--highlight);
+  color: var(--ink);
+  background: var(--highlight);
+}
+.landing .node-chip .tick {
+  margin-left: 8px;
+  font-style: normal;
+  opacity: 0.8;
+}
+.landing .ds-draft {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.landing .draft-tag {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--highlight);
+  border: 1px solid var(--highlight);
+  padding: 3px 8px;
+}
+.landing .draft-name {
+  font-family: "Fraunces", serif;
+  font-style: italic;
+  font-size: 18px;
+  color: var(--paper);
+}
+.landing .socratic-q {
+  font-family: "Newsreader", Georgia, serif;
+  font-style: italic;
+  font-size: 16px;
+  color: var(--paper);
+  border-left: 2px solid var(--highlight);
+  padding: 4px 0 4px 16px;
+}
+.landing .explain-box {
+  width: 100%;
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
   color: #b5a896;
-  text-align: center;
-  letter-spacing: 0.05em;
+  border: 1px solid rgba(241, 235, 222, 0.3);
+  padding: 12px 14px;
 }
-.landing .method-trace span {
+.landing .explain-box .caret,
+.landing .cc-answerbox .caret {
   color: var(--highlight);
+  margin-right: 8px;
+  font-weight: 700;
+}
+.landing .sched-pill {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 5px 12px;
+  border: 1px solid rgba(241, 235, 222, 0.3);
+  color: #d4ccbb;
+}
+.landing .sched-pill:first-child {
+  border-color: var(--highlight);
+  color: var(--ink);
+  background: var(--highlight);
 }
 
-/* ====================  EMPIRICAL  ==================== */
-.landing .principles {
+/* ====================  LIVING CONCEPTS  ==================== */
+.landing .lc-layout {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 64px;
+  align-items: start;
+}
+.landing .concept-card {
+  border: 1px solid var(--rule);
+  background: var(--paper-2);
+  padding: 32px 36px 36px;
+  box-shadow: 10px 10px 0 var(--rule);
+  position: relative;
+}
+.landing .cc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--rule-soft);
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+}
+.landing .cc-kind {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ink-muted);
+}
+.landing .cc-state {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 3px 8px;
+}
+.landing .cc-title {
+  font-family: "Fraunces", serif;
+  font-weight: 600;
+  font-size: 30px;
+  letter-spacing: -0.015em;
+  margin: 0 0 18px;
+}
+.landing .cc-voice {
+  font-family: "Newsreader", Georgia, serif;
+  font-style: italic;
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin: 0 0 24px;
+  padding-left: 20px;
+  border-left: 3px solid var(--accent);
+}
+.landing .cc-socratic {
+  border-top: 1px dashed var(--rule-soft);
+  padding-top: 20px;
+}
+.landing .cc-socratic-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+}
+.landing .cc-socratic p {
+  font-family: "Fraunces", serif;
+  font-weight: 500;
+  font-size: 19px;
+  line-height: 1.35;
+  margin: 10px 0 16px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.landing .cc-answerbox {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--ink-muted);
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  padding: 12px 14px;
+}
+.landing .cc-answerbox .caret {
+  color: var(--accent);
+}
+.landing .lc-aside .lc-lead {
+  font-family: "Newsreader", Georgia, serif;
+  font-style: italic;
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin: 0 0 20px;
+}
+.landing .lc-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.landing .lc-examples .node-chip {
+  border-color: var(--rule);
+  color: var(--ink-soft);
+  background: var(--paper);
+}
+.landing .lc-note {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  padding-top: 22px;
+  border-top: 1px solid var(--rule-soft);
+  margin: 0;
+}
+.landing .lc-note strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ====================  PROOF OF LEARNING  ==================== */
+.landing .proof-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 0;
-  margin-top: 48px;
   border: 1px solid var(--rule);
+  margin-bottom: 48px;
 }
-.landing .principle {
-  padding: 36px 32px;
+.landing .proof-item {
+  padding: 36px 28px;
   border-right: 1px solid var(--rule);
-  position: relative;
   background: var(--paper-2);
 }
-.landing .principle:last-child {
+.landing .proof-item:last-child {
   border-right: none;
 }
-.landing .principle .p-num {
+.landing .proof-item .pf-num {
   font-family: "Fraunces", serif;
   font-style: italic;
   font-weight: 200;
-  font-size: 64px;
+  font-size: 56px;
   line-height: 1;
   color: var(--accent);
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   font-variation-settings: "SOFT" 100;
 }
-.landing .principle h4 {
+.landing .proof-item h4 {
   font-family: "Fraunces", serif;
   font-weight: 600;
   font-size: 21px;
   margin: 0 0 10px;
   letter-spacing: -0.01em;
 }
-.landing .principle p {
+.landing .proof-item p {
   font-size: 15px;
+  line-height: 1.5;
   color: var(--ink-soft);
   margin: 0;
-  line-height: 1.5;
 }
-.landing .principle .ref {
-  margin-top: 16px;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 10px;
-  color: var(--ink-muted);
-  letter-spacing: 0.08em;
+.landing .proof-statement {
+  border-top: 3px double var(--rule);
+  border-bottom: 3px double var(--rule);
+  padding: 36px 0;
 }
-
-.landing .footnotes {
-  margin-top: 56px;
-  padding-top: 24px;
-  border-top: 1px solid var(--rule-soft);
-  font-size: 13.5px;
-  color: var(--ink-muted);
-  columns: 2;
-  column-gap: 48px;
-  line-height: 1.5;
+.landing .proof-statement p {
+  font-family: "Fraunces", serif;
+  font-size: clamp(22px, 2.6vw, 30px);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--ink);
 }
-.landing .footnotes p {
-  margin: 0 0 12px;
-  break-inside: avoid;
-}
-.landing .footnotes sup {
+.landing .proof-statement strong {
   color: var(--accent);
-  font-weight: 600;
-  margin-right: 4px;
+  font-weight: 700;
 }
 
-/* ====================  CTA / SUBMISSION  ==================== */
-.landing .submission {
+/* ====================  BENEFITS  ==================== */
+.landing .benefit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid var(--rule);
+  border-left: 1px solid var(--rule);
+}
+.landing .benefit {
+  padding: 36px 32px;
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  transition: background 0.2s;
+}
+.landing .benefit:hover {
+  background: var(--paper-2);
+}
+.landing .benefit .b-mono {
+  font-family: "Fraunces", serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 32px;
+  line-height: 1;
+  color: var(--accent);
+  margin-bottom: 16px;
+  font-variation-settings: "SOFT" 100;
+}
+.landing .benefit h4 {
+  font-family: "Fraunces", serif;
+  font-weight: 600;
+  font-size: 22px;
+  margin: 0 0 10px;
+  letter-spacing: -0.01em;
+}
+.landing .benefit p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* ====================  CTA / FINAL  ==================== */
+.landing .cta-section {
   padding: 120px 0;
   text-align: center;
   background:
@@ -960,79 +1026,95 @@
     var(--paper);
   border-bottom: 1px solid var(--rule);
 }
-.landing .submission .stamp-frame {
+.landing .cta-section .stamp-frame {
   max-width: 760px;
   margin: 0 auto;
   border: 2px solid var(--ink);
   padding: 64px 56px;
-  background: var(--paper-2);
+  background: var(--ink);
+  color: var(--paper);
   position: relative;
   box-shadow: 12px 12px 0 var(--accent);
 }
-.landing .submission .stamp-corner {
+.landing .cta-section .stamp-corner {
   position: absolute;
   width: 80px;
   height: 80px;
-  border: 1px solid var(--rule);
+  border: 1px solid rgba(241, 235, 222, 0.35);
 }
-.landing .submission .stamp-corner.tl {
+.landing .cta-section .stamp-corner.tl {
   top: 12px;
   left: 12px;
   border-right: none;
   border-bottom: none;
 }
-.landing .submission .stamp-corner.tr {
+.landing .cta-section .stamp-corner.tr {
   top: 12px;
   right: 12px;
   border-left: none;
   border-bottom: none;
 }
-.landing .submission .stamp-corner.bl {
+.landing .cta-section .stamp-corner.bl {
   bottom: 12px;
   left: 12px;
   border-right: none;
   border-top: none;
 }
-.landing .submission .stamp-corner.br {
+.landing .cta-section .stamp-corner.br {
   bottom: 12px;
   right: 12px;
   border-left: none;
   border-top: none;
+}
+.landing .cta-section .section-label {
+  color: var(--highlight);
+}
+.landing .cta-section .section-label::before {
+  background: var(--highlight);
 }
 
-.landing .submission h2 {
+.landing .cta-section h2 {
   font-family: "Fraunces", serif;
   font-weight: 500;
-  font-size: clamp(40px, 5.5vw, 76px);
+  font-size: clamp(36px, 5vw, 64px);
   line-height: 0.98;
   letter-spacing: -0.03em;
   margin: 0 0 24px;
+  color: var(--paper);
   font-variation-settings:
     "SOFT" 50,
     "opsz" 144;
 }
-.landing .submission h2 em {
+.landing .cta-section h2 em {
   font-style: italic;
-  color: var(--accent);
+  color: var(--highlight);
   font-variation-settings: "SOFT" 100;
 }
-.landing .submission p {
+.landing .cta-section p {
   font-size: 19px;
-  color: var(--ink-soft);
+  color: #d4ccbb;
   line-height: 1.5;
   max-width: 540px;
-  margin: 0 auto 36px;
+  margin: 0 auto 32px;
   font-style: italic;
 }
-.landing .submission .cta-row {
+.landing .cta-section .cta-form {
+  display: flex;
   justify-content: center;
 }
-.landing .submission .meta {
-  margin-top: 40px;
+.landing .cta-section .cta-form .waitlist {
+  max-width: 520px;
+}
+.landing .cta-section .meta {
+  margin-top: 32px;
   font-family: "JetBrains Mono", monospace;
   font-size: 11px;
-  color: var(--ink-muted);
-  letter-spacing: 0.2em;
+  color: #b5a896;
+  letter-spacing: 0.16em;
+}
+.landing .cta-section .meta a {
+  color: var(--highlight);
+  border-bottom-color: var(--highlight);
 }
 
 /* ====================  COLOPHON  ==================== */
@@ -1106,14 +1188,23 @@
 @media (max-width: 980px) {
   .landing .wrap,
   .landing .strip-inner,
-  .landing .masthead,
-  .landing nav.primary .nav-inner {
+  .landing .masthead {
     padding-left: 24px;
     padding-right: 24px;
   }
+  .landing nav.primary .nav-inner {
+    padding-left: 24px;
+    padding-right: 24px;
+    overflow-x: auto;
+    justify-content: flex-start;
+    /* hide scrollbar track but keep scrollability */
+    scrollbar-width: none;
+  }
+  .landing nav.primary .nav-inner::-webkit-scrollbar {
+    display: none;
+  }
   .landing .hero-grid,
-  .landing .gate-grid,
-  .landing .sov-grid {
+  .landing .lc-layout {
     grid-template-columns: 1fr;
     gap: 48px;
   }
@@ -1124,23 +1215,22 @@
   .landing .sec-num {
     font-size: 80px;
   }
-  .landing .feature-grid {
+  .landing .problem-grid,
+  .landing .benefit-grid {
     grid-template-columns: 1fr 1fr;
   }
-  .landing .procedure {
+  .landing .proof-grid {
     grid-template-columns: 1fr 1fr;
   }
-  .landing .principles {
-    grid-template-columns: 1fr 1fr;
-  }
-  .landing .citations {
-    grid-template-columns: 1fr 1fr;
+  .landing .proof-item:nth-child(2) {
+    border-right: none;
   }
   .landing .colophon-grid {
     grid-template-columns: 1fr 1fr;
   }
-  .landing .footnotes {
-    columns: 1;
+  .landing .diff-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }
 @media (max-width: 600px) {
@@ -1158,54 +1248,85 @@
   .landing .masthead-meta {
     font-size: 9px;
   }
+  .landing .masthead {
+    padding: 10px 20px 8px;
+  }
+  .landing .masthead .title {
+    font-size: clamp(36px, 11vw, 56px);
+  }
+  .landing .masthead .subtitle {
+    font-size: 15px;
+    margin-top: 8px;
+  }
+  .landing .masthead-meta {
+    margin-top: 8px;
+    padding-top: 6px;
+  }
+  .landing .hero {
+    padding: 28px 0 48px;
+  }
+  .landing .hero h1 {
+    font-size: clamp(34px, 9vw, 52px);
+    margin-bottom: 14px;
+  }
+  .landing .hero-lede {
+    font-size: 17px;
+    margin-bottom: 18px;
+  }
   .landing nav.primary .nav-inner {
-    gap: 18px;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    gap: 20px;
+    padding: 10px 20px;
     overflow-x: auto;
+    justify-content: flex-start;
+    scrollbar-width: none;
+  }
+  .landing nav.primary .nav-inner::-webkit-scrollbar {
+    display: none;
   }
   .landing nav.primary a {
     white-space: nowrap;
     font-size: 10px;
+    flex-shrink: 0;
   }
-  .landing .feature-grid {
+  .landing .problem-grid,
+  .landing .benefit-grid {
     grid-template-columns: 1fr;
   }
-  .landing .procedure {
+  .landing .proof-grid {
     grid-template-columns: 1fr;
   }
-  .landing .principles {
-    grid-template-columns: 1fr;
-  }
-  .landing .citations {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  .landing .cite {
+  .landing .proof-item {
     border-right: none;
-    border-bottom: 1px solid var(--rule-soft);
-    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .landing .proof-item:last-child {
+    border-bottom: none;
+  }
+  .landing .demo-steps {
+    grid-template-columns: 1fr;
   }
   .landing .colophon-grid {
     grid-template-columns: 1fr;
   }
-  .landing .submission .stamp-frame {
+  .landing .cta-section .stamp-frame {
     padding: 40px 28px;
-  }
-  .landing .pullquote p {
-    font-size: 26px;
   }
   .landing .abstract {
     padding: 28px 24px;
     box-shadow: 6px 6px 0 var(--rule);
   }
-  .landing .policy-card {
+  .landing .concept-card {
     padding: 28px 24px;
     box-shadow: 6px 6px 0 var(--rule);
   }
-  .landing .gate-svg-wrap {
-    padding: 20px;
-    box-shadow: 6px 6px 0 var(--rule);
+  .landing .waitlist-row {
+    flex-direction: column;
+  }
+  .landing .waitlist input {
+    flex: 0 0 auto;
+  }
+  .landing .waitlist .btn-primary {
+    justify-content: center;
   }
 }
 

@@ -1144,7 +1144,18 @@ export interface TransformedArticle {
   error: string | null
 }
 
+// Mirrors the server DTO allowlist (WAITLIST_SOURCES) — add new values there first.
+export type WaitlistSource = 'landing-hero' | 'landing-footer'
+
 export const api = {
+  // --- Waitlist (DET-270): public, no auth — a visitor's request() simply has
+  // no token. Idempotent server-side on duplicate email (no enumeration).
+  joinWaitlist: (input: { email: string; source?: WaitlistSource }) =>
+    request<{ ok: boolean }>('/waitlist', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   register: (input: { email: string; password: string; name?: string }) =>
     request<AuthResponse>('/auth/register', {
       method: 'POST',
