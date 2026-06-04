@@ -276,14 +276,37 @@ export interface ArticleSectionV2 {
 
 /* --- Forward-reserved top-level v2 fields (typed now; producers land later) --- */
 
-/** A reading-aid entry (DET-274): TOC node, source highlight, or reading time. */
+/**
+ * One table-of-contents entry (DET-274), derived deterministically from the
+ * final article heading hierarchy. `children` carries one level of nesting
+ * (subsections → H3); there is never a second level. `headingSource` mirrors the
+ * section's heading provenance so the renderer can mark inferred headings.
+ */
+export interface TocEntry {
+  sectionId: string
+  heading: string
+  headingSource: HeadingSourceV2
+  children?: {
+    sectionId: string
+    heading: string
+    headingSource: HeadingSourceV2
+  }[]
+}
+
+/**
+ * Reading aids (DET-274) — deterministic, NO LLM. `toc` and `readingTime` are
+ * always present; `highlights` is omitted entirely when no verbatim/lightly-
+ * cleaned source claim survives selection (the fidelity checker independently
+ * blocks unsupported ones). Every highlight is a preserved, source-grounded
+ * fragment with non-empty `sourceBlockIds` — never newly written.
+ */
 export interface ArticleReadingAids {
-  /** Flat or nested table-of-contents derived from the heading hierarchy. */
-  toc?: { sectionId: string; heading: string; level: number }[]
-  /** Estimated reading time of the article body, in minutes. */
-  readingTimeMinutes?: number
-  /** Source-grounded highlights, each traceable. */
-  sourceHighlights?: { text: string; sourceBlockIds: string[] }[]
+  /** Nested table-of-contents (one level) from the heading hierarchy. */
+  toc: TocEntry[]
+  /** Article-body reading time: word count + minutes (220 wpm, min 1). */
+  readingTime: { wordCount: number; minutes: number }
+  /** Source-grounded highlights, each traceable. Omitted when none are safe. */
+  highlights?: { text: string; sourceBlockIds: string[] }[]
 }
 
 /**

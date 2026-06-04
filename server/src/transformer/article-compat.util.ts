@@ -129,8 +129,7 @@ export function collectArticleSourceBlockIds(
   for (const e of article.sourceExamples) add(e.sourceBlockIds)
   for (const c of article.caveats) add(c.sourceBlockIds)
 
-  for (const h of article.readingAids?.sourceHighlights ?? [])
-    add(h.sourceBlockIds)
+  for (const h of article.readingAids?.highlights ?? []) add(h.sourceBlockIds)
 
   return ids
 }

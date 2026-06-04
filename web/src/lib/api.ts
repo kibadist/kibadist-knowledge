@@ -1125,10 +1125,21 @@ export interface ArticleSectionV2 {
   subsections?: ArticleSectionV2[]
 }
 
+export interface TocEntry {
+  sectionId: string
+  heading: string
+  headingSource: HeadingSourceV2
+  children?: {
+    sectionId: string
+    heading: string
+    headingSource: HeadingSourceV2
+  }[]
+}
+
 export interface ArticleReadingAids {
-  toc?: { sectionId: string; heading: string; level: number }[]
-  readingTimeMinutes?: number
-  sourceHighlights?: { text: string; sourceBlockIds: string[] }[]
+  toc: TocEntry[]
+  readingTime: { wordCount: number; minutes: number }
+  highlights?: { text: string; sourceBlockIds: string[] }[]
 }
 
 export interface ArticleCallout {

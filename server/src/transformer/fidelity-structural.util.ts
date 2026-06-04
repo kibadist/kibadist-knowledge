@@ -148,8 +148,8 @@ export function checkFullTraceability(
     checkIds(c.sourceBlockIds, `caveat #${i}`, `caveat-${i}`),
   )
 
-  // Forward-compat (W7): reading-aid highlights must be traceable too.
-  article.readingAids?.sourceHighlights?.forEach((h, i) =>
+  // Reading-aid highlights (W7) must be traceable too.
+  article.readingAids?.highlights?.forEach((h, i) =>
     checkIds(h.sourceBlockIds, `readingAids highlight #${i}`, `highlight-${i}`),
   )
 
@@ -380,7 +380,7 @@ export function checkUnsupportedHighlights(
 ): FidelityFinding[] {
   const article = toArticleV2(input)
   const findings: FidelityFinding[] = []
-  article.readingAids?.sourceHighlights?.forEach((h, i) => {
+  article.readingAids?.highlights?.forEach((h, i) => {
     if (h.sourceBlockIds.length === 0) {
       findings.push({
         severity: 'high',

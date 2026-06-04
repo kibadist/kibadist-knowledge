@@ -15,11 +15,13 @@ import {
   type ArticleParagraph,
   type ArticleParagraphBlock,
   type ArticleQuoteBlock,
+  type ArticleReadingAids,
   type ArticleSectionV2,
   type ArticleTableBlock,
   api,
   type IllustrationPlan,
   type IllustrationSuggestion,
+  type TocEntry,
 } from '@/lib/api'
 import { fidelityRiskChip } from '@/lib/transformer-format'
 import { placeIllustrations } from './illustration-placement'
@@ -101,6 +103,14 @@ export function ArticleView({
     Object.values(callouts.bySection).some((cs) => cs.length > 0) ||
     callouts.unplaced.length > 0
 
+  // Reading aids (DET-274): deterministic TOC + reading time + source-grounded
+  // highlights, computed server-side and attached to `readingAids`. Old articles
+  // generated before this wave have no aids — every consumer is guarded so the
+  // renderer never crashes and simply omits the affordance when absent.
+  const readingAids = article.readingAids
+  const toc = readingAids?.toc ?? []
+  const highlights = readingAids?.highlights ?? []
+
   return (
     <article className='tf-article'>
       {/* ---- Masthead rule: kicker left, demoted chips right ---- */}
@@ -108,6 +118,13 @@ export function ArticleView({
         <span className='tf-masthead-kicker'>Source-preserving transform</span>
         <div className='tf-masthead-chips'>{masthead}</div>
       </div>
+
+      {/* ---- Table of contents (DET-274) ----
+          A sticky rail in the left gutter on wide screens, a collapsible
+          <details> block above the article on narrow screens. Anchors link to a
+          section's stable DOM id (#section-id); subsection children are indented
+          one level. Omitted entirely when there are no headings. */}
+      {toc.length > 0 && <TableOfContents toc={toc} />}
 
       {/* ---- Hero ---- */}
       <header className='tf-hero'>
@@ -126,6 +143,14 @@ export function ArticleView({
                 {sourceBlockCount} source block
                 {sourceBlockCount === 1 ? '' : 's'}
               </span>
+            </>
+          )}
+          {readingAids && (
+            <>
+              <span className='tf-byline-dot' aria-hidden='true'>
+                ·
+              </span>
+              <span>{readingAids.readingTime.minutes} min read</span>
             </>
           )}
         </div>
@@ -154,6 +179,15 @@ export function ArticleView({
             />
           ))}
         </section>
+      )}
+
+      {/* ---- Source Highlights (DET-274) ----
+          An editorial box near the hero. Each highlight is a preserved,
+          source-grounded fragment (verbatim claim or lightly-cleaned leading
+          sentence) — clicking opens the source inspector with its sourceBlockIds.
+          Omitted entirely when no safe highlight survived selection. */}
+      {highlights.length > 0 && (
+        <SourceHighlights highlights={highlights} onInspect={onInspect} />
       )}
 
       {article.sections.map((section, i) => {
@@ -222,6 +256,85 @@ export function ArticleView({
         />
       )}
     </article>
+  )
+}
+
+/**
+ * The table of contents (DET-274). Rendered as a `<details>` element so it is a
+ * collapsible block on narrow screens out of the box; CSS pins it as a sticky
+ * rail in the left gutter on wide screens. Anchors link to each section's stable
+ * DOM id (#section-id); one level of subsection children is indented. Open by
+ * default so the rail reads as a standing nav on wide screens.
+ */
+function TableOfContents({ toc }: { toc: TocEntry[] }) {
+  return (
+    <details className='tf-toc' open>
+      <summary className='tf-toc-summary'>Contents</summary>
+      <nav className='tf-toc-nav' aria-label='Table of contents'>
+        <ol className='tf-toc-list'>
+          {toc.map((entry) => (
+            <li key={entry.sectionId} className='tf-toc-item'>
+              <a className='tf-toc-link' href={`#${entry.sectionId}`}>
+                {entry.heading}
+              </a>
+              {entry.children && entry.children.length > 0 && (
+                <ol className='tf-toc-list tf-toc-list--nested'>
+                  {entry.children.map((child) => (
+                    <li key={child.sectionId} className='tf-toc-item'>
+                      <a
+                        className='tf-toc-link tf-toc-link--child'
+                        href={`#${child.sectionId}`}
+                      >
+                        {child.heading}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </li>
+          ))}
+        </ol>
+      </nav>
+    </details>
+  )
+}
+
+/**
+ * The Source Highlights box (DET-274) near the hero. Each highlight is a
+ * source-grounded preserved fragment; clicking opens the source inspector with
+ * the highlight's own sourceBlockIds. Highlights always carry non-empty ids (the
+ * server omits unsafe ones), so every row is clickable.
+ */
+function SourceHighlights({
+  highlights,
+  onInspect,
+}: {
+  highlights: NonNullable<ArticleReadingAids['highlights']>
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  return (
+    <section className='tf-highlights' aria-label='Source Highlights'>
+      <h2 className='tf-highlights-label'>Source Highlights</h2>
+      <ul className='tf-highlights-list'>
+        {highlights.map((h, i) => (
+          <li key={`${i}-${h.sourceBlockIds.join('-')}`}>
+            <button
+              type='button'
+              className='tf-highlight'
+              onClick={() =>
+                onInspect({
+                  kind: 'Source highlight',
+                  transformedText: h.text,
+                  sourceBlockIds: h.sourceBlockIds,
+                })
+              }
+            >
+              {h.text}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 

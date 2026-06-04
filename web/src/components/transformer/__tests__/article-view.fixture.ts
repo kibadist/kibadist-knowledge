@@ -153,6 +153,32 @@ export const fixtureArticle: ArticleJsonV2 = {
   sourceExamples: [],
   caveats: [],
   originalStructure: [],
+  // Reading aids (DET-274). In production the SERVER computes these
+  // deterministically; the web test includes them so the renderer's TOC (with a
+  // nested child), reading-time byline, and Source Highlights paths are covered.
+  readingAids: {
+    toc: [
+      {
+        sectionId: 's1',
+        heading: 'All blocks',
+        headingSource: 'original',
+        children: [
+          {
+            sectionId: 's1a',
+            heading: 'A nested subsection',
+            headingSource: 'original',
+          },
+        ],
+      },
+    ],
+    readingTime: { wordCount: 60, minutes: 5 },
+    highlights: [
+      {
+        text: 'A source-grounded highlight claim.',
+        sourceBlockIds: ['b2'],
+      },
+    ],
+  },
   // Inline callout placement (DET-272). In production the SERVER computes this
   // (deterministic, no LLM) and attaches it; the web test just includes it in
   // the fixture so the renderer's margin-note / index / unplaced paths are
@@ -179,4 +205,15 @@ export const fixtureArticle: ArticleJsonV2 = {
       },
     ],
   },
+}
+
+/**
+ * A pre-wave v2 article with NO `readingAids` (and an absent `highlights` is
+ * implied by the missing aids). Mirrors a legacy/old article that the server's
+ * read-time adapter could not enrich — the renderer must not crash and must omit
+ * the TOC, the reading-time byline segment, and the Source Highlights box.
+ */
+export const fixtureArticleNoAids: ArticleJsonV2 = {
+  ...fixtureArticle,
+  readingAids: undefined,
 }

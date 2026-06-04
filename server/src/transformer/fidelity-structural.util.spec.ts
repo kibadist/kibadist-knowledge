@@ -84,7 +84,9 @@ describe('checkFullTraceability', () => {
   it('flags an unknown reading-aid highlight id', () => {
     const a = article([para('p1', 'x', ['b2'])], {
       readingAids: {
-        sourceHighlights: [{ text: 'h', sourceBlockIds: ['ghost'] }],
+        toc: [{ sectionId: 's1', heading: 'H', headingSource: 'original' }],
+        readingTime: { wordCount: 1, minutes: 1 },
+        highlights: [{ text: 'h', sourceBlockIds: ['ghost'] }],
       },
     })
     const res = checkFullTraceability(a, known)
@@ -103,7 +105,11 @@ describe('checkUnsupportedHighlights', () => {
 
   it('flags an empty-id highlight as high severity', () => {
     const a = article([para('p1', 'x', ['b2'])], {
-      readingAids: { sourceHighlights: [{ text: 'h', sourceBlockIds: [] }] },
+      readingAids: {
+        toc: [{ sectionId: 's1', heading: 'H', headingSource: 'original' }],
+        readingTime: { wordCount: 1, minutes: 1 },
+        highlights: [{ text: 'h', sourceBlockIds: [] }],
+      },
     })
     const out = checkUnsupportedHighlights(a, known)
     expect(out).toHaveLength(1)
@@ -113,7 +119,9 @@ describe('checkUnsupportedHighlights', () => {
   it('flags an unknown-id highlight as high severity', () => {
     const a = article([para('p1', 'x', ['b2'])], {
       readingAids: {
-        sourceHighlights: [{ text: 'h', sourceBlockIds: ['ghost'] }],
+        toc: [{ sectionId: 's1', heading: 'H', headingSource: 'original' }],
+        readingTime: { wordCount: 1, minutes: 1 },
+        highlights: [{ text: 'h', sourceBlockIds: ['ghost'] }],
       },
     })
     const out = checkUnsupportedHighlights(a, known)

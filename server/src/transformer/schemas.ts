@@ -338,18 +338,22 @@ const articleSectionV2: z.ZodType<ArticleSectionV2> = z.lazy(() =>
   }),
 )
 
+// One TOC entry (DET-274): a section heading + provenance, with one optional
+// level of child entries (subsections). Highlights are preserved source claims
+// with non-empty sourceBlockIds; the array is OMITTED when none survive (so an
+// empty highlights array is not produced — but if present, each entry is real).
+const tocChild = z.object({
+  sectionId: z.string().min(1),
+  heading: z.string().min(1),
+  headingSource: headingSourceV2,
+})
 const readingAids = z.object({
-  toc: z
-    .array(
-      z.object({
-        sectionId: z.string().min(1),
-        heading: z.string().min(1),
-        level: z.number(),
-      }),
-    )
-    .optional(),
-  readingTimeMinutes: z.number().optional(),
-  sourceHighlights: z
+  toc: z.array(tocChild.extend({ children: z.array(tocChild).optional() })),
+  readingTime: z.object({
+    wordCount: z.number().int().min(0),
+    minutes: z.number().int().min(1),
+  }),
+  highlights: z
     .array(z.object({ text: z.string().min(1), sourceBlockIds }))
     .optional(),
 })

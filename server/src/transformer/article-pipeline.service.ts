@@ -11,6 +11,7 @@ import { buildCoverageReport, type CoverageBlock } from './coverage.util'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { buildReadingAids } from './reading-aids.util'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import type {
   IllustrationPlan,
@@ -148,9 +149,18 @@ export class ArticlePipelineService {
     // LLM): place the end-matter (keyTerms/examples/caveats) against the sections
     // by source-block overlap and attach it to the stored artifact. The top-level
     // arrays remain the single source of truth — these are placement REFERENCES.
-    const article: ArticleJsonV2 = {
+    const withCallouts: ArticleJsonV2 = {
       ...generated,
       calloutPlacements: placeCallouts(generated),
+    }
+    // Reading aids (DET-274) are deterministic too (TOC + reading time +
+    // source-grounded highlights drawn from the structure model's preserved
+    // claims). They are attached HERE, before the fidelity check runs, so the
+    // checker validates the highlights as traceable fragments on the enriched
+    // artifact.
+    const article: ArticleJsonV2 = {
+      ...withCallouts,
+      readingAids: buildReadingAids(withCallouts, structureModel),
     }
     await this.persist(articleId, {
       articleJson: article as unknown as Prisma.InputJsonValue,

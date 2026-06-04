@@ -98,7 +98,21 @@ function makeServices(overrides: {
   fidelity?: Partial<FidelityCheckerService>
 }) {
   const structure = {
-    build: jest.fn(async () => ({})),
+    // A minimal valid structure model: one preserved claim grounded in b1, which
+    // the article represents — so reading-aids highlight selection (DET-274) can
+    // pick it deterministically.
+    build: jest.fn(async () => ({
+      title: null,
+      subtitle: null,
+      claims: [{ text: 'A claim', sourceBlockIds: ['b1'] }],
+      definitions: [],
+      examples: [],
+      caveats: [],
+      terminology: [],
+      originalOutline: [],
+      noiseDecisions: [],
+      uncertainBlockIds: [],
+    })),
     ...overrides.structure,
   } as unknown as StructureModelService
   const plan = {
@@ -156,6 +170,25 @@ describe('ArticlePipelineService.run', () => {
       id: 'co-caveat-0',
     })
     expect(stored.calloutPlacements?.unplaced).toEqual([])
+
+    // Reading aids (DET-274) are computed in code and attached to the stored
+    // articleJson: TOC from the heading hierarchy, reading time, and a
+    // source-grounded highlight selected from the structure model's claims.
+    expect(stored.readingAids).toBeDefined()
+    expect(stored.readingAids?.toc).toEqual([
+      { sectionId: 's1', heading: 'Only section', headingSource: 'original' },
+    ])
+    expect(stored.readingAids?.readingTime.minutes).toBeGreaterThanOrEqual(1)
+    expect(stored.readingAids?.highlights).toEqual([
+      { text: 'A claim', sourceBlockIds: ['b1'] },
+    ])
+
+    // The fidelity checker received the ENRICHED artifact (callouts + reading
+    // aids attached) so it can validate the highlights as traceable fragments.
+    const checkMock = s.fidelity.check as unknown as jest.Mock
+    const checkArg = checkMock.mock.calls[0][0] as ArticleJsonV2
+    expect(checkArg.readingAids).toBeDefined()
+    expect(checkArg.calloutPlacements).toBeDefined()
   })
 
   it('ends BLOCKED when the fidelity gate rejects', async () => {

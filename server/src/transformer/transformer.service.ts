@@ -20,11 +20,13 @@ import { placeCallouts } from './callout-placement.util'
 import type { CreateTextSourceDto } from './dto/create-text-source.dto'
 import type { CreateUrlSourceDto } from './dto/create-url-source.dto'
 import { ARTICLE_IN_FLIGHT, PipelineService } from './pipeline.service'
+import { buildReadingAids } from './reading-aids.util'
 import type {
   IllustrationPlan,
   IllustrationSuggestion,
   LearningConcept,
   LearningLayer,
+  SourceStructureModel,
 } from './schemas'
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
@@ -44,6 +46,24 @@ import type {
 function withCalloutPlacements(article: ArticleJsonV2): ArticleJsonV2 {
   if (article.calloutPlacements) return article
   return { ...article, calloutPlacements: placeCallouts(article) }
+}
+
+/**
+ * Ensure a v2 article carries reading aids (DET-274). Pipeline-produced articles
+ * already have them; legacy v1 (post-adaptation) and pre-wave v2 articles do not
+ * — TOC + reading time + source-grounded highlights are deterministic, so we
+ * compute them at the read boundary rather than rewriting stored JSON. The stored
+ * structure model (when present) lets claims-based highlights work for old
+ * articles too. Existing reading aids are preserved (idempotent).
+ */
+function withReadingAids(
+  article: ArticleJsonV2,
+  structureModel: SourceStructureModel | null,
+): ArticleJsonV2 {
+  if (article.readingAids) return article
+  const readingAids = buildReadingAids(article, structureModel)
+  if (!readingAids) return article
+  return { ...article, readingAids }
 }
 
 /** A source as shown in the workspace list (status + latest article summary). */
@@ -359,7 +379,19 @@ export class TransformerService {
     // purpose (toArticleV2 must not invent placement); placement is layered on at
     // the read boundary, after adaptation. Native v2 articles produced by the
     // pipeline already carry `calloutPlacements`, so this is a no-op for them.
-    const adapted = stored ? withCalloutPlacements(toArticleV2(stored)) : null
+    //
+    // Reading aids (DET-274) are layered on the same way: pre-wave articles lack
+    // them, so we compute TOC + reading time + source-grounded highlights here.
+    // The stored structureModel lets claims-based highlights work for old
+    // articles too; native v2 articles already carry readingAids (no-op).
+    const structureModel =
+      (article.structureModel as SourceStructureModel | null) ?? null
+    const adapted = stored
+      ? withReadingAids(
+          withCalloutPlacements(toArticleV2(stored)),
+          structureModel,
+        )
+      : null
     return {
       id: article.id,
       sourceId: article.sourceId,

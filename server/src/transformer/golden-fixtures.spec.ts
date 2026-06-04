@@ -14,6 +14,7 @@ import {
 import { placeCallouts } from './callout-placement.util'
 import { buildCoverageReport } from './coverage.util'
 import { mergeDeterministicChecks } from './fidelity-checker.service'
+import { buildReadingAids } from './reading-aids.util'
 import { ArticleJsonV2Schema } from './schemas'
 import type { FidelityReport } from './transformer.types'
 
@@ -192,6 +193,58 @@ describe.each(
     expect(merged.lostInformation).toEqual([])
     expect(merged.unsupportedHeadings).toEqual([])
     expect(merged.approved).toBe(true)
+  })
+})
+
+describe('golden fixture: reading aids (DET-274)', () => {
+  it('builds deterministic, traceable reading aids over every v2 fixture', () => {
+    for (const { article, blocks } of v2Fixtures) {
+      const known = knownBlockIds(blocks)
+      // No structure model in the fixtures → exercises the leading-paragraph
+      // fallback (claims-based selection is covered in the unit spec).
+      const aids = buildReadingAids(article, null)
+      expect(aids).toBeDefined()
+      if (!aids) continue
+
+      // TOC mirrors the section hierarchy (top-level sections + one nesting).
+      expect(aids.toc.map((t) => t.sectionId)).toEqual(
+        article.sections.map((s) => s.id),
+      )
+      for (let i = 0; i < article.sections.length; i++) {
+        const subs = article.sections[i].subsections ?? []
+        if (subs.length > 0) {
+          expect(aids.toc[i].children?.map((c) => c.sectionId)).toEqual(
+            subs.map((s) => s.id),
+          )
+        }
+      }
+
+      // Reading time is positive minutes with a non-negative word count.
+      expect(aids.readingTime.minutes).toBeGreaterThanOrEqual(1)
+      expect(aids.readingTime.wordCount).toBeGreaterThanOrEqual(0)
+
+      // Highlights, when present, are traceable verbatim source fragments. This
+      // ties into checkUnsupportedHighlights: an enriched article must never
+      // carry an untraceable highlight.
+      for (const h of aids.highlights ?? []) {
+        expect(h.sourceBlockIds.length).toBeGreaterThan(0)
+        for (const id of h.sourceBlockIds) expect(known.has(id)).toBe(true)
+      }
+
+      // The enriched article (with computed aids) still has zero untraceable
+      // citations and the deterministic merge keeps approving it.
+      const enriched = { ...article, readingAids: aids }
+      expect(findUnknownSourceBlockIds(enriched, known)).toEqual([])
+      const merged = mergeDeterministicChecks(cleanReport(), enriched, known)
+      expect(merged.approved).toBe(true)
+    }
+  })
+
+  it('is deterministic and idempotent over a fixture', () => {
+    const { article } = caveatHeavy
+    expect(buildReadingAids(article, null)).toEqual(
+      buildReadingAids(article, null),
+    )
   })
 })
 

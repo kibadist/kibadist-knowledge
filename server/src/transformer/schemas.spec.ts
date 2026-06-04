@@ -219,9 +219,18 @@ describe('ArticleJsonV2Schema (DET-277)', () => {
       { blockId: 'b1', blockType: 'PARAGRAPH', preview: 'p' },
     ],
     readingAids: {
-      toc: [{ sectionId: 's1', heading: 'Original heading', level: 1 }],
-      readingTimeMinutes: 3,
-      sourceHighlights: [{ text: 'highlight', sourceBlockIds: ['b1'] }],
+      toc: [
+        {
+          sectionId: 's1',
+          heading: 'Original heading',
+          headingSource: 'original',
+          children: [
+            { sectionId: 's1a', heading: 'Nested', headingSource: 'original' },
+          ],
+        },
+      ],
+      readingTime: { wordCount: 120, minutes: 3 },
+      highlights: [{ text: 'highlight', sourceBlockIds: ['b1'] }],
     },
     calloutPlacements: {
       bySection: {
@@ -297,7 +306,15 @@ describe('ArticleJsonV2Schema (DET-277)', () => {
   it('rejects a source highlight with empty sourceBlockIds', () => {
     const broken = structuredClone(fullV2)
     broken.readingAids = {
-      sourceHighlights: [{ text: 'x', sourceBlockIds: [] }],
+      toc: [
+        {
+          sectionId: 's1',
+          heading: 'Original heading',
+          headingSource: 'original',
+        },
+      ],
+      readingTime: { wordCount: 10, minutes: 1 },
+      highlights: [{ text: 'x', sourceBlockIds: [] }],
     }
     expect(ArticleJsonV2Schema.safeParse(broken).success).toBe(false)
   })

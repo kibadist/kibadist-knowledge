@@ -4,9 +4,10 @@ import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { ArticleJsonV2 } from '@/lib/api'
 import { ArticleView } from '../article-view'
 import type { InspectorSelection } from '../source-inspector-panel'
-import { fixtureArticle } from './article-view.fixture'
+import { fixtureArticle, fixtureArticleNoAids } from './article-view.fixture'
 
 /**
  * Web renderer smoke tests (DET-279, decision 9). Render `ArticleView` against a
@@ -17,7 +18,10 @@ import { fixtureArticle } from './article-view.fixture'
  * renders the "missing source" chip and is NOT clickable.
  */
 
-function renderArticleView(onInspect: (s: InspectorSelection) => void) {
+function renderArticleView(
+  onInspect: (s: InspectorSelection) => void,
+  article: ArticleJsonV2 = fixtureArticle,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -26,7 +30,7 @@ function renderArticleView(onInspect: (s: InspectorSelection) => void) {
   )
   return render(
     <ArticleView
-      article={fixtureArticle}
+      article={article}
       articleId='art-1'
       illustrationPlan={null}
       sourceBlockCount={8}
@@ -286,5 +290,64 @@ describe('ArticleView (v2 renderer)', () => {
     const pullQuotes = container.querySelectorAll('.tf-pullquote')
     expect(pullQuotes).toHaveLength(1)
     expect(pullQuotes[0].textContent).toContain('A pulled excerpt.')
+  })
+
+  // --- DET-274: reading aids (TOC, reading time, source highlights) --------
+
+  it('renders the TOC with a top-level entry, a nested child and #section anchors', () => {
+    const { container } = renderArticleView(vi.fn())
+    const toc = container.querySelector('.tf-toc')
+    expect(toc).toBeInTheDocument()
+    // The top-level section entry links to its DOM id.
+    const links = toc?.querySelectorAll('a.tf-toc-link')
+    expect(links?.length).toBe(2)
+    const top = toc?.querySelector('a.tf-toc-link:not(.tf-toc-link--child)')
+    expect(top?.getAttribute('href')).toBe('#s1')
+    expect(top?.textContent).toBe('All blocks')
+    // The nested subsection renders as an indented child anchor.
+    const child = toc?.querySelector('a.tf-toc-link--child')
+    expect(child?.getAttribute('href')).toBe('#s1a')
+    expect(child?.textContent).toBe('A nested subsection')
+  })
+
+  it('shows the reading time in the hero byline', () => {
+    renderArticleView(vi.fn())
+    expect(screen.getByText('5 min read')).toBeInTheDocument()
+  })
+
+  it('renders the Source Highlights box and clicking a highlight fires onInspect', async () => {
+    const onInspect = vi.fn()
+    const { container } = renderArticleView(onInspect)
+    const box = container.querySelector('.tf-highlights')
+    expect(box).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Source Highlights' }),
+    ).toBeInTheDocument()
+
+    const user = userEvent.setup()
+    const highlight = box?.querySelector<HTMLButtonElement>(
+      'button.tf-highlight',
+    )
+    expect(highlight).not.toBeNull()
+    await user.click(highlight as HTMLButtonElement)
+    expect(onInspect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Source highlight',
+        transformedText: 'A source-grounded highlight claim.',
+        sourceBlockIds: ['b2'],
+      }),
+    )
+  })
+
+  it('omits TOC, reading time and Source Highlights when readingAids is absent (old article)', () => {
+    const { container } = renderArticleView(vi.fn(), fixtureArticleNoAids)
+    // No crash, and none of the DET-274 affordances render.
+    expect(container.querySelector('.tf-toc')).toBeNull()
+    expect(container.querySelector('.tf-highlights')).toBeNull()
+    expect(screen.queryByText(/min read/)).toBeNull()
+    // The article body still renders.
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Every block type' }),
+    ).toBeInTheDocument()
   })
 })

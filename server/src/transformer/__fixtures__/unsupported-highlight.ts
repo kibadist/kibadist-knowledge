@@ -4,7 +4,7 @@ import type { V2Fixture } from './index'
 
 /**
  * NEGATIVE fixture — unsupported-highlight. A valid v2 article whose
- * `readingAids.sourceHighlights` entry references a block id (`b999`) the source
+ * `readingAids.highlights` entry references a block id (`b999`) the source
  * does NOT contain. The shape is schema-valid (sourceBlockIds is non-empty), so
  * `ArticleJsonV2Schema.parse` SUCCEEDS — but the traceability walk
  * (`findUnknownSourceBlockIds`) flags `b999` as untraceable. The spec asserts
@@ -70,7 +70,15 @@ const article: ArticleJsonV2 = {
     },
   ],
   readingAids: {
-    sourceHighlights: [
+    toc: [
+      {
+        sectionId: 's1',
+        heading: 'TCP congestion control',
+        headingSource: 'original',
+      },
+    ],
+    readingTime: { wordCount: 9, minutes: 1 },
+    highlights: [
       {
         // b999 does not exist among the source blocks — an untraceable highlight.
         text: 'A highlight not grounded in any real source block.',

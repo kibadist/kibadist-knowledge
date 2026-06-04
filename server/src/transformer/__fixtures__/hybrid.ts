@@ -130,11 +130,11 @@ const article: ArticleJsonV2 = {
       {
         sectionId: 's1',
         heading: 'Setting up continuous deployment',
-        level: 1,
+        headingSource: 'original',
       },
     ],
-    readingTimeMinutes: 1,
-    sourceHighlights: [
+    readingTime: { wordCount: 40, minutes: 1 },
+    highlights: [
       {
         text: 'Continuous deployment ships every passing commit to production automatically.',
         sourceBlockIds: ['b2'],

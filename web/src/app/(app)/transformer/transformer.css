@@ -864,6 +864,134 @@
   margin-top: 26px;
 }
 
+/* ============================================================================
+   Reading aids (DET-274). A sticky table-of-contents rail in the LEFT gutter on
+   wide screens (the right gutter belongs to the callout rail), collapsing to a
+   <details> block above the article on narrow screens; a "Source Highlights"
+   editorial box near the hero; and the "min read" byline (no extra CSS). All on
+   light-only `.kbapp` tokens.
+   ============================================================================ */
+
+/* TOC — collapsible block by default (works at every width). */
+.kbapp .tf-toc {
+  margin: 0 0 30px;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: 12px 0;
+}
+.kbapp .tf-toc-summary {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+  cursor: pointer;
+  list-style: none;
+}
+.kbapp .tf-toc-summary::-webkit-details-marker {
+  display: none;
+}
+.kbapp .tf-toc-nav {
+  margin-top: 12px;
+}
+.kbapp .tf-toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kbapp .tf-toc-list--nested {
+  margin: 6px 0 4px;
+  padding-left: 16px;
+  border-left: 1px solid var(--rule-soft);
+}
+.kbapp .tf-toc-link {
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.kbapp .tf-toc-link:hover {
+  color: var(--accent);
+}
+.kbapp .tf-toc-link--child {
+  font-size: 14px;
+  color: var(--ink-faint);
+}
+
+/* Wide screens: pin the TOC as a sticky rail in the left gutter beside the
+   centered 68ch measure. The article column sits in a ≤1180px screen, so there
+   is room to the left; the rail is offset just before the measure and capped
+   narrow, mirroring the right-hand callout rail. */
+@media (min-width: 1181px) {
+  .kbapp .tf-toc {
+    position: absolute;
+    top: 0;
+    right: calc(100% + 28px);
+    width: 200px;
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+  .kbapp .tf-toc[open] {
+    position: sticky;
+    top: 24px;
+    float: left;
+    margin-left: -228px;
+    margin-bottom: -400px;
+  }
+}
+
+/* Source Highlights box — editorial, near the hero. */
+.kbapp .tf-highlights {
+  margin: 0 0 40px;
+  padding: 22px 24px;
+  background: var(--paper-hi);
+  border: 1px solid var(--rule-soft);
+  border-left: 3px solid var(--accent);
+}
+.kbapp .tf-highlights-label {
+  margin: 0 0 14px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+}
+.kbapp .tf-highlights-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kbapp .tf-highlight {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid var(--rule);
+  padding: 2px 0 2px 14px;
+  margin: 0;
+  cursor: pointer;
+  font-family: var(--font-body), serif;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--ink);
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+.kbapp .tf-highlight:hover {
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+
 .kbapp .tf-original-structure {
   opacity: 0.92;
 }
