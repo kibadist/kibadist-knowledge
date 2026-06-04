@@ -159,6 +159,50 @@ describe('ArticleView (v2 renderer)', () => {
     }
   })
 
+  it('opens the inspector from a source-grounded section heading (DET-276)', async () => {
+    const onInspect = vi.fn()
+    renderArticleView(onInspect)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'All blocks' }))
+
+    expect(onInspect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Section heading',
+        transformedText: 'All blocks',
+        sourceBlockIds: ['b1'],
+      }),
+    )
+  })
+
+  it('renders one level of subsections with their own source-grounded heading (DET-276)', async () => {
+    const onInspect = vi.fn()
+    renderArticleView(onInspect)
+    const user = userEvent.setup()
+
+    // The nested subsection heading renders as an <h3> and its body shows.
+    const subheading = screen.getByRole('heading', {
+      level: 3,
+      name: 'A nested subsection',
+    })
+    expect(subheading).toBeInTheDocument()
+    expect(
+      screen.getByText('A paragraph inside the subsection.'),
+    ).toBeInTheDocument()
+
+    // The subheading is clickable and opens the inspector with its provenance.
+    await user.click(
+      screen.getByRole('button', { name: 'A nested subsection' }),
+    )
+    expect(onInspect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Section heading',
+        transformedText: 'A nested subsection',
+        sourceBlockIds: ['b9'],
+      }),
+    )
+  })
+
   it('renders an error chip for an untraceable block and does not make it clickable', () => {
     renderArticleView(vi.fn())
     const broken = screen.getByText('This paragraph has no source.')

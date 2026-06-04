@@ -74,14 +74,34 @@ export class ReshapingPlanService {
       maxTokens: 4000,
     })
 
-    // Guard A: every section block id must exist → loud failure.
+    // Guard A: every cited block id (sections, their headings, and one level of
+    // subsections) must exist → loud failure.
     const unknown = new Set<string>()
-    for (const s of plan.sections) {
+    const checkSection = (s: PlanSectionLike) => {
       for (const id of s.sourceBlockIds) if (!known.has(id)) unknown.add(id)
+      for (const id of s.headingSourceBlockIds ?? [])
+        if (!known.has(id)) unknown.add(id)
+      for (const sub of s.subsections ?? []) checkSection(sub)
     }
+    for (const s of plan.sections) checkSection(s)
     if (unknown.size > 0) {
       throw new Error(
         `Reshaping plan references unknown block ids: ${[...unknown].join(', ')}`,
+      )
+    }
+
+    // Guard C (DET-276): the source has usable headings (the structure model
+    // surfaced them in originalOutline) but the plan went ALL-inferred. This may
+    // be legitimate (the source headings could be unusable noise), so we do NOT
+    // hard-fail — we append an auditable warning so the choice is inspectable.
+    const sourceHasHeadings = structureModel.originalOutline.length > 0
+    const allInferred =
+      plan.sections.length > 0 &&
+      plan.sections.every((s) => everyHeadingInferred(s))
+    const headingWarnings: string[] = []
+    if (sourceHasHeadings && allInferred) {
+      headingWarnings.push(
+        `Source has ${structureModel.originalOutline.length} heading(s) in its outline, but every planned heading is inferred. Verify the source headings were genuinely unusable.`,
       )
     }
 
@@ -89,7 +109,7 @@ export class ReshapingPlanService {
     // violation (protected class, non-removable, or unknown id) into warnings and
     // keep the block.
     const keptRemovals: ReshapingPlan['removedBlocks'] = []
-    const warnings = [...plan.warnings]
+    const warnings = [...plan.warnings, ...headingWarnings]
     for (const r of plan.removedBlocks) {
       const block = byId.get(r.blockId)
       if (!block) {
@@ -110,4 +130,22 @@ export class ReshapingPlanService {
 
     return { ...plan, removedBlocks: keptRemovals, warnings }
   }
+}
+
+/**
+ * The shared shape of a plan section and its (one-level) subsections — enough for
+ * the recursive id check and the all-inferred test. `subsections` is only present
+ * on top-level sections; subsections never nest further.
+ */
+type PlanSectionLike = {
+  headingSource: ReshapingPlan['sections'][number]['headingSource']
+  sourceBlockIds: string[]
+  headingSourceBlockIds?: string[]
+  subsections?: PlanSectionLike[]
+}
+
+/** True when this section AND all its subsections have an inferred heading. */
+function everyHeadingInferred(s: PlanSectionLike): boolean {
+  if (s.headingSource !== 'inferred') return false
+  return (s.subsections ?? []).every(everyHeadingInferred)
 }

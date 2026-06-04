@@ -14,6 +14,7 @@ import {
   type ArticleParagraph,
   type ArticleParagraphBlock,
   type ArticleQuoteBlock,
+  type ArticleSectionV2,
   type ArticleTableBlock,
   api,
   type IllustrationPlan,
@@ -157,7 +158,7 @@ export function ArticleView({
           <div key={section.id}>
             {i > 0 && <SectionOrnament />}
             <section className='tf-article-section'>
-              <h2 className='tf-article-heading'>{section.heading}</h2>
+              <SectionHeading section={section} level={2} onInspect={onInspect} />
               {slot && (
                 <IllustrationSlot
                   articleId={articleId}
@@ -169,6 +170,14 @@ export function ArticleView({
               )}
               {section.blocks.map((b) => (
                 <Block key={b.id} block={b} onInspect={onInspect} />
+              ))}
+              {section.subsections?.map((sub) => (
+                <section key={sub.id} className='tf-article-subsection'>
+                  <SectionHeading section={sub} level={3} onInspect={onInspect} />
+                  {sub.blocks.map((b) => (
+                    <Block key={b.id} block={b} onInspect={onInspect} />
+                  ))}
+                </section>
               ))}
             </section>
             {i === pullAt && pullCaveat && (
@@ -277,6 +286,48 @@ function SectionOrnament() {
     <div className='tf-ornament' aria-hidden='true'>
       <span className='tf-ornament-mark'>✶</span>
     </div>
+  )
+}
+
+/**
+ * A section (or subsection) heading. When the heading carries
+ * `headingSourceBlockIds` (its provenance — the source heading block it was taken
+ * from), the text becomes a clickable button that opens the source inspector
+ * (DET-276), exactly like a body block. A heading with no provenance (e.g. an
+ * inferred heading) renders as plain, non-clickable text.
+ */
+function SectionHeading({
+  section,
+  level,
+  onInspect,
+}: {
+  section: ArticleSectionV2
+  level: 2 | 3
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  const className =
+    level === 2 ? 'tf-article-heading' : 'tf-article-subheading'
+  const sourceBlockIds = section.headingSourceBlockIds ?? []
+  const Tag = level === 2 ? 'h2' : 'h3'
+  if (sourceBlockIds.length === 0) {
+    return <Tag className={className}>{section.heading}</Tag>
+  }
+  return (
+    <Tag className={className}>
+      <button
+        type='button'
+        className='tf-heading-btn'
+        onClick={() =>
+          onInspect({
+            kind: 'Section heading',
+            transformedText: section.heading,
+            sourceBlockIds,
+          })
+        }
+      >
+        {section.heading}
+      </button>
+    </Tag>
   )
 }
 

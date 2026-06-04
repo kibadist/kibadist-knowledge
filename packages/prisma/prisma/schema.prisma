@@ -1272,6 +1272,12 @@ model TransformerSourceBlock {
   orderIndex           Int
   blockType            TransformerBlockType
   text                 String
+  // The original heading depth (1–6) for HEADING blocks, recovered at extraction
+  // time from HTML hN tags / markdown # depth (DET-276). Null for non-heading
+  // blocks and for sources where depth is unrecoverable (e.g. PDF). Threaded into
+  // the structure model's originalOutline so the reshaping plan can preserve the
+  // source's H2→H3 nesting as section subsections.
+  headingLevel         Int?
   pageNumber           Int?
   charStart            Int?
   charEnd              Int?

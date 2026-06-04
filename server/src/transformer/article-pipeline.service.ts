@@ -218,6 +218,7 @@ export class ArticlePipelineService {
         id: true,
         blockType: true,
         text: true,
+        headingLevel: true,
         classification: true,
         removable: true,
       },
@@ -227,6 +228,7 @@ export class ArticlePipelineService {
       type: r.blockType,
       classification: r.classification ?? TransformerBlockClass.UNCERTAIN,
       text: r.text,
+      headingLevel: r.headingLevel,
       removable: r.removable,
       uncertain:
         r.classification === TransformerBlockClass.UNCERTAIN ||

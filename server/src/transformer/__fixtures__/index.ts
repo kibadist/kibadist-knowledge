@@ -39,6 +39,7 @@ import { howtoProcedure } from './howto-procedure'
 import { hybrid } from './hybrid'
 import { articleV1Legacy } from './legacy-v1'
 import { messyTranscript } from './messy-transcript'
+import { noisyHeadings } from './noisy-headings'
 import { quoteHeavy } from './quote-heavy'
 import { tableHeavy } from './table-heavy'
 import { unsafeReorder } from './unsafe-reorder'
@@ -70,6 +71,7 @@ export const v2Fixtures: V2Fixture[] = [
   tableHeavy,
   quoteHeavy,
   headingedDoc,
+  noisyHeadings,
   caveatHeavy,
   glossaryReference,
   hybrid,

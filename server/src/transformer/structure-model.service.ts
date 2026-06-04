@@ -18,6 +18,8 @@ export interface ClassifiedBlockInput {
   classification: string
   text: string
   removable: boolean
+  /** Original heading depth (1–6) for HEADING blocks; undefined otherwise (DET-276). */
+  headingLevel?: number | null
 }
 
 /**
@@ -59,6 +61,7 @@ function toPromptBlock(b: ClassifiedBlockInput): PromptBlock {
     type: b.type,
     classification: b.classification,
     text: b.text,
+    headingLevel: b.headingLevel,
   }
 }
 

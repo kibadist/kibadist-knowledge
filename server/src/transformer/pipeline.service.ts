@@ -225,6 +225,7 @@ export class PipelineService implements OnApplicationBootstrap {
           orderIndex: b.orderIndex,
           blockType: b.blockType,
           text: b.text,
+          headingLevel: b.headingLevel,
           pageNumber: b.pageNumber,
           charStart: b.charStart,
           charEnd: b.charEnd,

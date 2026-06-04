@@ -126,6 +126,27 @@ export const fixtureArticle: ArticleJsonV2 = {
           fidelityRisk: 'high',
         },
       ],
+      // One level of nesting (H2→H3) to exercise the subsection renderer and a
+      // source-grounded subheading that opens the inspector (DET-276).
+      subsections: [
+        {
+          id: 's1a',
+          heading: 'A nested subsection',
+          headingSource: 'original',
+          headingSourceBlockIds: ['b9'],
+          sourceBlockIds: ['b9'],
+          blocks: [
+            {
+              id: 'subpara1',
+              type: 'paragraph',
+              text: 'A paragraph inside the subsection.',
+              sourceBlockIds: ['b9'],
+              transformationType: 'verbatim',
+              fidelityRisk: 'low',
+            },
+          ],
+        },
+      ],
     },
   ],
   keyTerms: [],

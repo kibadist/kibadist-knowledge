@@ -29,6 +29,8 @@ export interface SegmentedBlock {
   orderIndex: number
   blockType: TransformerBlockType
   text: string
+  /** Original heading depth (1–6) for HEADING blocks; null otherwise (DET-276). */
+  headingLevel: number | null
   pageNumber: number | null
   charStart: number
   charEnd: number
@@ -75,7 +77,7 @@ function segmentLocatedBlocks(located: LocatedBlock[]): SegmentedSource {
     // (not stored), so its order index is never allocated. Also drop any block
     // that flattened to empty text.
     if (!mapped) continue
-    const { blockType, text } = mapped
+    const { blockType, text, headingLevel } = mapped
     if (!text) continue
 
     // Separator precedes every block after the first; charStart/charEnd index
@@ -93,6 +95,7 @@ function segmentLocatedBlocks(located: LocatedBlock[]): SegmentedSource {
       orderIndex: blocks.length,
       blockType,
       text,
+      headingLevel,
       pageNumber,
       charStart,
       charEnd,
@@ -109,10 +112,16 @@ function segmentLocatedBlocks(located: LocatedBlock[]): SegmentedSource {
  */
 function mapBlock(
   block: SourceBlock,
-): { blockType: TransformerBlockType; text: string } | null {
+): { blockType: TransformerBlockType; text: string; headingLevel: number | null } | null {
   switch (block.type) {
     case 'heading':
-      return finalize(TransformerBlockType.HEADING, blockText(block))
+      // Preserve the original heading depth (1–6) so the plan can rebuild the
+      // source's H2→H3 nesting downstream (DET-276).
+      return finalize(
+        TransformerBlockType.HEADING,
+        blockText(block),
+        block.level,
+      )
     case 'paragraph':
       return finalize(TransformerBlockType.PARAGRAPH, blockText(block))
     case 'quote':
@@ -138,10 +147,11 @@ function mapBlock(
 function finalize(
   blockType: TransformerBlockType,
   text: string,
-): { blockType: TransformerBlockType; text: string } | null {
+  headingLevel: number | null = null,
+): { blockType: TransformerBlockType; text: string; headingLevel: number | null } | null {
   const trimmed = text.trim()
   if (!trimmed) return null
-  return { blockType, text: trimmed }
+  return { blockType, text: trimmed, headingLevel }
 }
 
 /** Flatten one block to plain text via the shared blocksToPlainText helper. */

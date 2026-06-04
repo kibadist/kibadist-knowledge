@@ -44,6 +44,23 @@ describe('segmentDocument', () => {
     expect(result.blocks.map((b) => b.orderIndex)).toEqual([0, 1, 2, 3, 4, 5])
   })
 
+  it('preserves heading depth (level) on HEADING blocks, null elsewhere (DET-276)', () => {
+    const result = segmentDocument(
+      doc([
+        { id: 'a', type: 'heading', level: 2, text: 'Section' },
+        { id: 'b', type: 'heading', level: 3, text: 'Subsection' },
+        { id: 'c', type: 'paragraph', runs: [{ text: 'Body' }] },
+      ]),
+    )
+    expect(result.blocks.map((b) => b.blockType)).toEqual([
+      TransformerBlockType.HEADING,
+      TransformerBlockType.HEADING,
+      TransformerBlockType.PARAGRAPH,
+    ])
+    // Heading depth survives segmentation; non-heading blocks carry null.
+    expect(result.blocks.map((b) => b.headingLevel)).toEqual([2, 3, null])
+  })
+
   it('image → CAPTION when it has alt/caption text', () => {
     const result = segmentDocument(
       doc([

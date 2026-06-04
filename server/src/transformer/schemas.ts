@@ -58,6 +58,8 @@ const terminologyItem = z.object({
 
 const outlineEntry = z.object({
   heading: z.string().min(1),
+  /** Original heading depth (1–6) when recoverable from the source (DET-276). */
+  level: z.number().int().min(1).max(6).optional(),
   sourceBlockIds,
 })
 
@@ -104,12 +106,54 @@ const allowedTransformation = z.enum([
   'reorder',
 ])
 
-const planSection = z.object({
-  heading: z.string().min(1),
-  headingSource,
-  sourceBlockIds,
-  allowedTransformations: z.array(allowedTransformation),
-})
+/**
+ * Plan heading vocabulary (DET-276). NEW plans use the v2 naming — 'original'
+ * (verbatim source heading), 'cleanedOriginal' (light cleanup of a source
+ * heading: typo/case/trailing punctuation only), 'inferred' (synthesized when
+ * the source has no usable heading). This matches `HeadingSourceV2` so the plan
+ * flows straight into the generator without translation. SAFE to rename here:
+ * the only consumer of `ReshapingPlanSchema` is fresh-LLM validation in
+ * `reshaping-plan.service.ts`; stored `reshapingPlan` JSON of old articles is
+ * persisted but never re-validated against this schema.
+ */
+const planHeadingSource = z.enum(['original', 'cleanedOriginal', 'inferred'])
+
+const planSection = z
+  .object({
+    heading: z.string().min(1),
+    headingSource: planHeadingSource,
+    /** Block ids grounding the heading text (provenance for the inspector). When
+     *  the heading is original/cleanedOriginal these are the source heading
+     *  block(s). */
+    headingSourceBlockIds: z.array(z.string().min(1)).optional(),
+    /** REQUIRED when headingSource === 'inferred': why a heading had to be
+     *  synthesized rather than taken from the source. Enforced by refine below. */
+    headingInferenceReason: z.string().min(1).optional(),
+    sourceBlockIds,
+    allowedTransformations: z.array(allowedTransformation),
+    /** One level of nesting (H2→H3), present when the source carried depth. */
+    subsections: z.array(z.lazy(() => planSubsection)).optional(),
+  })
+  .refine((s) => s.headingSource !== 'inferred' || !!s.headingInferenceReason, {
+    message: 'an inferred heading must carry a headingInferenceReason',
+    path: ['headingInferenceReason'],
+  })
+
+// A nested subsection mirrors a plan section minus its own subsections (one level
+// only). Declared after planSection so the refine above can z.lazy-reference it.
+const planSubsection = z
+  .object({
+    heading: z.string().min(1),
+    headingSource: planHeadingSource,
+    headingSourceBlockIds: z.array(z.string().min(1)).optional(),
+    headingInferenceReason: z.string().min(1).optional(),
+    sourceBlockIds,
+    allowedTransformations: z.array(allowedTransformation),
+  })
+  .refine((s) => s.headingSource !== 'inferred' || !!s.headingInferenceReason, {
+    message: 'an inferred heading must carry a headingInferenceReason',
+    path: ['headingInferenceReason'],
+  })
 
 const removedBlock = z.object({
   blockId: z.string().min(1),
@@ -123,7 +167,10 @@ const removedBlock = z.object({
  * and keeps the block.
  */
 export const ReshapingPlanSchema = z.object({
-  titleProposal: z.object({ text: z.string().min(1), source: headingSource }),
+  titleProposal: z.object({
+    text: z.string().min(1),
+    source: planHeadingSource,
+  }),
   sections: z.array(planSection).min(1),
   removedBlocks: z.array(removedBlock),
   warnings: z.array(z.string().min(1)),
