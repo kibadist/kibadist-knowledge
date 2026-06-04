@@ -306,7 +306,11 @@ describe('buildCoverageReport — reorderAudit summary (DET-275)', () => {
   })
 
   it('counts a covered move as audited with zero unaudited', () => {
-    const article = v2([sec('s3', ['b3']), sec('s1', ['b1']), sec('s2', ['b2'])])
+    const article = v2([
+      sec('s3', ['b3']),
+      sec('s1', ['b1']),
+      sec('s2', ['b2']),
+    ])
     article.reorderings = [
       {
         sourceBlockId: 'b3',

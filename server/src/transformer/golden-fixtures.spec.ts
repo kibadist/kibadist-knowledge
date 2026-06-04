@@ -459,7 +459,8 @@ describe('golden fixture: audited reorder (DET-275)', () => {
     )
     expect(
       merged.structuralFindings.some(
-        (f) => f.severity === 'high' && /unaudited reorder/i.test(f.description),
+        (f) =>
+          f.severity === 'high' && /unaudited reorder/i.test(f.description),
       ),
     ).toBe(true)
     expect(merged.approved).toBe(false)
@@ -482,7 +483,8 @@ describe('golden fixture: audited reorder (DET-275)', () => {
     expect(
       merged.structuralFindings.some(
         (f) =>
-          f.severity === 'high' && /separated from the claim/.test(f.description),
+          f.severity === 'high' &&
+          /separated from the claim/.test(f.description),
       ),
     ).toBe(true)
     expect(merged.approved).toBe(false)

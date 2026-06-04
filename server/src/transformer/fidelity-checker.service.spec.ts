@@ -167,7 +167,8 @@ describe('mergeDeterministicChecks (fidelity blocking rules)', () => {
   // --- DET-275 audited reorder ----------------------------------------------
 
   it('blocks: unaudited movement → high structuralFinding', () => {
-    const { article, blocks, structureModel } = reorderFixtures.unauditedMovement
+    const { article, blocks, structureModel } =
+      reorderFixtures.unauditedMovement
     const out = mergeDeterministicChecks(
       emptyReport(99),
       article,
@@ -191,7 +192,9 @@ describe('mergeDeterministicChecks (fidelity blocking rules)', () => {
     )
     // No unaudited movement, no cluster separation, no chronology inversion.
     expect(
-      out.structuralFindings.some((f) => /unaudited reorder/i.test(f.description)),
+      out.structuralFindings.some((f) =>
+        /unaudited reorder/i.test(f.description),
+      ),
     ).toBe(false)
     expect(out.approved).toBe(true)
   })
@@ -214,7 +217,8 @@ describe('mergeDeterministicChecks (fidelity blocking rules)', () => {
       { structureModel, blocks },
     )
     const note = out.emphasisChanges.find(
-      (f) => f.severity === 'medium' && /high-risk reorder/i.test(f.description),
+      (f) =>
+        f.severity === 'medium' && /high-risk reorder/i.test(f.description),
     )
     expect(note).toBeDefined()
     // The high-risk audit alone does not block (still cluster/chronology-safe).
@@ -231,12 +235,16 @@ describe('mergeDeterministicChecks (fidelity blocking rules)', () => {
     )
     // The move is fully audited → no unaudited-movement finding…
     expect(
-      out.structuralFindings.some((f) => /unaudited reorder/i.test(f.description)),
+      out.structuralFindings.some((f) =>
+        /unaudited reorder/i.test(f.description),
+      ),
     ).toBe(false)
     // …yet the cluster check still blocks (caveat separated from its claim).
     expect(
       out.structuralFindings.some(
-        (f) => f.severity === 'high' && /separated from the claim/.test(f.description),
+        (f) =>
+          f.severity === 'high' &&
+          /separated from the claim/.test(f.description),
       ),
     ).toBe(true)
     expect(out.approved).toBe(false)

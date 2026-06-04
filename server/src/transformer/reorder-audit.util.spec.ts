@@ -133,7 +133,11 @@ describe('auditReorderCoverage — audit coverage', () => {
   // Background block b3 jumps to the front; the other two keep order → the single
   // moved section's anchor is b3.
   const jumped = () =>
-    article([section('s3', ['b3']), section('s1', ['b1']), section('s2', ['b2'])])
+    article([
+      section('s3', ['b3']),
+      section('s1', ['b1']),
+      section('s2', ['b2']),
+    ])
 
   it('covers the move via sourceBlockId', () => {
     const out = auditReorderCoverage(jumped(), blocks('b1', 'b2', 'b3'), [

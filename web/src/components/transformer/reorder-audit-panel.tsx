@@ -51,10 +51,10 @@ export function ReorderAuditPanel({
         <p className='tf-reorder-empty'>Sections follow source order.</p>
       ) : (
         <ul className='tf-reorder-list'>
-          {entries.map((r) => {
+          {entries.map((r, i) => {
             const clusterCount = r.movedWithClusterIds?.length ?? 0
             return (
-              <li key={r.sourceBlockId} className='tf-reorder-item'>
+              <li key={`${r.sourceBlockId}-${i}`} className='tf-reorder-item'>
                 <div className='tf-reorder-line'>
                   <span className='tf-reorder-block'>
                     Block “{blockPreview(r.sourceBlockId, blocksById)}”

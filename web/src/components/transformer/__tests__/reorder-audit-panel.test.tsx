@@ -46,12 +46,16 @@ const audit = (
 describe('ReorderAuditPanel (DET-275)', () => {
   it('renders the empty state when there is no audit', () => {
     render(<ReorderAuditPanel reorderings={[]} blocksById={blocks()} />)
-    expect(screen.getByText('Sections follow source order.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Sections follow source order.'),
+    ).toBeInTheDocument()
   })
 
   it('renders the empty state when reorderings is undefined', () => {
     render(<ReorderAuditPanel reorderings={undefined} blocksById={blocks()} />)
-    expect(screen.getByText('Sections follow source order.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Sections follow source order.'),
+    ).toBeInTheDocument()
   })
 
   it('renders an entry with the block preview, move, risk badge and reason', () => {
@@ -66,7 +70,10 @@ describe('ReorderAuditPanel (DET-275)', () => {
             risk: 'high',
           }),
         ]}
-        blocksById={blocks({ id: 'b1', text: 'Open-plan offices became popular.' })}
+        blocksById={blocks({
+          id: 'b1',
+          text: 'Open-plan offices became popular.',
+        })}
       />,
     )
     expect(
@@ -98,6 +105,8 @@ describe('ReorderAuditPanel (DET-275)', () => {
         blocksById={blocks({ id: 'b1', text: 'A claim.' })}
       />,
     )
-    expect(screen.getByText('moved with cluster (2 blocks)')).toBeInTheDocument()
+    expect(
+      screen.getByText('moved with cluster (2 blocks)'),
+    ).toBeInTheDocument()
   })
 })
