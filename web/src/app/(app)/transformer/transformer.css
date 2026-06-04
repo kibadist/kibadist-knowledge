@@ -964,7 +964,10 @@
 .kbapp .tf-illus-thumb {
   display: block;
   width: 100%;
-  height: auto;
+  /* Illustrations are generated 3:2 (gpt-image-1's widest) but presented 16:9 —
+     a cinematic magazine crop. object-fit: cover trims ~14% top/bottom. */
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
   border: 1px solid var(--rule-soft);
   box-shadow: 4px 4px 0 var(--rule-soft);
 }
@@ -974,7 +977,9 @@
   align-items: center;
   gap: 8px;
   justify-content: center;
-  min-height: 96px;
+  /* Match the 16:9 figure so there is no layout shift when the blob resolves. */
+  width: 100%;
+  aspect-ratio: 16 / 9;
   border: 1px solid var(--rule-soft);
   font-family: var(--font-mono), monospace;
   font-size: 11px;

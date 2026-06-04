@@ -18,6 +18,7 @@ import { ArticlePipelineService } from './article-pipeline.service'
 import type { CreateTextSourceDto } from './dto/create-text-source.dto'
 import type { CreateUrlSourceDto } from './dto/create-url-source.dto'
 import { ARTICLE_IN_FLIGHT, PipelineService } from './pipeline.service'
+import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
   IllustrationPlan,
   IllustrationSuggestion,
@@ -421,7 +422,7 @@ export class TransformerService {
 
     // Prompt uses ONLY the approved suggestion text — never the source blocks.
     const prompt = `${suggestion.visualDescription}\n\nCaption: ${suggestion.caption}`
-    const result = await this.ai.image({ prompt })
+    const result = await this.ai.image({ prompt, size: ILLUSTRATION_IMAGE_SIZE })
     const generatedAt = new Date().toISOString()
 
     const bytes = new Uint8Array(Buffer.from(result.base64, 'base64'))

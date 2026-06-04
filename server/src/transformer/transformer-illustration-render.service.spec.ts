@@ -158,6 +158,8 @@ describe('TransformerService illustration render (DET-261)', () => {
     expect(promptArg).toContain('Caption: Guiding light') // caption
     // never reads source blocks — no block text leaks into the prompt
     expect(promptArg).not.toContain('b1')
+    // generated at the landscape 3:2 size (presented 16:9 on the client)
+    expect(image.mock.calls[0][0].size).toBe('1536x1024')
 
     expect(prisma.transformerIllustrationImage.upsert).toHaveBeenCalledTimes(1)
     expect(plan.suggestions[0].image).toEqual({
