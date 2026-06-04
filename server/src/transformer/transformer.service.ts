@@ -386,9 +386,10 @@ export class TransformerService {
         where: { id: articleId },
         select: { illustrationPlan: true },
       })
-      const plan: IllustrationPlan = (row?.illustrationPlan as IllustrationPlan | null) ?? {
-        suggestions: [],
-      }
+      const plan: IllustrationPlan =
+        (row?.illustrationPlan as IllustrationPlan | null) ?? {
+          suggestions: [],
+        }
       const updated = await apply(plan, tx)
       await tx.transformedArticle.update({
         where: { id: articleId },
