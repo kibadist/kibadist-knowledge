@@ -10,6 +10,10 @@ export type { PredictComparisonPanelProps } from './predict-comparison-panel'
 export { PredictComparisonPanel } from './predict-comparison-panel'
 export type { PredictModeProps } from './predict-mode'
 export { PredictMode } from './predict-mode'
+export type { RewriteBlockProps } from './rewrite-block'
+export { RewriteBlock } from './rewrite-block'
+export type { RewriteModeProps } from './rewrite-mode'
+export { RewriteMode } from './rewrite-mode'
 export {
   AFFORDANCE_META,
   SectionActions,
