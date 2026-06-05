@@ -4,6 +4,17 @@ export type { CompareModeProps } from './compare-mode'
 export { CompareMode } from './compare-mode'
 export type { CompareRepairBlockProps } from './compare-repair-block'
 export { CompareRepairBlock } from './compare-repair-block'
+export type {
+  ConceptApproval,
+  ConceptCandidateCardProps,
+  ConceptDecision,
+} from './concept-candidate-card'
+export { ConceptCandidateCard } from './concept-candidate-card'
+export type {
+  ConceptExtractionModeProps,
+  SavedConcept,
+} from './concept-extraction-mode'
+export { ConceptExtractionMode } from './concept-extraction-mode'
 export { DeepReadingBlock } from './deep-reading-block'
 export type { DeepReadingModeProps } from './deep-reading-mode'
 export { DeepReadingMode } from './deep-reading-mode'

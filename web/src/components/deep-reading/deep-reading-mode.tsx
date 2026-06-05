@@ -17,6 +17,10 @@ import {
 } from '@/lib/article-v2'
 
 import { CompareMode } from './compare-mode'
+import {
+  ConceptExtractionMode,
+  type SavedConcept,
+} from './concept-extraction-mode'
 import { DeepReadingSection } from './deep-reading-section'
 import { KeyTermOverview } from './key-term-overview'
 import { PredictMode } from './predict-mode'
@@ -89,6 +93,15 @@ export interface DeepReadingModeProps {
    * Pass an explicit `handlers.onCompare` to override the built-in flow.
    */
   enableCompare?: boolean
+  /**
+   * Enable the built-in Concept Extraction Mode (DET-287). On by default; the
+   * mode is reachable from the mode bar and from each section's Extract concepts
+   * action, and turns key terms / seeded concepts into validated candidates.
+   * Pass an explicit `handlers.onExtractConcepts` to override the built-in flow.
+   */
+  enableExtract?: boolean
+  /** Concept Library sink — called when a concept candidate is approved. */
+  onSaveConcept?: (concept: SavedConcept) => void
 }
 
 const EMPTY_HANDLERS: LearningModeHandlers = {}
@@ -105,6 +118,8 @@ export function DeepReadingMode({
   enablePredict = true,
   enableRewrite = true,
   enableCompare = true,
+  enableExtract = true,
+  onSaveConcept,
 }: DeepReadingModeProps) {
   const sections = useMemo(() => orderedSections(article), [article])
 
@@ -122,6 +137,8 @@ export function DeepReadingMode({
   const [rewriteFocusId, setRewriteFocusId] = useState<string | null>(null)
   // The block to anchor on when entering Compare Mode (from a section action).
   const [compareFocusId, setCompareFocusId] = useState<string | null>(null)
+  // The section to scope to when entering Concept Extraction (section action).
+  const [extractFocusId, setExtractFocusId] = useState<string | null>(null)
 
   // Section element registry for active-section tracking + scroll restoration.
   const sectionEls = useRef(new Map<string, HTMLElement>())
@@ -248,6 +265,8 @@ export function DeepReadingMode({
       if (next === 'rewrite') setRewriteFocusId(null)
       // Entering Compare from the mode bar clears any block anchor (top of mode).
       if (next === 'compare') setCompareFocusId(null)
+      // Entering Extract from the mode bar scopes to the whole article.
+      if (next === 'extract') setExtractFocusId(null)
       setMode(next)
     },
     [activeSectionId],
@@ -274,6 +293,13 @@ export function DeepReadingMode({
     setMode('compare')
   }, [])
 
+  // Built-in Concept Extraction from a section action: scope to that section.
+  const enterExtract = useCallback((ctx: SectionContext) => {
+    setExtractFocusId(ctx.section.section_id)
+    setActiveSectionId(ctx.section.section_id)
+    setMode('extract')
+  }, [])
+
   // Section affordances use these handlers. The built-in Predict/Rewrite flows
   // are wired unless the caller supplies their own handler (a custom downstream
   // mode), in which case theirs wins.
@@ -282,15 +308,19 @@ export function DeepReadingMode({
     if (enablePredict && !handlers.onPredict) merged.onPredict = enterPredict
     if (enableRewrite && !handlers.onRewrite) merged.onRewrite = enterRewrite
     if (enableCompare && !handlers.onCompare) merged.onCompare = enterCompare
+    if (enableExtract && !handlers.onExtractConcepts)
+      merged.onExtractConcepts = enterExtract
     return merged
   }, [
     enablePredict,
     enableRewrite,
     enableCompare,
+    enableExtract,
     handlers,
     enterPredict,
     enterRewrite,
     enterCompare,
+    enterExtract,
   ])
 
   const onAffordance = useCallback(
@@ -376,6 +406,17 @@ export function DeepReadingMode({
               Compare
             </button>
           )}
+          {enableExtract && (
+            <button
+              type='button'
+              role='tab'
+              aria-selected={mode === 'extract'}
+              className={`seg${mode === 'extract' ? ' on' : ''}`}
+              onClick={() => handleToggle('extract')}
+            >
+              Extract concepts
+            </button>
+          )}
         </div>
       </div>
 
@@ -419,7 +460,9 @@ export function DeepReadingMode({
                 ? `Rewrite from memory · ${sections.length} sections`
                 : mode === 'compare'
                   ? `Compare & repair · feedback on your rewrites`
-                  : `${sections.length} sections`}
+                  : mode === 'extract'
+                    ? `Extract concepts · validate what's worth keeping`
+                    : `${sections.length} sections`}
           {engaged > 0 && ` · ${engaged} engaged`}
         </p>
       </div>
@@ -453,6 +496,14 @@ export function DeepReadingMode({
           learning={learning}
           sourceAvailable={provenance?.sourceAvailable}
           focusBlockId={compareFocusId}
+          onStartReading={handleStartReading}
+        />
+      ) : mode === 'extract' ? (
+        <ConceptExtractionMode
+          article={article}
+          learning={learning}
+          focusSectionId={extractFocusId}
+          onSaveConcept={onSaveConcept}
           onStartReading={handleStartReading}
         />
       ) : (

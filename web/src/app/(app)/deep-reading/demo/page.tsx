@@ -51,13 +51,13 @@ export default function DeepReadingDemoPage() {
       })
 
     return {
-      // onPredict / onRewrite / onCompare are intentionally omitted so the
-      // section actions and tabs open the built-in modes: Predict Before Reveal
-      // (DET-282), Rewrite-the-Block (DET-285), and Compare & Repair (DET-286).
-      // They emit prediction_submitted / block_rewrite_started / rewrite_peeked /
+      // onPredict / onRewrite / onCompare / onExtractConcepts are intentionally
+      // omitted so the section actions and tabs open the built-in modes: Predict
+      // Before Reveal (DET-282), Rewrite-the-Block (DET-285), Compare & Repair
+      // (DET-286), and Concept Extraction (DET-287). They emit
+      // prediction_submitted / block_rewrite_started / rewrite_peeked /
       // block_rewrite_submitted / section_revealed / comparison_generated /
-      // rewrite_revised through this same shared store.
-      onExtractConcepts: (ctx) => emitFor(ctx, 'concept_candidate_approved'),
+      // rewrite_revised / concept_candidate_approved through this same store.
       onReview: (ctx) => emitFor(ctx, 'review_completed'),
     }
   }, [learning])
@@ -81,7 +81,11 @@ export default function DeepReadingDemoPage() {
         tracked. Then switch to <strong>Compare</strong> for the DET-286
         compare-and-repair flow: each rewrite you submitted is checked against
         the article block — see what you preserved, missed, or changed, then
-        make one improved attempt.
+        make one improved attempt. Finally switch to{' '}
+        <strong>Extract concepts</strong> for the DET-287 flow: the
+        article&apos;s key terms and seeded concepts become candidates you can
+        approve, edit, or reject — a concept is only validated once you explain
+        it yourself.
       </p>
 
       <div className='seg-row'>
@@ -122,6 +126,13 @@ export default function DeepReadingDemoPage() {
         </button>
         <button
           type='button'
+          onClick={() => setMode('extract')}
+          className={`seg${mode === 'extract' ? ' on' : ''}`}
+        >
+          Open in extract
+        </button>
+        <button
+          type='button'
           onClick={() => setHighlight((h) => !h)}
           className={`seg${highlight ? ' on' : ''}`}
         >
@@ -135,6 +146,11 @@ export default function DeepReadingDemoPage() {
         initialMode={mode}
         learningState={learning}
         handlers={handlers}
+        onSaveConcept={(c) =>
+          setLog((prev) =>
+            [`concept saved · ${c.name} (${c.status})`, ...prev].slice(0, 8),
+          )
+        }
         highlightKeyTerms={highlight}
         provenance={{
           captureSource: 'URL',
