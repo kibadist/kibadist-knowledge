@@ -1,8 +1,8 @@
 'use client'
 
-import { Fragment } from 'react'
+import type { SourceBlock } from '@/lib/api'
 
-import type { InlineRun, SourceBlock } from '@/lib/api'
+import { InlineRuns } from './inline-runs'
 
 /**
  * Structured block renderer (DET-210). Renders a SourceDocument's blocks as
@@ -45,13 +45,13 @@ function Block({ block }: { block: SourceBlock }) {
     case 'paragraph':
       return (
         <p id={block.id} className='kb-paragraph'>
-          <Runs runs={block.runs} />
+          <InlineRuns runs={block.runs} />
         </p>
       )
     case 'quote':
       return (
         <blockquote id={block.id} className='kb-quote'>
-          <Runs runs={block.runs} />
+          <InlineRuns runs={block.runs} />
         </blockquote>
       )
     case 'list': {
@@ -61,7 +61,7 @@ function Block({ block }: { block: SourceBlock }) {
           {block.items.map((item, i) => (
             // Items have no stable id of their own; index key is safe (read-only).
             <li key={i} className='kb-li'>
-              <Runs runs={item} />
+              <InlineRuns runs={item} />
             </li>
           ))}
         </Tag>
@@ -115,54 +115,4 @@ function Block({ block }: { block: SourceBlock }) {
         </div>
       )
   }
-}
-
-function Runs({ runs }: { runs: InlineRun[] }) {
-  return (
-    <>
-      {runs.map((run, i) => (
-        <Run key={i} run={run} />
-      ))}
-    </>
-  )
-}
-
-const MARK_CLASS: Record<string, string> = {
-  bold: 'kb-bold',
-  italic: 'kb-italic',
-  code: 'kb-text-code',
-  strikethrough: 'kb-strikethrough',
-}
-
-function Run({ run }: { run: InlineRun }) {
-  const className =
-    run.marks && run.marks.length
-      ? run.marks
-          .map((m) => MARK_CLASS[m])
-          .filter(Boolean)
-          .join(' ')
-      : undefined
-
-  // Preserve hard line breaks within a run.
-  const content = run.text.split('\n').map((line, i, arr) => (
-    <Fragment key={i}>
-      {line}
-      {i < arr.length - 1 && <br />}
-    </Fragment>
-  ))
-
-  if (run.href) {
-    return (
-      <a
-        href={run.href}
-        target='_blank'
-        rel='noopener noreferrer'
-        className={`kb-link${className ? ` ${className}` : ''}`}
-      >
-        {content}
-      </a>
-    )
-  }
-  if (className) return <span className={className}>{content}</span>
-  return <>{content}</>
 }
