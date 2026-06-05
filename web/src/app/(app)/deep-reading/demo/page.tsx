@@ -52,12 +52,11 @@ export default function DeepReadingDemoPage() {
       })
 
     return {
-      // onPredict is intentionally omitted so the section's Predict action and
-      // the Predict tab open the built-in Predict Before Reveal Mode (DET-282),
-      // which emits prediction_submitted / section_revealed / comparison_generated
-      // through this same shared store.
-      onRewrite: (ctx: BlockContext) =>
-        emitFor(ctx, 'block_rewrite_submitted', ctx.block.block_id),
+      // onPredict / onRewrite are intentionally omitted so the section actions
+      // and tabs open the built-in modes: Predict Before Reveal (DET-282) and
+      // Rewrite-the-Block (DET-285). They emit prediction_submitted /
+      // block_rewrite_started / rewrite_peeked / block_rewrite_submitted /
+      // section_revealed / comparison_generated through this same shared store.
       onExtractConcepts: (ctx) => emitFor(ctx, 'concept_candidate_approved'),
       onCompare: (ctx: BlockContext) =>
         emitFor(ctx, 'comparison_generated', ctx.block.block_id),
@@ -78,7 +77,10 @@ export default function DeepReadingDemoPage() {
         preview where it occurs, then start guided reading. Switch to{' '}
         <strong>Predict</strong> for the DET-282 predict-before-reveal flow:
         answer from the heading and key terms, then reveal the section and see
-        how your model compares.
+        how your model compares. Switch to <strong>Rewrite</strong> for the
+        DET-285 active-recall flow: reconstruct each block from memory while the
+        source blurs the moment you start writing — peek if you must, it&apos;s
+        tracked.
       </p>
 
       <div className='seg-row'>
@@ -102,6 +104,13 @@ export default function DeepReadingDemoPage() {
           className={`seg${mode === 'predict' ? ' on' : ''}`}
         >
           Open in predict
+        </button>
+        <button
+          type='button'
+          onClick={() => setMode('rewrite')}
+          className={`seg${mode === 'rewrite' ? ' on' : ''}`}
+        >
+          Open in rewrite
         </button>
         <button
           type='button'

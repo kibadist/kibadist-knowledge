@@ -1022,3 +1022,366 @@
     transition: none;
   }
 }
+
+/* ── Rewrite-the-Block Mode (DET-285) ──────────────────────────────────────
+   The core active-recall mode: reconstruct each block from memory while the
+   source blurs the moment the editor takes focus. Scoped under .kb-rw (inside
+   .kb-dr, so the reader tokens apply). */
+.kb-rw {
+  display: block;
+}
+
+.kb-rw-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-top: 1.4rem;
+}
+
+.kb-rw-lede {
+  flex: 1 1 18rem;
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--reader-muted);
+}
+
+.kb-rw-cta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--reader-rule);
+  background: transparent;
+  color: var(--reader-fg);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.kb-rw-cta:hover {
+  border-color: var(--reader-accent);
+  color: var(--reader-accent);
+}
+
+.kb-rw-sections {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.kb-rw-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.kb-rw-section-num {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--reader-faint);
+}
+
+.kb-rw-section-title {
+  margin: 0;
+}
+
+.kb-rw-empty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--reader-faint);
+  font-style: italic;
+}
+
+/* One rewrite card. */
+.kb-rw-block {
+  border: 1px solid var(--reader-rule);
+  padding: 1rem 1.1rem 1.2rem;
+  margin-bottom: 1.25rem;
+  background: var(--reader-paper);
+}
+
+.kb-rw-block.is-submitted {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--reader-rule));
+}
+
+.kb-rw-block-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.kb-rw-block-num {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--reader-faint);
+}
+
+.kb-rw-block-noun {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--reader-rule);
+}
+
+.kb-rw-block-badge {
+  margin-left: auto;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.kb-rw-orient {
+  margin: 0.6rem 0 0.8rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  color: var(--reader-faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+/* The source block. Layout is preserved; content blurs while the editor is
+   engaged so it can't be copied or lightly paraphrased. */
+.kb-rw-source {
+  position: relative;
+  border-left: 2px solid var(--reader-rule);
+  padding-left: 1rem;
+  transition:
+    filter 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.kb-rw-source.is-blurred {
+  filter: blur(5px);
+  opacity: 0.55;
+  user-select: none;
+  pointer-events: none;
+  /* Clip the blur halo so it doesn't bleed past the card. */
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-rw-source {
+    transition: none;
+  }
+  .kb-rw-source.is-blurred {
+    filter: blur(4px);
+  }
+}
+
+/* The overlay shown while blurred: a quiet reminder + the Peek control. */
+.kb-rw-veil {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px dashed var(--reader-rule);
+  background: var(--reader-code-bg);
+}
+
+.kb-rw-veil-text {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+}
+
+.kb-rw-peek {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--ochre);
+  background: transparent;
+  color: var(--ochre);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.kb-rw-peek:hover,
+.kb-rw-peek.is-active {
+  background: color-mix(in srgb, var(--ochre) 14%, transparent);
+}
+
+.kb-rw-editor {
+  margin-top: 1rem;
+}
+
+.kb-rw-prompt {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--reader-strong);
+  margin-bottom: 0.5rem;
+}
+
+.kb-rw-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--reader-fg);
+  background: var(--reader-paper);
+  border: 1px solid var(--reader-rule);
+  padding: 0.7rem 0.8rem;
+}
+
+.kb-rw-input:focus-visible {
+  outline: 2px solid var(--reader-accent);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.kb-rw-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  margin-top: 0.7rem;
+}
+
+.kb-rw-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+}
+
+.kb-rw-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--reader-muted);
+  cursor: pointer;
+}
+
+.kb-rw-lock-hint {
+  color: var(--reader-faint);
+  font-size: 0.6875rem;
+}
+
+.kb-rw-submit-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.kb-rw-words {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  color: var(--reader-faint);
+}
+
+.kb-rw-submit {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--reader-accent);
+  background: var(--reader-accent);
+  color: var(--reader-paper);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.kb-rw-submit:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.kb-rw-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.kb-rw-hint {
+  margin: 0.7rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--reader-faint);
+}
+
+.kb-rw-submitted {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--reader-rule);
+}
+
+.kb-rw-submitted-eyebrow {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+}
+
+.kb-rw-submitted-text {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-left: 2px solid var(--accent);
+  background: var(--reader-code-bg);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--reader-fg);
+  white-space: pre-wrap;
+}
+
+.kb-rw-submitted-foot {
+  margin: 0.7rem 0 0;
+  font-size: 0.75rem;
+  color: var(--reader-faint);
+}
+
+.kb-rw-foot {
+  margin: 1.75rem 0 0;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--reader-faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+@media (min-width: 640px) {
+  .kb-rw-block {
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-rw-cta,
+  .kb-rw-peek,
+  .kb-rw-submit,
+  .kb-rw-input {
+    transition: none;
+  }
+}

@@ -19,8 +19,10 @@ import {
 import { DeepReadingSection } from './deep-reading-section'
 import { KeyTermOverview } from './key-term-overview'
 import { PredictMode } from './predict-mode'
+import { RewriteMode } from './rewrite-mode'
 import {
   type ArticleProvenance,
+  type BlockContext,
   type LearningModeHandlers,
   type ReadingMode,
   type SectionContext,
@@ -73,6 +75,12 @@ export interface DeepReadingModeProps {
    * Pass an explicit `handlers.onPredict` to override the built-in flow.
    */
   enablePredict?: boolean
+  /**
+   * Enable the built-in Rewrite-the-Block Mode (DET-285). On by default; the
+   * mode is reachable from the mode bar and from each section's Rewrite action.
+   * Pass an explicit `handlers.onRewrite` to override the built-in flow.
+   */
+  enableRewrite?: boolean
 }
 
 const EMPTY_HANDLERS: LearningModeHandlers = {}
@@ -87,6 +95,7 @@ export function DeepReadingMode({
   initialEvents,
   highlightKeyTerms = true,
   enablePredict = true,
+  enableRewrite = true,
 }: DeepReadingModeProps) {
   const sections = useMemo(() => orderedSections(article), [article])
 
@@ -100,6 +109,8 @@ export function DeepReadingMode({
   )
   // The section to anchor on when entering Predict Mode (from a section action).
   const [predictFocusId, setPredictFocusId] = useState<string | null>(null)
+  // The block to anchor on when entering Rewrite Mode (from a section action).
+  const [rewriteFocusId, setRewriteFocusId] = useState<string | null>(null)
 
   // Section element registry for active-section tracking + scroll restoration.
   const sectionEls = useRef(new Map<string, HTMLElement>())
@@ -222,6 +233,8 @@ export function DeepReadingMode({
       if (next === 'deep') pendingScroll.current = activeSectionId
       // Entering Predict from the mode bar anchors on the active section.
       if (next === 'predict') setPredictFocusId(activeSectionId)
+      // Entering Rewrite from the mode bar clears any block anchor (top of mode).
+      if (next === 'rewrite') setRewriteFocusId(null)
       setMode(next)
     },
     [activeSectionId],
@@ -234,12 +247,22 @@ export function DeepReadingMode({
     setMode('predict')
   }, [])
 
-  // Section affordances use these handlers. The built-in Predict flow is wired
-  // unless the caller supplies their own onPredict (a custom downstream mode).
+  // Built-in Rewrite entry from a section action: anchor on the targeted block.
+  const enterRewrite = useCallback((ctx: BlockContext) => {
+    setRewriteFocusId(ctx.block.block_id)
+    setActiveSectionId(ctx.section.section_id)
+    setMode('rewrite')
+  }, [])
+
+  // Section affordances use these handlers. The built-in Predict/Rewrite flows
+  // are wired unless the caller supplies their own handler (a custom downstream
+  // mode), in which case theirs wins.
   const effectiveHandlers = useMemo<LearningModeHandlers>(() => {
-    if (!enablePredict || handlers.onPredict) return handlers
-    return { ...handlers, onPredict: enterPredict }
-  }, [enablePredict, handlers, enterPredict])
+    const merged: LearningModeHandlers = { ...handlers }
+    if (enablePredict && !handlers.onPredict) merged.onPredict = enterPredict
+    if (enableRewrite && !handlers.onRewrite) merged.onRewrite = enterRewrite
+    return merged
+  }, [enablePredict, enableRewrite, handlers, enterPredict, enterRewrite])
 
   const onAffordance = useCallback(
     (_affordance: LearningAffordance, _ctx: SectionContext) => {
@@ -302,6 +325,17 @@ export function DeepReadingMode({
               Predict
             </button>
           )}
+          {enableRewrite && (
+            <button
+              type='button'
+              role='tab'
+              aria-selected={mode === 'rewrite'}
+              className={`seg${mode === 'rewrite' ? ' on' : ''}`}
+              onClick={() => handleToggle('rewrite')}
+            >
+              Rewrite
+            </button>
+          )}
         </div>
       </div>
 
@@ -341,7 +375,9 @@ export function DeepReadingMode({
             ? `Section ${activeIndex + 1} of ${sections.length}`
             : mode === 'predict'
               ? `Predict before reveal · ${sections.length} sections`
-              : `${sections.length} sections`}
+              : mode === 'rewrite'
+                ? `Rewrite from memory · ${sections.length} sections`
+                : `${sections.length} sections`}
           {engaged > 0 && ` · ${engaged} engaged`}
         </p>
       </div>
@@ -360,6 +396,13 @@ export function DeepReadingMode({
           learning={learning}
           highlightKeyTerms={highlightKeyTerms}
           focusSectionId={predictFocusId}
+          onStartReading={handleStartReading}
+        />
+      ) : mode === 'rewrite' ? (
+        <RewriteMode
+          article={article}
+          learning={learning}
+          focusBlockId={rewriteFocusId}
           onStartReading={handleStartReading}
         />
       ) : (
