@@ -702,3 +702,323 @@
   color: var(--reader-faint);
   font-family: var(--font-mono), ui-monospace, monospace;
 }
+
+/* ── Predict Before Reveal Mode (DET-282) ──────────────────────────────────
+   Ask the learner to explain a section from its heading + key terms BEFORE the
+   prose is revealed, then mirror their prediction against the article. Scoped
+   under .kb-pred (inside .kb-dr, so the reader tokens above apply). */
+.kb-pred {
+  display: block;
+}
+
+.kb-pred-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-top: 1.4rem;
+}
+
+.kb-pred-lede {
+  flex: 1 1 18rem;
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--reader-muted);
+}
+
+.kb-pred-cta,
+.kb-pred-submit,
+.kb-pred-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--reader-rule);
+  background: transparent;
+  color: var(--reader-fg);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.kb-pred-cta:hover,
+.kb-pred-skip:hover {
+  background: var(--paper-2);
+  border-color: var(--reader-accent);
+}
+
+/* Sections list. */
+.kb-pred-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin-top: 1.75rem;
+}
+
+.kb-pred-section {
+  scroll-margin-top: 1.5rem;
+}
+
+.kb-pred-section + .kb-pred-section {
+  border-top: 1px solid var(--reader-rule);
+  padding-top: 1.75rem;
+}
+
+/* The "Predict" stage badge in the eyebrow before reveal. */
+.kb-pred-stage {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--reader-accent);
+  border: 1px solid
+    color-mix(in srgb, var(--reader-accent) 45%, var(--reader-rule));
+  padding: 0.1rem 0.4rem;
+}
+
+/* The prompt card shown before reveal. */
+.kb-pred-card {
+  margin-top: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--reader-rule);
+  background: color-mix(in srgb, var(--reader-paper) 55%, transparent);
+}
+
+.kb-pred-orient {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--reader-faint);
+}
+
+.kb-pred-terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.kb-pred-term {
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--reader-rule);
+  background: var(--paper-2);
+  color: var(--reader-strong);
+}
+
+.kb-pred-prompt {
+  display: block;
+  margin-bottom: 0.6rem;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--reader-strong);
+}
+
+.kb-pred-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--reader-fg);
+  background: var(--reader-paper);
+  border: 1px solid var(--reader-rule);
+}
+
+.kb-pred-input:focus-visible {
+  outline: 2px solid var(--reader-accent);
+  outline-offset: 1px;
+  border-color: var(--reader-accent);
+}
+
+.kb-pred-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.kb-pred-submit {
+  border-color: color-mix(
+    in srgb,
+    var(--reader-accent) 60%,
+    var(--reader-rule)
+  );
+  color: var(--reader-accent);
+}
+
+.kb-pred-submit:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--reader-accent) 12%, transparent);
+}
+
+.kb-pred-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.kb-pred-hint {
+  margin: 0.85rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--reader-faint);
+}
+
+/* Comparison panel (post-reveal). */
+.kb-pred-compare {
+  margin-top: 1.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--reader-rule);
+  border-left-width: 3px;
+  border-left-color: var(--reader-accent);
+  background: color-mix(in srgb, var(--reader-paper) 50%, transparent);
+}
+
+.kb-pred-compare.is-empty {
+  border-left-color: var(--reader-rule);
+}
+
+.kb-pred-compare-empty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--reader-muted);
+}
+
+.kb-pred-compare-eyebrow {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+}
+
+.kb-pred-compare-yours {
+  margin: 0 0 1.1rem;
+  padding: 0.6rem 0.9rem;
+  border-left: 2px solid var(--reader-rule);
+  font-style: italic;
+  color: var(--reader-soft, var(--reader-fg));
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.kb-pred-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+@media (min-width: 640px) {
+  .kb-pred-compare-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.kb-pred-bucket {
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--reader-rule);
+  border-top-width: 2px;
+  background: var(--reader-paper);
+}
+
+.kb-pred-bucket--match {
+  border-top-color: var(--olive);
+}
+.kb-pred-bucket--gap {
+  border-top-color: var(--indigo);
+}
+.kb-pred-bucket--extra {
+  border-top-color: var(--accent);
+}
+.kb-pred-bucket--check {
+  border-top-color: var(--ochre);
+}
+
+.kb-pred-bucket-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.kb-pred-bucket-label {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--reader-strong);
+}
+
+.kb-pred-bucket-count {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--reader-faint);
+}
+
+.kb-pred-bucket-blurb {
+  margin: 0.3rem 0 0.6rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--reader-muted);
+}
+
+.kb-pred-bucket-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.kb-pred-bucket-item {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--reader-fg);
+  padding-left: 0.9rem;
+  position: relative;
+}
+
+.kb-pred-bucket-item::before {
+  content: "·";
+  position: absolute;
+  left: 0.2rem;
+  color: var(--reader-faint);
+}
+
+.kb-pred-compare-foot {
+  margin: 1.1rem 0 0;
+  font-size: 0.75rem;
+  color: var(--reader-faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  letter-spacing: 0.04em;
+}
+
+.kb-pred-foot {
+  margin: 1.75rem 0 0;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--reader-faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-pred-cta,
+  .kb-pred-submit,
+  .kb-pred-skip {
+    transition: none;
+  }
+}

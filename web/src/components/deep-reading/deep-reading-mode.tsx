@@ -18,6 +18,7 @@ import {
 
 import { DeepReadingSection } from './deep-reading-section'
 import { KeyTermOverview } from './key-term-overview'
+import { PredictMode } from './predict-mode'
 import {
   type ArticleProvenance,
   type LearningModeHandlers,
@@ -66,6 +67,12 @@ export interface DeepReadingModeProps {
   initialEvents?: ArticleLearningEvent[]
   /** Highlight key terms inside the prose (a source-safe reading aid). */
   highlightKeyTerms?: boolean
+  /**
+   * Enable the built-in Predict Before Reveal Mode (DET-282). On by default; the
+   * mode is reachable from the mode bar and from each section's Predict action.
+   * Pass an explicit `handlers.onPredict` to override the built-in flow.
+   */
+  enablePredict?: boolean
 }
 
 const EMPTY_HANDLERS: LearningModeHandlers = {}
@@ -79,6 +86,7 @@ export function DeepReadingMode({
   onEmit,
   initialEvents,
   highlightKeyTerms = true,
+  enablePredict = true,
 }: DeepReadingModeProps) {
   const sections = useMemo(() => orderedSections(article), [article])
 
@@ -90,6 +98,8 @@ export function DeepReadingMode({
   const [activeSectionId, setActiveSectionId] = useState<string | null>(
     sections[0]?.section_id ?? null,
   )
+  // The section to anchor on when entering Predict Mode (from a section action).
+  const [predictFocusId, setPredictFocusId] = useState<string | null>(null)
 
   // Section element registry for active-section tracking + scroll restoration.
   const sectionEls = useRef(new Map<string, HTMLElement>())
@@ -210,10 +220,26 @@ export function DeepReadingMode({
     (next: ReadingMode) => {
       // Preserve position: keep the active section as the deep-mode anchor.
       if (next === 'deep') pendingScroll.current = activeSectionId
+      // Entering Predict from the mode bar anchors on the active section.
+      if (next === 'predict') setPredictFocusId(activeSectionId)
       setMode(next)
     },
     [activeSectionId],
   )
+
+  // Built-in Predict entry from a section action: focus that section and switch.
+  const enterPredict = useCallback((ctx: SectionContext) => {
+    setPredictFocusId(ctx.section.section_id)
+    setActiveSectionId(ctx.section.section_id)
+    setMode('predict')
+  }, [])
+
+  // Section affordances use these handlers. The built-in Predict flow is wired
+  // unless the caller supplies their own onPredict (a custom downstream mode).
+  const effectiveHandlers = useMemo<LearningModeHandlers>(() => {
+    if (!enablePredict || handlers.onPredict) return handlers
+    return { ...handlers, onPredict: enterPredict }
+  }, [enablePredict, handlers, enterPredict])
 
   const onAffordance = useCallback(
     (_affordance: LearningAffordance, _ctx: SectionContext) => {
@@ -265,6 +291,17 @@ export function DeepReadingMode({
           >
             Deep reading
           </button>
+          {enablePredict && (
+            <button
+              type='button'
+              role='tab'
+              aria-selected={mode === 'predict'}
+              className={`seg${mode === 'predict' ? ' on' : ''}`}
+              onClick={() => handleToggle('predict')}
+            >
+              Predict
+            </button>
+          )}
         </div>
       </div>
 
@@ -302,7 +339,9 @@ export function DeepReadingMode({
         <p className='kb-dr-progress-label'>
           {mode === 'deep'
             ? `Section ${activeIndex + 1} of ${sections.length}`
-            : `${sections.length} sections`}
+            : mode === 'predict'
+              ? `Predict before reveal · ${sections.length} sections`
+              : `${sections.length} sections`}
           {engaged > 0 && ` · ${engaged} engaged`}
         </p>
       </div>
@@ -315,6 +354,14 @@ export function DeepReadingMode({
           onSelectSection={handleSelectFromOverview}
           onStartReading={handleStartReading}
         />
+      ) : mode === 'predict' ? (
+        <PredictMode
+          article={article}
+          learning={learning}
+          highlightKeyTerms={highlightKeyTerms}
+          focusSectionId={predictFocusId}
+          onStartReading={handleStartReading}
+        />
       ) : (
         <div className='kb-dr-sections'>
           {sections.map((section, i) => (
@@ -325,7 +372,7 @@ export function DeepReadingMode({
               index={i + 1}
               total={sections.length}
               completed={completedBySection(section.section_id)}
-              handlers={handlers}
+              handlers={effectiveHandlers}
               highlightKeyTerms={highlightKeyTerms}
               onAffordance={onAffordance}
               registerRef={registerRef}

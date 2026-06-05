@@ -4,6 +4,12 @@ export { DeepReadingMode } from './deep-reading-mode'
 export { DeepReadingSection } from './deep-reading-section'
 export type { KeyTermOverviewProps } from './key-term-overview'
 export { KeyTermOverview } from './key-term-overview'
+export type { PredictBeforeRevealProps } from './predict-before-reveal'
+export { PredictBeforeReveal } from './predict-before-reveal'
+export type { PredictComparisonPanelProps } from './predict-comparison-panel'
+export { PredictComparisonPanel } from './predict-comparison-panel'
+export type { PredictModeProps } from './predict-mode'
+export { PredictMode } from './predict-mode'
 export {
   AFFORDANCE_META,
   SectionActions,
