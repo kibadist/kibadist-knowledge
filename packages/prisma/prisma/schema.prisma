@@ -22,22 +22,23 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  notes              Note[]
-  concepts           Concept[]
-  articulations      Articulation[]
-  links              Link[]
-  retrievalEvents    RetrievalEvent[]
-  intakeQuestions    IntakeQuestion[]
-  promotionDrafts    PromotionDraft[]
-  sourceQuestions    SourceQuestion[]
-  stateTransitions   ConceptStateTransition[]
-  sessions           Session[]
-  reflections        Reflection[]
-  sourceChunks       SourceChunk[]
-  conceptCandidates  SourceConceptCandidate[]
-  graphNodePositions GraphNodePosition[]
-  livingConcepts     LivingConcept[]
-  workspaces         Workspace[]
+  notes                 Note[]
+  concepts              Concept[]
+  articulations         Articulation[]
+  links                 Link[]
+  retrievalEvents       RetrievalEvent[]
+  intakeQuestions       IntakeQuestion[]
+  promotionDrafts       PromotionDraft[]
+  sourceQuestions       SourceQuestion[]
+  stateTransitions      ConceptStateTransition[]
+  sessions              Session[]
+  reflections           Reflection[]
+  sourceChunks          SourceChunk[]
+  conceptCandidates     SourceConceptCandidate[]
+  graphNodePositions    GraphNodePosition[]
+  livingConcepts        LivingConcept[]
+  workspaces            Workspace[]
+  articleLearningEvents ArticleLearningEvent[]
 
   @@map("user")
 }
@@ -1032,4 +1033,90 @@ enum LivingConceptStatus {
   DRAFT
   USER_VALIDATED
   ARCHIVED
+}
+
+// The source-of-truth log for the Generated Article Learning Modes (DET-278).
+// HARD BOUNDARY: this stores USER ACTIVITY against generated articles, NOT
+// concept knowledge and NOT the article JSON. A rewrite is not automatically a
+// concept; a prediction may expose a misconception but does not become a note by
+// itself. Downstream systems (Concept Library candidates, the Retrieval Engine)
+// CONSUME selected events but never own them, and the article experience stays
+// auditable even if concept extraction is never run.
+//
+// Events anchor to PERSISTED ids: `articleId`, plus the exact `articleVersionId`
+// they were created from, plus optional `sectionId`/`blockId` (DET-278 rule #1).
+// Never attach an event to an unstable array index. `userAnswer` is the
+// learner's own words, stored VERBATIM; AI output lives in `aiFeedback` as
+// STRUCTURED JSON (never only prose); per-mode extras (peek_count, focus
+// duration, revision history, compared-block snapshots) live in `metadata`.
+//
+// The TS contract in server/src/article-learning/article-learning.types.ts is
+// the single source of truth for the `eventType` vocabulary; contract-sync.spec
+// fails if this enum drifts from it.
+model ArticleLearningEvent {
+  id               String                   @id @default(cuid())
+  userId           String
+  articleId        String
+  // The exact article version the event was created from (DET-278 rule #1).
+  articleVersionId String?
+  sectionId        String?
+  blockId          String?
+  sourceSpanIds    String[]
+  eventType        ArticleLearningEventType
+  // AI-authored prompt/scaffold shown to the user (metadata, never the answer).
+  prompt           String?
+  // The learner's own words, stored verbatim; null for events with no answer.
+  userAnswer       String?
+  // Structured AI feedback (claims + provenance), never only prose. Null when
+  // the event carries no feedback.
+  aiFeedback       Json?
+  // Per-mode extras: peek_count, focus duration, revision history, block snapshots.
+  metadata         Json                     @default("{}")
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, articleId])
+  @@index([articleId, eventType])
+  @@map("article_learning_event")
+}
+
+// The closed set of recordable interactions across the learning modes (DET-278).
+// MIRRORS the ArticleLearningEventType TS union member-for-member.
+enum ArticleLearningEventType {
+  overview_viewed
+  prediction_submitted
+  section_revealed
+  block_rewrite_started
+  block_rewrite_submitted
+  rewrite_peeked
+  comparison_generated
+  rewrite_revised
+  concept_candidate_approved
+  review_prompt_approved
+  review_completed
+}
+
+// Lifecycle of a review prompt derived from a learning event (DET-278 rule #4).
+// MVP default is `suggested`: AI may propose review, the user validates what
+// becomes scheduled. MIRRORS the ReviewPromptStatus TS union.
+enum ReviewPromptStatus {
+  suggested
+  approved
+  rejected
+  scheduled
+  retired
+}
+
+// How trustworthy a feedback claim is (DET-278 rule #5). Generated article prose
+// and the original source are never collapsed into one truth layer. MIRRORS the
+// SourceConfidence TS union.
+enum SourceConfidence {
+  source_supported
+  article_supported_source_unavailable
+  user_authored_unsourced
+  unsupported_or_invented
+  needs_review
 }
