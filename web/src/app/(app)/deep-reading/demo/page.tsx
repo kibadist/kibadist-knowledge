@@ -52,7 +52,10 @@ export default function DeepReadingDemoPage() {
       })
 
     return {
-      onPredict: (ctx) => emitFor(ctx, 'prediction_submitted'),
+      // onPredict is intentionally omitted so the section's Predict action and
+      // the Predict tab open the built-in Predict Before Reveal Mode (DET-282),
+      // which emits prediction_submitted / section_revealed / comparison_generated
+      // through this same shared store.
       onRewrite: (ctx: BlockContext) =>
         emitFor(ctx, 'block_rewrite_submitted', ctx.block.block_id),
       onExtractConcepts: (ctx) => emitFor(ctx, 'concept_candidate_approved'),
@@ -72,7 +75,10 @@ export default function DeepReadingDemoPage() {
         actions; click one and watch its completion marker appear. Switch to{' '}
         <strong>Overview</strong> for the DET-280 key-term skeleton: headings
         and key terms stay crisp while the prose is blurred — click a term to
-        preview where it occurs, then start guided reading.
+        preview where it occurs, then start guided reading. Switch to{' '}
+        <strong>Predict</strong> for the DET-282 predict-before-reveal flow:
+        answer from the heading and key terms, then reveal the section and see
+        how your model compares.
       </p>
 
       <div className='seg-row'>
@@ -89,6 +95,13 @@ export default function DeepReadingDemoPage() {
           className={`seg${mode === 'overview' ? ' on' : ''}`}
         >
           Open in overview
+        </button>
+        <button
+          type='button'
+          onClick={() => setMode('predict')}
+          className={`seg${mode === 'predict' ? ' on' : ''}`}
+        >
+          Open in predict
         </button>
         <button
           type='button'
