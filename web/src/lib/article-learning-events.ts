@@ -103,6 +103,9 @@ export const EVENT_COMPLETION: Partial<
   comparison_generated: 'compare',
   rewrite_revised: 'compare',
   concept_candidate_approved: 'extract_concepts',
+  // Creating/approving spaced-review prompts proves the section's review step;
+  // a later completed review (review_completed) also keeps the marker lit.
+  review_prompt_approved: 'review',
   review_completed: 'review',
 }
 

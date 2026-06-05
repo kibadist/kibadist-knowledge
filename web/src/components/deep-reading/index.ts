@@ -27,6 +27,12 @@ export type { PredictComparisonPanelProps } from './predict-comparison-panel'
 export { PredictComparisonPanel } from './predict-comparison-panel'
 export type { PredictModeProps } from './predict-mode'
 export { PredictMode } from './predict-mode'
+export type {
+  ReviewPromptApproval,
+  ReviewPromptCardProps,
+  ReviewPromptDecision,
+} from './review-prompt-card'
+export { ReviewPromptCard } from './review-prompt-card'
 export type { RewriteBlockProps } from './rewrite-block'
 export { RewriteBlock } from './rewrite-block'
 export type { RewriteModeProps } from './rewrite-mode'
@@ -36,6 +42,11 @@ export {
   SectionActions,
   SectionCompletionMarkers,
 } from './section-actions'
+export type {
+  ScheduledReviewPrompt,
+  SpacedReviewModeProps,
+} from './spaced-review-mode'
+export { SpacedReviewMode } from './spaced-review-mode'
 export type {
   ArticleProvenance,
   BlockContext,

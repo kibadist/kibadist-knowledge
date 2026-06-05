@@ -2505,3 +2505,394 @@
     transition: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Spaced Review Mode (DET-288)
+   The retrieval mode: the learner's rewrites, comparisons, and saved concepts
+   become future review prompts they approve, edit, or reject before anything is
+   scheduled. User-authored prompts are marked distinctly from AI/source ones;
+   nothing is scheduled without approval. Scoped under .kb-sr (inside .kb-dr). */
+.kb-sr {
+  display: block;
+}
+
+.kb-sr-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-top: 1.4rem;
+}
+
+.kb-sr-lede {
+  flex: 1 1 20rem;
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--reader-muted);
+}
+
+.kb-sr-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.kb-sr-cta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--olive);
+  background: var(--olive);
+  color: var(--paper-hi);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.kb-sr-cta:hover:not(:disabled) {
+  border-color: var(--reader-accent);
+  background: var(--reader-accent);
+}
+
+.kb-sr-cta:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.kb-sr-cta--ghost {
+  border-color: var(--reader-rule);
+  background: transparent;
+  color: var(--reader-fg);
+}
+
+.kb-sr-cta--ghost:hover:not(:disabled) {
+  border-color: var(--reader-accent);
+  background: transparent;
+  color: var(--reader-accent);
+}
+
+.kb-sr-empty-note,
+.kb-sr-variety-note {
+  margin: 1rem 0 0;
+  padding: 0.8rem 1rem;
+  border: 1px dashed var(--reader-rule);
+  background: color-mix(in srgb, var(--reader-paper) 50%, transparent);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--reader-muted);
+}
+
+/* Toolbar: scope toggle + prompt count. */
+.kb-sr-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-top: 1.5rem;
+}
+
+.kb-sr-scope {
+  display: inline-flex;
+  border: 1px solid var(--reader-rule);
+}
+
+.kb-sr-scope-btn {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.7rem;
+  border: none;
+  border-right: 1px solid var(--reader-rule);
+  background: transparent;
+  color: var(--reader-muted);
+  cursor: pointer;
+}
+
+.kb-sr-scope-btn:last-child {
+  border-right: none;
+}
+
+.kb-sr-scope-btn.on {
+  background: var(--reader-accent);
+  color: var(--paper-hi);
+}
+
+.kb-sr-scope-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.kb-sr-count {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--reader-faint);
+}
+
+/* Prompt groups. */
+.kb-sr-groups {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.kb-sr-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.kb-sr-group-title {
+  margin: 0;
+}
+
+.kb-sr-group-count {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--reader-faint);
+}
+
+/* One review-prompt card. */
+.kb-sr-card {
+  border: 1px solid var(--reader-rule);
+  border-left-width: 3px;
+  border-left-color: var(--reader-rule);
+  padding: 1.1rem 1.2rem 1.2rem;
+  margin-bottom: 1rem;
+  background: var(--reader-paper);
+}
+
+/* User-authored prompts read as the strongest — an olive accent. */
+.kb-sr-card.is-user {
+  border-left-color: var(--olive);
+}
+
+.kb-sr-card--approved {
+  border-left-color: var(--olive);
+  background: color-mix(in srgb, var(--olive) 5%, var(--reader-paper));
+}
+
+.kb-sr-card--rejected {
+  border-left-color: var(--reader-rule);
+  opacity: 0.62;
+}
+
+.kb-sr-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.kb-sr-type {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--reader-rule);
+  color: var(--reader-muted);
+}
+
+.kb-sr-origin {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.5625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--reader-faint);
+}
+
+.kb-sr-origin--user {
+  color: var(--olive);
+}
+
+.kb-sr-question {
+  margin: 0 0 0.7rem;
+  font-size: 1.05rem;
+  line-height: 1.4;
+  color: var(--reader-strong);
+}
+
+.kb-sr-field {
+  display: block;
+  margin-bottom: 0.7rem;
+}
+
+.kb-sr-field-label,
+.kb-sr-answer-label {
+  display: block;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.5625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reader-faint);
+  margin-bottom: 0.3rem;
+}
+
+.kb-sr-answer {
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--reader-rule);
+  background: color-mix(in srgb, var(--reader-paper) 60%, transparent);
+}
+
+.kb-sr-answer-text {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--reader-fg);
+  white-space: pre-wrap;
+}
+
+.kb-sr-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--reader-fg);
+  background: var(--reader-paper);
+  border: 1px solid var(--reader-rule);
+  padding: 0.5rem 0.6rem;
+  resize: vertical;
+  transition: border-color 0.15s ease;
+}
+
+.kb-sr-input:focus {
+  outline: none;
+  border-color: var(--reader-accent);
+}
+
+.kb-sr-provenance {
+  margin: 0 0 0.85rem;
+  font-size: 0.8125rem;
+  color: var(--reader-muted);
+}
+
+.kb-sr-provenance strong {
+  color: var(--reader-fg);
+  font-weight: 600;
+}
+
+/* Decision controls. */
+.kb-sr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.kb-sr-spacer {
+  flex: 1 1 auto;
+}
+
+.kb-sr-edit,
+.kb-sr-reject,
+.kb-sr-approve {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--reader-rule);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.kb-sr-edit {
+  color: var(--reader-muted);
+}
+
+.kb-sr-edit:hover {
+  border-color: var(--reader-accent);
+  color: var(--reader-accent);
+}
+
+.kb-sr-reject {
+  color: var(--reader-muted);
+}
+
+.kb-sr-reject:hover {
+  border-color: var(--ochre);
+  color: var(--ochre);
+}
+
+.kb-sr-approve {
+  border-color: var(--olive);
+  color: var(--paper-hi);
+  background: var(--olive);
+}
+
+.kb-sr-approve:hover {
+  border-color: var(--reader-accent);
+  background: var(--reader-accent);
+}
+
+.kb-sr-decided {
+  font-size: 0.8125rem;
+  color: var(--reader-muted);
+}
+
+.kb-sr-undo {
+  margin-left: auto;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--reader-rule);
+  background: transparent;
+  color: var(--reader-muted);
+  cursor: pointer;
+}
+
+.kb-sr-undo:hover {
+  border-color: var(--reader-accent);
+  color: var(--reader-accent);
+}
+
+.kb-sr-foot {
+  margin: 1.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--reader-faint);
+}
+
+@media (min-width: 640px) {
+  .kb-sr-card {
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-sr-cta,
+  .kb-sr-edit,
+  .kb-sr-reject,
+  .kb-sr-approve,
+  .kb-sr-input {
+    transition: none;
+  }
+}
