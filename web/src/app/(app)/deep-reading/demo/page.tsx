@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import type {
-  BlockContext,
   LearningModeHandlers,
   ReadingMode,
   SectionContext,
@@ -52,14 +51,13 @@ export default function DeepReadingDemoPage() {
       })
 
     return {
-      // onPredict / onRewrite are intentionally omitted so the section actions
-      // and tabs open the built-in modes: Predict Before Reveal (DET-282) and
-      // Rewrite-the-Block (DET-285). They emit prediction_submitted /
-      // block_rewrite_started / rewrite_peeked / block_rewrite_submitted /
-      // section_revealed / comparison_generated through this same shared store.
+      // onPredict / onRewrite / onCompare are intentionally omitted so the
+      // section actions and tabs open the built-in modes: Predict Before Reveal
+      // (DET-282), Rewrite-the-Block (DET-285), and Compare & Repair (DET-286).
+      // They emit prediction_submitted / block_rewrite_started / rewrite_peeked /
+      // block_rewrite_submitted / section_revealed / comparison_generated /
+      // rewrite_revised through this same shared store.
       onExtractConcepts: (ctx) => emitFor(ctx, 'concept_candidate_approved'),
-      onCompare: (ctx: BlockContext) =>
-        emitFor(ctx, 'comparison_generated', ctx.block.block_id),
       onReview: (ctx) => emitFor(ctx, 'review_completed'),
     }
   }, [learning])
@@ -80,7 +78,10 @@ export default function DeepReadingDemoPage() {
         how your model compares. Switch to <strong>Rewrite</strong> for the
         DET-285 active-recall flow: reconstruct each block from memory while the
         source blurs the moment you start writing — peek if you must, it&apos;s
-        tracked.
+        tracked. Then switch to <strong>Compare</strong> for the DET-286
+        compare-and-repair flow: each rewrite you submitted is checked against
+        the article block — see what you preserved, missed, or changed, then
+        make one improved attempt.
       </p>
 
       <div className='seg-row'>
@@ -111,6 +112,13 @@ export default function DeepReadingDemoPage() {
           className={`seg${mode === 'rewrite' ? ' on' : ''}`}
         >
           Open in rewrite
+        </button>
+        <button
+          type='button'
+          onClick={() => setMode('compare')}
+          className={`seg${mode === 'compare' ? ' on' : ''}`}
+        >
+          Open in compare
         </button>
         <button
           type='button'

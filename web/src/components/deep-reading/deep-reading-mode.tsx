@@ -16,6 +16,7 @@ import {
   orderedSections,
 } from '@/lib/article-v2'
 
+import { CompareMode } from './compare-mode'
 import { DeepReadingSection } from './deep-reading-section'
 import { KeyTermOverview } from './key-term-overview'
 import { PredictMode } from './predict-mode'
@@ -81,6 +82,13 @@ export interface DeepReadingModeProps {
    * Pass an explicit `handlers.onRewrite` to override the built-in flow.
    */
   enableRewrite?: boolean
+  /**
+   * Enable the built-in Compare & Repair Mode (DET-286). On by default; the mode
+   * is reachable from the mode bar and from each section's Compare action, and
+   * compares the rewrites submitted in Rewrite Mode against the article block.
+   * Pass an explicit `handlers.onCompare` to override the built-in flow.
+   */
+  enableCompare?: boolean
 }
 
 const EMPTY_HANDLERS: LearningModeHandlers = {}
@@ -96,6 +104,7 @@ export function DeepReadingMode({
   highlightKeyTerms = true,
   enablePredict = true,
   enableRewrite = true,
+  enableCompare = true,
 }: DeepReadingModeProps) {
   const sections = useMemo(() => orderedSections(article), [article])
 
@@ -111,6 +120,8 @@ export function DeepReadingMode({
   const [predictFocusId, setPredictFocusId] = useState<string | null>(null)
   // The block to anchor on when entering Rewrite Mode (from a section action).
   const [rewriteFocusId, setRewriteFocusId] = useState<string | null>(null)
+  // The block to anchor on when entering Compare Mode (from a section action).
+  const [compareFocusId, setCompareFocusId] = useState<string | null>(null)
 
   // Section element registry for active-section tracking + scroll restoration.
   const sectionEls = useRef(new Map<string, HTMLElement>())
@@ -235,6 +246,8 @@ export function DeepReadingMode({
       if (next === 'predict') setPredictFocusId(activeSectionId)
       // Entering Rewrite from the mode bar clears any block anchor (top of mode).
       if (next === 'rewrite') setRewriteFocusId(null)
+      // Entering Compare from the mode bar clears any block anchor (top of mode).
+      if (next === 'compare') setCompareFocusId(null)
       setMode(next)
     },
     [activeSectionId],
@@ -254,6 +267,13 @@ export function DeepReadingMode({
     setMode('rewrite')
   }, [])
 
+  // Built-in Compare entry from a section action: anchor on the targeted block.
+  const enterCompare = useCallback((ctx: BlockContext) => {
+    setCompareFocusId(ctx.block.block_id)
+    setActiveSectionId(ctx.section.section_id)
+    setMode('compare')
+  }, [])
+
   // Section affordances use these handlers. The built-in Predict/Rewrite flows
   // are wired unless the caller supplies their own handler (a custom downstream
   // mode), in which case theirs wins.
@@ -261,8 +281,17 @@ export function DeepReadingMode({
     const merged: LearningModeHandlers = { ...handlers }
     if (enablePredict && !handlers.onPredict) merged.onPredict = enterPredict
     if (enableRewrite && !handlers.onRewrite) merged.onRewrite = enterRewrite
+    if (enableCompare && !handlers.onCompare) merged.onCompare = enterCompare
     return merged
-  }, [enablePredict, enableRewrite, handlers, enterPredict, enterRewrite])
+  }, [
+    enablePredict,
+    enableRewrite,
+    enableCompare,
+    handlers,
+    enterPredict,
+    enterRewrite,
+    enterCompare,
+  ])
 
   const onAffordance = useCallback(
     (_affordance: LearningAffordance, _ctx: SectionContext) => {
@@ -336,6 +365,17 @@ export function DeepReadingMode({
               Rewrite
             </button>
           )}
+          {enableCompare && (
+            <button
+              type='button'
+              role='tab'
+              aria-selected={mode === 'compare'}
+              className={`seg${mode === 'compare' ? ' on' : ''}`}
+              onClick={() => handleToggle('compare')}
+            >
+              Compare
+            </button>
+          )}
         </div>
       </div>
 
@@ -377,7 +417,9 @@ export function DeepReadingMode({
               ? `Predict before reveal · ${sections.length} sections`
               : mode === 'rewrite'
                 ? `Rewrite from memory · ${sections.length} sections`
-                : `${sections.length} sections`}
+                : mode === 'compare'
+                  ? `Compare & repair · feedback on your rewrites`
+                  : `${sections.length} sections`}
           {engaged > 0 && ` · ${engaged} engaged`}
         </p>
       </div>
@@ -403,6 +445,14 @@ export function DeepReadingMode({
           article={article}
           learning={learning}
           focusBlockId={rewriteFocusId}
+          onStartReading={handleStartReading}
+        />
+      ) : mode === 'compare' ? (
+        <CompareMode
+          article={article}
+          learning={learning}
+          sourceAvailable={provenance?.sourceAvailable}
+          focusBlockId={compareFocusId}
           onStartReading={handleStartReading}
         />
       ) : (
