@@ -26,6 +26,10 @@ import { KeyTermOverview } from './key-term-overview'
 import { PredictMode } from './predict-mode'
 import { RewriteMode } from './rewrite-mode'
 import {
+  type ScheduledReviewPrompt,
+  SpacedReviewMode,
+} from './spaced-review-mode'
+import {
   type ArticleProvenance,
   type BlockContext,
   type LearningModeHandlers,
@@ -100,8 +104,17 @@ export interface DeepReadingModeProps {
    * Pass an explicit `handlers.onExtractConcepts` to override the built-in flow.
    */
   enableExtract?: boolean
+  /**
+   * Enable the built-in Spaced Review Mode (DET-288). On by default; the mode is
+   * reachable from the mode bar and from each section's Review action, and turns
+   * the learner's rewrites, comparisons, and saved concepts into review prompts.
+   * Pass an explicit `handlers.onReview` to override the built-in flow.
+   */
+  enableReview?: boolean
   /** Concept Library sink — called when a concept candidate is approved. */
   onSaveConcept?: (concept: SavedConcept) => void
+  /** Retrieval Engine sink — called when a review prompt is approved. */
+  onSchedulePrompt?: (prompt: ScheduledReviewPrompt) => void
 }
 
 const EMPTY_HANDLERS: LearningModeHandlers = {}
@@ -119,7 +132,9 @@ export function DeepReadingMode({
   enableRewrite = true,
   enableCompare = true,
   enableExtract = true,
+  enableReview = true,
   onSaveConcept,
+  onSchedulePrompt,
 }: DeepReadingModeProps) {
   const sections = useMemo(() => orderedSections(article), [article])
 
@@ -139,6 +154,8 @@ export function DeepReadingMode({
   const [compareFocusId, setCompareFocusId] = useState<string | null>(null)
   // The section to scope to when entering Concept Extraction (section action).
   const [extractFocusId, setExtractFocusId] = useState<string | null>(null)
+  // The section to scope to when entering Spaced Review (section action).
+  const [reviewFocusId, setReviewFocusId] = useState<string | null>(null)
 
   // Section element registry for active-section tracking + scroll restoration.
   const sectionEls = useRef(new Map<string, HTMLElement>())
@@ -267,6 +284,8 @@ export function DeepReadingMode({
       if (next === 'compare') setCompareFocusId(null)
       // Entering Extract from the mode bar scopes to the whole article.
       if (next === 'extract') setExtractFocusId(null)
+      // Entering Review from the mode bar scopes to the whole article.
+      if (next === 'review') setReviewFocusId(null)
       setMode(next)
     },
     [activeSectionId],
@@ -300,6 +319,13 @@ export function DeepReadingMode({
     setMode('extract')
   }, [])
 
+  // Built-in Spaced Review from a section action: scope to that section.
+  const enterReview = useCallback((ctx: SectionContext) => {
+    setReviewFocusId(ctx.section.section_id)
+    setActiveSectionId(ctx.section.section_id)
+    setMode('review')
+  }, [])
+
   // Section affordances use these handlers. The built-in Predict/Rewrite flows
   // are wired unless the caller supplies their own handler (a custom downstream
   // mode), in which case theirs wins.
@@ -310,17 +336,20 @@ export function DeepReadingMode({
     if (enableCompare && !handlers.onCompare) merged.onCompare = enterCompare
     if (enableExtract && !handlers.onExtractConcepts)
       merged.onExtractConcepts = enterExtract
+    if (enableReview && !handlers.onReview) merged.onReview = enterReview
     return merged
   }, [
     enablePredict,
     enableRewrite,
     enableCompare,
     enableExtract,
+    enableReview,
     handlers,
     enterPredict,
     enterRewrite,
     enterCompare,
     enterExtract,
+    enterReview,
   ])
 
   const onAffordance = useCallback(
@@ -417,6 +446,17 @@ export function DeepReadingMode({
               Extract concepts
             </button>
           )}
+          {enableReview && (
+            <button
+              type='button'
+              role='tab'
+              aria-selected={mode === 'review'}
+              className={`seg${mode === 'review' ? ' on' : ''}`}
+              onClick={() => handleToggle('review')}
+            >
+              Spaced review
+            </button>
+          )}
         </div>
       </div>
 
@@ -462,7 +502,9 @@ export function DeepReadingMode({
                   ? `Compare & repair · feedback on your rewrites`
                   : mode === 'extract'
                     ? `Extract concepts · validate what's worth keeping`
-                    : `${sections.length} sections`}
+                    : mode === 'review'
+                      ? `Spaced review · turn this into recurring practice`
+                      : `${sections.length} sections`}
           {engaged > 0 && ` · ${engaged} engaged`}
         </p>
       </div>
@@ -504,6 +546,15 @@ export function DeepReadingMode({
           learning={learning}
           focusSectionId={extractFocusId}
           onSaveConcept={onSaveConcept}
+          onStartReading={handleStartReading}
+        />
+      ) : mode === 'review' ? (
+        <SpacedReviewMode
+          article={article}
+          learning={learning}
+          focusSectionId={reviewFocusId}
+          sourceAvailable={provenance?.sourceAvailable}
+          onSchedulePrompt={onSchedulePrompt}
           onStartReading={handleStartReading}
         />
       ) : (

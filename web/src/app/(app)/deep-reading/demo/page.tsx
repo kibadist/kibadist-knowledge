@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react'
 import type {
   LearningModeHandlers,
   ReadingMode,
-  SectionContext,
 } from '@/components/deep-reading'
 import { DeepReadingMode } from '@/components/deep-reading'
 import { SAMPLE_ARTICLE } from '@/components/deep-reading/sample-article'
@@ -35,32 +34,15 @@ export default function DeepReadingDemoPage() {
       ),
   })
 
-  const handlers = useMemo<LearningModeHandlers>(() => {
-    const emitFor = (
-      ctx: SectionContext,
-      event_type: Parameters<typeof learning.emit>[0]['event_type'],
-      block_id?: string,
-    ) =>
-      learning.emit({
-        article_id: ctx.article.article_id,
-        article_version_id: ctx.article.article_version_id,
-        section_id: ctx.section.section_id,
-        block_id,
-        event_type,
-        metadata: { surface: 'demo' },
-      })
-
-    return {
-      // onPredict / onRewrite / onCompare / onExtractConcepts are intentionally
-      // omitted so the section actions and tabs open the built-in modes: Predict
-      // Before Reveal (DET-282), Rewrite-the-Block (DET-285), Compare & Repair
-      // (DET-286), and Concept Extraction (DET-287). They emit
-      // prediction_submitted / block_rewrite_started / rewrite_peeked /
-      // block_rewrite_submitted / section_revealed / comparison_generated /
-      // rewrite_revised / concept_candidate_approved through this same store.
-      onReview: (ctx) => emitFor(ctx, 'review_completed'),
-    }
-  }, [learning])
+  // onPredict / onRewrite / onCompare / onExtractConcepts / onReview are
+  // intentionally omitted so the section actions and tabs open the built-in
+  // modes: Predict Before Reveal (DET-282), Rewrite-the-Block (DET-285),
+  // Compare & Repair (DET-286), Concept Extraction (DET-287), and Spaced Review
+  // (DET-288). They emit prediction_submitted / block_rewrite_started /
+  // rewrite_peeked / block_rewrite_submitted / section_revealed /
+  // comparison_generated / rewrite_revised / concept_candidate_approved /
+  // review_prompt_approved through this same store.
+  const handlers = useMemo<LearningModeHandlers>(() => ({}), [])
 
   return (
     <div className='screen'>
@@ -85,7 +67,10 @@ export default function DeepReadingDemoPage() {
         <strong>Extract concepts</strong> for the DET-287 flow: the
         article&apos;s key terms and seeded concepts become candidates you can
         approve, edit, or reject — a concept is only validated once you explain
-        it yourself.
+        it yourself. Finally switch to <strong>Spaced review</strong> for the
+        DET-288 flow: your rewrites, comparisons, and saved concepts become
+        review prompts — grouped by recall, misconception repair, contrast, and
+        transfer — that you approve before they enter your Retrieval Engine.
       </p>
 
       <div className='seg-row'>
@@ -133,6 +118,13 @@ export default function DeepReadingDemoPage() {
         </button>
         <button
           type='button'
+          onClick={() => setMode('review')}
+          className={`seg${mode === 'review' ? ' on' : ''}`}
+        >
+          Open in review
+        </button>
+        <button
+          type='button'
           onClick={() => setHighlight((h) => !h)}
           className={`seg${highlight ? ' on' : ''}`}
         >
@@ -149,6 +141,14 @@ export default function DeepReadingDemoPage() {
         onSaveConcept={(c) =>
           setLog((prev) =>
             [`concept saved · ${c.name} (${c.status})`, ...prev].slice(0, 8),
+          )
+        }
+        onSchedulePrompt={(p) =>
+          setLog((prev) =>
+            [
+              `prompt scheduled · ${p.prompt_type} · ${p.subject}`,
+              ...prev,
+            ].slice(0, 8),
           )
         }
         highlightKeyTerms={highlight}

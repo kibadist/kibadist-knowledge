@@ -52,6 +52,7 @@ export type ReadingMode =
   | 'rewrite'
   | 'compare'
   | 'extract'
+  | 'review'
 
 /** Maps an affordance to the handler key that implements it. */
 export const AFFORDANCE_HANDLER: Record<
