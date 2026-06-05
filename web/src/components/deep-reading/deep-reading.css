@@ -1,0 +1,453 @@
+/* Deep Reading Mode (DET-284). The polished reading surface for a *generated*
+   article — the worked example — with quiet entry points into active learning.
+   Scoped under .kb-dr so it never leaks into other routes. It reuses the
+   reader's --reader-* tokens (pulled in via reader.css) and the .kb-* typography
+   classes for prose, so the generated article and the source Reader stay
+   visually consistent. */
+
+.kb-dr {
+  --reader-paper: var(--paper-hi);
+  --reader-fg: var(--ink-soft);
+  --reader-strong: var(--ink);
+  --reader-muted: var(--ink-muted);
+  --reader-faint: var(--ink-faint);
+  --reader-rule: var(--rule-soft);
+  --reader-accent: var(--accent);
+  --reader-quote-rule: var(--rule-soft);
+  --reader-code-bg: var(--paper-2);
+  --reader-code-fg: var(--ink-soft);
+
+  display: block;
+  color: var(--reader-fg);
+  background: var(--reader-paper);
+  border: 1px solid var(--rule);
+  padding: 1.5rem 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .kb-dr {
+    padding: 2.25rem 2.5rem;
+  }
+}
+
+/* Top bar: provenance eyebrow + mode toggle. */
+.kb-dr-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.kb-dr-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.kb-dr-eyebrow-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: var(--reader-accent);
+  opacity: 0.7;
+}
+
+.kb-dr-modes {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* Header. */
+.kb-dr-header {
+  margin-top: 1.1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--reader-rule);
+}
+
+.kb-dr-title {
+  margin: 0;
+  color: var(--reader-strong);
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-family: var(--font-display), Georgia, serif;
+}
+
+@media (min-width: 640px) {
+  .kb-dr-title {
+    font-size: 2.1rem;
+  }
+}
+
+.kb-dr-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+  margin: 0.6rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--reader-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.kb-dr-meta > * + *::before {
+  content: "·";
+  margin-right: 0.85rem;
+  color: var(--reader-faint);
+}
+
+.kb-dr-meta-link {
+  color: var(--reader-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  max-width: 20rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-dr-meta-link:hover {
+  color: var(--reader-fg);
+}
+
+/* Reading progress. */
+.kb-dr-progress {
+  margin-top: 1rem;
+}
+
+.kb-dr-progress-track {
+  height: 3px;
+  background: color-mix(in srgb, var(--reader-rule) 50%, transparent);
+  overflow: hidden;
+}
+
+.kb-dr-progress-fill {
+  height: 100%;
+  background: var(--reader-accent);
+  transition: width 0.3s var(--ease, ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-dr-progress-fill {
+    transition: none;
+  }
+}
+
+.kb-dr-progress-label {
+  margin: 0.4rem 0 0;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--reader-faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+/* Sections. */
+.kb-dr-sections {
+  margin-top: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.kb-dr-section {
+  scroll-margin-top: 1.5rem;
+  border-left: 2px solid transparent;
+  padding-left: 1rem;
+  margin-left: -1rem;
+  transition: border-color 0.2s ease;
+}
+
+.kb-dr-section.is-touched {
+  border-left-color: color-mix(in srgb, var(--reader-accent) 45%, transparent);
+}
+
+.kb-dr-section-head {
+  margin-bottom: 0.75rem;
+}
+
+.kb-dr-section-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reader-faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.kb-dr-section-badge {
+  color: var(--reader-accent);
+  font-weight: 600;
+}
+
+.kb-dr-section-title {
+  margin: 0;
+}
+
+.kb-dr-prose {
+  margin-top: 0;
+}
+
+/* The closing affordance row stays quiet until the section is engaged. */
+.kb-dr-section-foot {
+  margin-top: 1rem;
+}
+
+.kb-dr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  opacity: 0.35;
+  transition: opacity 0.2s ease;
+}
+
+.kb-dr-section:hover .kb-dr-actions,
+.kb-dr-section:focus-within .kb-dr-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  /* On touch there is no hover — keep actions legible. */
+  .kb-dr-actions {
+    opacity: 0.85;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-dr-actions {
+    transition: none;
+  }
+}
+
+.kb-dr-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--reader-rule);
+  background: transparent;
+  color: var(--reader-fg);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.kb-dr-action:hover:not(:disabled) {
+  background: var(--paper-2);
+  border-color: var(--reader-accent);
+}
+
+.kb-dr-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.kb-dr-action.is-done {
+  border-color: color-mix(
+    in srgb,
+    var(--reader-accent) 55%,
+    var(--reader-rule)
+  );
+  color: var(--reader-accent);
+}
+
+.kb-dr-action-mark {
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+/* Completion markers. */
+.kb-dr-markers {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+}
+
+.kb-dr-marker {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--reader-accent);
+}
+
+/* Quote attribution + callouts + divider (v2-only blocks). */
+.kb-dr-quote-cite {
+  display: block;
+  margin-top: 0.5rem;
+  font-style: normal;
+  font-size: 0.8125rem;
+  color: var(--reader-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.kb-dr-callout {
+  margin: 1.3em 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--reader-rule);
+  border-left-width: 3px;
+  background: color-mix(in srgb, var(--reader-paper) 50%, transparent);
+}
+
+.kb-dr-callout--note {
+  border-left-color: var(--indigo);
+}
+.kb-dr-callout--tip {
+  border-left-color: var(--olive);
+}
+.kb-dr-callout--warning {
+  border-left-color: var(--ochre);
+}
+.kb-dr-callout--insight {
+  border-left-color: var(--accent);
+}
+
+.kb-dr-callout-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.kb-dr-callout-body {
+  margin: 0;
+}
+
+.kb-dr-divider {
+  margin: 2em auto;
+  width: 40%;
+  border: none;
+  border-top: 1px solid var(--reader-rule);
+}
+
+/* Key-term highlight — a subtle reading aid, never a loud marker. */
+.kb-dr-term {
+  background: var(--accent-tint);
+  color: inherit;
+  padding: 0 0.1em;
+  border-radius: 2px;
+}
+
+/* Overview Mode. */
+.kb-dr-overview {
+  margin-top: 1.75rem;
+}
+
+.kb-dr-overview-lede {
+  margin: 0 0 1.25rem;
+  font-size: 0.95rem;
+  color: var(--reader-muted);
+  font-family: var(--font-body), Georgia, serif;
+  font-style: italic;
+}
+
+.kb-dr-overview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kb-dr-overview-item {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--reader-rule);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.kb-dr-overview-item:hover {
+  background: var(--paper-2);
+}
+
+.kb-dr-overview-item.is-active {
+  border-color: var(--reader-accent);
+}
+
+.kb-dr-overview-num {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--reader-faint);
+  padding-top: 0.15rem;
+}
+
+.kb-dr-overview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.kb-dr-overview-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--reader-strong);
+}
+
+.kb-dr-overview-done {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--reader-accent);
+}
+
+.kb-dr-overview-terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.kb-dr-overview-term {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  color: var(--reader-muted);
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--reader-rule);
+}
+
+/* Footnote. */
+.kb-dr-footnote {
+  margin: 2rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--reader-rule);
+  font-size: 0.75rem;
+  color: var(--reader-faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
