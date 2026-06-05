@@ -17,7 +17,7 @@ import {
 } from '@/lib/article-v2'
 
 import { DeepReadingSection } from './deep-reading-section'
-import { OverviewMode } from './overview-mode'
+import { KeyTermOverview } from './key-term-overview'
 import {
   type ArticleProvenance,
   type LearningModeHandlers,
@@ -101,8 +101,9 @@ export function DeepReadingMode({
     [],
   )
 
-  // When we switch into deep mode we restore the reader to the section they
-  // were last looking at (set in overview, or preserved from the prior scroll).
+  // When we switch into deep mode we restore the reader to the section (or the
+  // specific block) they were last looking at — set in overview, or preserved
+  // from the prior scroll. Holds a section_id or a block_id DOM anchor.
   const pendingScroll = useRef<string | null>(null)
 
   const revealedOnce = useRef(new Set<string>())
@@ -116,7 +117,11 @@ export function DeepReadingMode({
       article_id: article.article_id,
       article_version_id: article.article_version_id,
       event_type: 'overview_viewed',
-      metadata: { surface: 'deep_reading_mode' },
+      metadata: {
+        surface: 'deep_reading_mode',
+        mode: 'key_term_overview',
+        section_count: article.sections.length,
+      },
     })
   }, [mode, article, learning])
 
@@ -159,7 +164,10 @@ export function DeepReadingMode({
     const targetId = pendingScroll.current ?? activeSectionId
     pendingScroll.current = null
     if (!targetId) return
-    const el = sectionEls.current.get(targetId)
+    // A section anchor lives in the registry; a block anchor (from an overview
+    // key-term jump) is a plain DOM id on the rendered block.
+    const el =
+      sectionEls.current.get(targetId) ?? document.getElementById(targetId)
     if (!el) return
     const reduceMotion = window.matchMedia(
       '(prefers-reduced-motion: reduce)',
@@ -182,11 +190,21 @@ export function DeepReadingMode({
     [learning],
   )
 
-  const handleSelectFromOverview = useCallback((sectionId: string) => {
-    pendingScroll.current = sectionId
-    setActiveSectionId(sectionId)
+  const handleSelectFromOverview = useCallback(
+    (sectionId: string, blockId?: string) => {
+      // Prefer a block anchor when a key-term jump supplied one, so the reader
+      // lands on the exact occurrence; otherwise anchor to the section top.
+      pendingScroll.current = blockId ?? sectionId
+      setActiveSectionId(sectionId)
+      setMode('deep')
+    },
+    [],
+  )
+
+  const handleStartReading = useCallback(() => {
+    pendingScroll.current = activeSectionId
     setMode('deep')
-  }, [])
+  }, [activeSectionId])
 
   const handleToggle = useCallback(
     (next: ReadingMode) => {
@@ -290,11 +308,12 @@ export function DeepReadingMode({
       </div>
 
       {mode === 'overview' ? (
-        <OverviewMode
+        <KeyTermOverview
           article={article}
           activeSectionId={activeSectionId}
           completedBySection={completedBySection}
           onSelectSection={handleSelectFromOverview}
+          onStartReading={handleStartReading}
         />
       ) : (
         <div className='kb-dr-sections'>

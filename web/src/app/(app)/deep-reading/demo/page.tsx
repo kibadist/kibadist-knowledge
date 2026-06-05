@@ -69,7 +69,10 @@ export default function DeepReadingDemoPage() {
       <p className='lede'>
         The polished generated-article reading surface (DET-284) with quiet
         entry points into active learning. Hover a section to reveal its
-        actions; click one and watch its completion marker appear.
+        actions; click one and watch its completion marker appear. Switch to{' '}
+        <strong>Overview</strong> for the DET-280 key-term skeleton: headings
+        and key terms stay crisp while the prose is blurred — click a term to
+        preview where it occurs, then start guided reading.
       </p>
 
       <div className='seg-row'>

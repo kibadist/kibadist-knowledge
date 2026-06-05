@@ -352,94 +352,345 @@
   border-radius: 2px;
 }
 
-/* Overview Mode. */
-.kb-dr-overview {
+/* Key-Term Overview Mode (DET-280) — the pre-reading skeleton. Headings and key
+   terms stay crisp; secondary prose is blurred and examples fold away. */
+.kb-kto {
   margin-top: 1.75rem;
 }
 
-.kb-dr-overview-lede {
-  margin: 0 0 1.25rem;
+.kb-kto-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.kb-kto-lede {
+  flex: 1 1 18rem;
+  margin: 0;
   font-size: 0.95rem;
+  line-height: 1.55;
   color: var(--reader-muted);
   font-family: var(--font-body), Georgia, serif;
   font-style: italic;
 }
 
-.kb-dr-overview-list {
+.kb-kto-cta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--reader-accent);
+  background: var(--reader-accent);
+  color: var(--paper-hi, #fff);
+  cursor: pointer;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+
+.kb-kto-cta:hover {
+  opacity: 0.88;
+}
+
+.kb-kto-sections {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 1.5rem;
 }
 
-.kb-dr-overview-item {
-  display: flex;
-  gap: 1rem;
-  width: 100%;
-  text-align: left;
-  padding: 0.9rem 1rem;
+.kb-kto-section {
   border: 1px solid var(--reader-rule);
-  background: transparent;
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
+  border-left-width: 2px;
+  padding: 1.1rem 1.25rem 1.25rem;
+  transition: border-color 0.2s ease;
 }
 
-.kb-dr-overview-item:hover {
-  background: var(--paper-2);
+.kb-kto-section.is-active {
+  border-left-color: var(--reader-accent);
 }
 
-.kb-dr-overview-item.is-active {
-  border-color: var(--reader-accent);
+.kb-kto-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
 }
 
-.kb-dr-overview-num {
+.kb-kto-num {
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.75rem;
   color: var(--reader-faint);
-  padding-top: 0.15rem;
 }
 
-.kb-dr-overview-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  min-width: 0;
-}
-
-.kb-dr-overview-heading {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
+.kb-kto-heading {
+  flex: 1 1 auto;
+  text-align: left;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
   font-family: var(--font-display), Georgia, serif;
-  font-size: 1.05rem;
+  font-size: 1.2rem;
   font-weight: 600;
+  line-height: 1.25;
   color: var(--reader-strong);
+  transition: color 0.15s ease;
 }
 
-.kb-dr-overview-done {
+.kb-kto-heading:hover {
+  color: var(--reader-accent);
+}
+
+.kb-kto-done {
+  flex: 0 0 auto;
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.6875rem;
   letter-spacing: 0.06em;
   color: var(--reader-accent);
 }
 
-.kb-dr-overview-terms {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+.kb-kto-summary {
+  margin: 0.6rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--reader-fg);
+  font-family: var(--font-body), Georgia, serif;
 }
 
-.kb-dr-overview-term {
+/* Key-term chips — the scannable skeleton. */
+.kb-kto-terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.85rem;
+}
+
+.kb-kto-term {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  color: var(--reader-strong);
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--reader-rule);
+  background: var(--accent-tint);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.kb-kto-term:hover {
+  border-color: var(--reader-accent);
+}
+
+.kb-kto-term.is-open {
+  border-color: var(--reader-accent);
+  color: var(--reader-accent);
+}
+
+/* Click-to-preview panel for a term. */
+.kb-kto-preview {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--reader-rule);
+  border-left: 2px solid var(--reader-accent);
+  background: var(--paper-2);
+}
+
+.kb-kto-preview-term {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--reader-strong);
+}
+
+.kb-kto-preview-concept {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.45rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--reader-fg);
+}
+
+.kb-kto-preview-tag {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--reader-rule);
+}
+
+.kb-kto-preview-snippet {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--reader-muted);
+  font-family: var(--font-body), Georgia, serif;
+  font-style: italic;
+}
+
+.kb-kto-preview-snippet.is-empty {
+  font-style: normal;
+  color: var(--reader-faint);
+}
+
+.kb-kto-preview-read {
+  margin-top: 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.6875rem;
-  letter-spacing: 0.04em;
-  color: var(--reader-muted);
-  padding: 0.15rem 0.45rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.6rem;
   border: 1px solid var(--reader-rule);
+  background: transparent;
+  color: var(--reader-fg);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.kb-kto-preview-read:hover {
+  border-color: var(--reader-accent);
+  color: var(--reader-accent);
+}
+
+/* Relationship / definition phrases lifted from the prose. */
+.kb-kto-rels {
+  list-style: none;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.kb-kto-rel {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--reader-fg);
+}
+
+.kb-kto-rel::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  color: var(--reader-accent);
+}
+
+/* The obscured skeleton body: layout kept, prose blurred, examples folded. */
+.kb-kto-blocks {
+  margin-top: 1.1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--reader-rule);
+}
+
+.kb-kto-prose {
+  filter: blur(3px);
+  opacity: 0.5;
+  user-select: none;
+  pointer-events: none;
+  /* Clip the blur halo so blurred blocks don't bleed into crisp headings. */
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Blur is a static visual scaffold, not motion — no change needed, but keep
+     the deemphasis gentle for readers who lower it via reduced transparency. */
+  .kb-kto-prose {
+    filter: blur(2.5px);
+  }
+}
+
+.kb-kto-example {
+  margin: 1.1em 0;
+}
+
+.kb-kto-example-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.7rem;
+  border: 1px dashed var(--reader-rule);
+  background: transparent;
+  color: var(--reader-muted);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.kb-kto-example-toggle:hover {
+  border-color: var(--reader-accent);
+  color: var(--reader-fg);
+}
+
+.kb-kto-example-body {
+  margin-top: 0.75rem;
+}
+
+.kb-kto-read {
+  margin-top: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--reader-rule);
+  background: transparent;
+  color: var(--reader-fg);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.kb-kto-read:hover {
+  border-color: var(--reader-accent);
+  color: var(--reader-accent);
+}
+
+.kb-kto-foot {
+  margin: 1.5rem 0 0;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--reader-faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+@media (min-width: 640px) {
+  .kb-kto-section {
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+  .kb-kto-heading {
+    font-size: 1.35rem;
+  }
 }
 
 /* Footnote. */
