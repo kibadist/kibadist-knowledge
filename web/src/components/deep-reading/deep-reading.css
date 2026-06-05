@@ -1385,3 +1385,551 @@
     transition: none;
   }
 }
+
+/* ── Compare & Repair Mode (DET-286) ────────────────────────────────────────
+   The feedback mode: each submitted reconstruction is shown beside its source
+   block with structured, source-faithful feedback and a "try again" editor.
+   Scoped under .kb-cmp (inside .kb-dr, so the reader tokens apply). */
+.kb-cmp {
+  display: block;
+}
+
+.kb-cmp-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-top: 1.4rem;
+}
+
+.kb-cmp-lede {
+  flex: 1 1 18rem;
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--reader-muted);
+}
+
+.kb-cmp-cta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--reader-rule);
+  background: transparent;
+  color: var(--reader-fg);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.kb-cmp-cta:hover {
+  border-color: var(--reader-accent);
+  color: var(--reader-accent);
+}
+
+/* Empty state — nothing reconstructed to compare yet. */
+.kb-cmp-empty {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border: 1px dashed var(--reader-rule);
+  background: color-mix(in srgb, var(--reader-paper) 50%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.kb-cmp-empty-lede {
+  flex: 1 1 18rem;
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--reader-muted);
+}
+
+.kb-cmp-sections {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.kb-cmp-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.kb-cmp-section-num {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--reader-faint);
+}
+
+.kb-cmp-section-title {
+  margin: 0;
+}
+
+/* One compare card. */
+.kb-cmp-block {
+  border: 1px solid var(--reader-rule);
+  padding: 1rem 1.1rem 1.2rem;
+  margin-bottom: 1.25rem;
+  background: var(--reader-paper);
+}
+
+.kb-cmp-block-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.kb-cmp-block-num {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--reader-faint);
+}
+
+.kb-cmp-block-noun {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--reader-rule);
+}
+
+.kb-cmp-block-badge {
+  margin-left: auto;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* Side-by-side: the learner's version and the source block. */
+.kb-cmp-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 720px) {
+  .kb-cmp-columns {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.kb-cmp-col {
+  min-width: 0;
+}
+
+.kb-cmp-col-eyebrow {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+}
+
+.kb-cmp-yours {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-left: 2px solid var(--accent);
+  background: var(--reader-code-bg);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--reader-fg);
+  white-space: pre-wrap;
+}
+
+.kb-cmp-source {
+  border-left: 2px solid var(--reader-rule);
+  padding-left: 1rem;
+}
+
+/* Feedback panel. */
+.kb-cmp-feedback {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--reader-rule);
+  border-left-width: 3px;
+  border-left-color: var(--reader-accent);
+  background: color-mix(in srgb, var(--reader-paper) 50%, transparent);
+}
+
+.kb-cmp-feedback.is-empty {
+  border-left-color: var(--reader-rule);
+}
+
+.kb-cmp-feedback-empty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--reader-muted);
+}
+
+.kb-cmp-feedback-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.kb-cmp-feedback-eyebrow {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+}
+
+/* Source-confidence chip — quiet, colour-coded by provenance state. */
+.kb-cmp-confidence {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--reader-rule);
+  color: var(--reader-muted);
+}
+
+.kb-cmp-confidence--source_supported {
+  border-color: var(--olive);
+  color: var(--olive);
+}
+.kb-cmp-confidence--article_supported_source_unavailable {
+  border-color: var(--indigo);
+  color: var(--indigo);
+}
+.kb-cmp-confidence--user_authored_unsourced {
+  border-color: var(--reader-rule);
+  color: var(--reader-muted);
+}
+.kb-cmp-confidence--unsupported_or_invented {
+  border-color: var(--ochre);
+  color: var(--ochre);
+}
+.kb-cmp-confidence--needs_review {
+  border-color: var(--ochre);
+  color: var(--ochre);
+}
+
+.kb-cmp-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+@media (min-width: 640px) {
+  .kb-cmp-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.kb-cmp-bucket {
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--reader-rule);
+  border-top-width: 2px;
+  background: var(--reader-paper);
+}
+
+.kb-cmp-bucket--match {
+  border-top-color: var(--olive);
+}
+.kb-cmp-bucket--gap {
+  border-top-color: var(--indigo);
+}
+.kb-cmp-bucket--changed {
+  border-top-color: var(--ochre);
+}
+.kb-cmp-bucket--extra {
+  border-top-color: var(--accent);
+}
+
+.kb-cmp-bucket-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.kb-cmp-bucket-label {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--reader-strong);
+}
+
+.kb-cmp-bucket-count {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--reader-faint);
+}
+
+.kb-cmp-bucket-blurb {
+  margin: 0.3rem 0 0.6rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--reader-muted);
+}
+
+.kb-cmp-bucket-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.kb-cmp-bucket-item {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--reader-fg);
+  padding-left: 0.9rem;
+  position: relative;
+}
+
+.kb-cmp-bucket-item::before {
+  content: "·";
+  position: absolute;
+  left: 0.2rem;
+  color: var(--reader-faint);
+}
+
+/* Misconceptions worth repairing later. */
+.kb-cmp-misconceptions {
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--reader-rule);
+}
+
+.kb-cmp-misconceptions-eyebrow {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+}
+
+.kb-cmp-misconceptions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.kb-cmp-misconception {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.kb-cmp-misconception-belief {
+  color: var(--ochre);
+  font-style: italic;
+}
+
+.kb-cmp-misconception-arrow {
+  color: var(--reader-faint);
+}
+
+.kb-cmp-misconception-article {
+  color: var(--reader-fg);
+}
+
+/* The repair prompt — one improved attempt, never a grade. */
+.kb-cmp-repair {
+  margin-top: 1.1rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--reader-accent);
+  background: color-mix(in srgb, var(--reader-accent) 8%, transparent);
+}
+
+.kb-cmp-repair-eyebrow {
+  margin: 0 0 0.3rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--reader-accent);
+}
+
+.kb-cmp-repair-prompt {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--reader-strong);
+}
+
+.kb-cmp-feedback-foot {
+  margin: 1.1rem 0 0;
+  font-size: 0.75rem;
+  color: var(--reader-faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  letter-spacing: 0.04em;
+}
+
+/* Revise affordance + editor. */
+.kb-cmp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+  margin-top: 1rem;
+}
+
+.kb-cmp-revise-cta {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--reader-accent);
+  background: var(--reader-accent);
+  color: var(--reader-paper);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.kb-cmp-revise-cta:hover {
+  opacity: 0.88;
+}
+
+.kb-cmp-actions-hint {
+  font-size: 0.75rem;
+  color: var(--reader-faint);
+}
+
+.kb-cmp-editor {
+  margin-top: 1rem;
+}
+
+.kb-cmp-prompt {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--reader-strong);
+  margin-bottom: 0.5rem;
+}
+
+.kb-cmp-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--reader-fg);
+  background: var(--reader-paper);
+  border: 1px solid var(--reader-rule);
+  padding: 0.7rem 0.8rem;
+}
+
+.kb-cmp-input:focus-visible {
+  outline: 2px solid var(--reader-accent);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.kb-cmp-editor-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.7rem;
+}
+
+.kb-cmp-cancel {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--reader-rule);
+  background: transparent;
+  color: var(--reader-muted);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.kb-cmp-cancel:hover {
+  border-color: var(--reader-fg);
+  color: var(--reader-fg);
+}
+
+.kb-cmp-submit {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--reader-accent);
+  background: var(--reader-accent);
+  color: var(--reader-paper);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.kb-cmp-submit:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.kb-cmp-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.kb-cmp-editor-hint {
+  margin: 0.7rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--reader-faint);
+}
+
+.kb-cmp-foot {
+  margin: 1.75rem 0 0;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--reader-faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+@media (min-width: 640px) {
+  .kb-cmp-block {
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-cmp-cta,
+  .kb-cmp-revise-cta,
+  .kb-cmp-submit,
+  .kb-cmp-cancel,
+  .kb-cmp-input {
+    transition: none;
+  }
+}

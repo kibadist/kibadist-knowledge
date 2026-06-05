@@ -45,7 +45,12 @@ export interface ArticleProvenance {
   sourceAvailable?: boolean
 }
 
-export type ReadingMode = 'overview' | 'deep' | 'predict' | 'rewrite'
+export type ReadingMode =
+  | 'overview'
+  | 'deep'
+  | 'predict'
+  | 'rewrite'
+  | 'compare'
 
 /** Maps an affordance to the handler key that implements it. */
 export const AFFORDANCE_HANDLER: Record<
