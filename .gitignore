@@ -44,3 +44,4 @@ coverage/
 
 # mcp local artifacts
 .mcp/
+.mcp.json
