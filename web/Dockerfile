@@ -2,8 +2,9 @@
 # Production image for the Next.js web app (kibadist-web) in this pnpm monorepo.
 # Build context must be the REPO ROOT (the workspace lockfile lives there).
 
-# ---- Base: Node 20 + pnpm via corepack ---------------------------------------
-FROM node:20-bookworm-slim AS base
+# ---- Base: Node 24 + pnpm via corepack ---------------------------------------
+# Kept in lockstep with the API image (repo-root Dockerfile): Node 24 LTS.
+FROM node:24-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable

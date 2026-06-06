@@ -2,8 +2,10 @@
 # Production image for the NestJS API (@kibadist/server) in this pnpm monorepo.
 # Debian-based so Prisma's native query engine matches build and runtime.
 
-# ---- Base: Node 20 + pnpm via corepack ---------------------------------------
-FROM node:20-bookworm-slim AS base
+# ---- Base: Node 24 + pnpm via corepack ---------------------------------------
+# Node >= 22.9 is required at runtime by undici@8 (markAsUncloneable); 24 is the
+# LTS the team develops on.
+FROM node:24-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
 # OpenSSL + CA certs are required by Prisma's query engine.
