@@ -185,6 +185,14 @@ export interface InboxItem {
   /** Set when this capture was validated out of a source-preserving article
    *  (DET-283) — drives the "from article" badge + backlink. */
   originArticleId: string | null
+  /** Unified capture (DET-300): the TransformerSource captured alongside this
+   *  item, so the row can open the source pipeline. Null for forged merges and
+   *  pre-DET-300 captures. */
+  sourceId: string | null
+  /** The companion source's latest generated article + status (DET-300): drives
+   *  the row's "Read" action once the pipeline produces an article. */
+  latestArticleId: string | null
+  latestArticleStatus: TransformedArticleStatus | null
   excerpt: string
   /** Word count of the raw material — drives the row's read-time signal. */
   wordCount: number

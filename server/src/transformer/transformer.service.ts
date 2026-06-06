@@ -190,7 +190,40 @@ export class TransformerService {
     // a fetch failure surfaces synchronously as a 400 rather than a failed async
     // pipeline. Extraction (chrome removal, blocks) happens later, in-pipeline.
     const page = await fetchReadable(dto.url)
-    const title = page.title?.trim() || hostPathLabel(dto.url)
+    return this.persistUrlSource(
+      userId,
+      workspaceId,
+      dto.url,
+      page.html,
+      page.title,
+    )
+  }
+
+  /**
+   * Create a URL source from an ALREADY-FETCHED page (DET-300). The unified inbox
+   * capture (InboxService) fetches the page once — for the inbox concept's
+   * structured document — and hands the raw HTML here so the same URL isn't
+   * fetched twice. Otherwise identical to createUrlSource: persist the raw HTML +
+   * fire the pipeline.
+   */
+  async createUrlSourceFromHtml(
+    userId: string,
+    workspaceId: string,
+    url: string,
+    html: string,
+    pageTitle?: string | null,
+  ): Promise<TransformerSourceListItem> {
+    return this.persistUrlSource(userId, workspaceId, url, html, pageTitle)
+  }
+
+  private async persistUrlSource(
+    userId: string,
+    workspaceId: string,
+    url: string,
+    html: string,
+    pageTitle?: string | null,
+  ): Promise<TransformerSourceListItem> {
+    const title = pageTitle?.trim() || hostPathLabel(url)
     const source = await this.prisma.transformerSource.create({
       data: {
         userId,
@@ -198,9 +231,9 @@ export class TransformerService {
         type: TransformerSourceType.URL,
         status: TransformerSourceStatus.INGESTED,
         title,
-        url: dto.url,
-        rawContent: page.html,
-        metadata: { title, url: dto.url },
+        url,
+        rawContent: html,
+        metadata: { title, url },
       },
     })
     this.fire(source.id)

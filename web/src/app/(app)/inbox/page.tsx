@@ -3,8 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+import { CaptureCard } from '@/components/transformer/capture-card'
 import { api, type InboxItem } from '@/lib/api'
 import {
   defaultSnoozeUntil,
@@ -14,72 +15,27 @@ import {
   sourceMark,
 } from '@/lib/inbox-format'
 
-type Mode = 'text' | 'url' | 'pdf'
-
-const MODES: { key: Mode; label: string }[] = [
-  { key: 'text', label: 'Paste' },
-  { key: 'url', label: 'Link' },
-  { key: 'pdf', label: 'PDF' },
-]
-
 /**
- * Inbox — the low-friction capture surface (step 1 of the core loop). Captured
- * items are a deliberate holding area, NOT knowledge: no graph links, no
- * retrieval, no AI summary. They're earned into concepts later. The UI leans
- * into "a waiting room, not a library" (DET-187).
+ * Inbox — the single capture + triage surface (DET-300). The one "Add a source"
+ * card (paste / link / PDF) lives at the top; below it is the triage queue of
+ * unprocessed captures. Each capture also ingests a companion TransformerSource
+ * (the richer artifact) server-side, so a row can route to BOTH the reading
+ * surface (the generated article) and the promote gate (Process) from the same
+ * place — the two front-door pipelines no longer compete.
  *
- * Triage affordances (DET-241): rather than tagging every row "Unprocessed"
- * (redundant — the whole screen is the unprocessed queue), each row carries a
- * source + read-time signal, the queue shows its count and groups by day, and
- * Process is the primary action. Keyboard: j/k to move, P to process, E to
- * discard — clearing the inbox is meant to feel like a finishable pass.
+ * Captured items are a deliberate holding area, NOT knowledge: no graph links, no
+ * retrieval, no AI summary. They're earned into concepts later (DET-187).
+ *
+ * Triage affordances (DET-241): each row carries a source + read-time signal, the
+ * queue shows its count and groups by day, and Process is the primary action.
+ * Keyboard: j/k to move, P to process, S snooze, X select, F forge, E discard —
+ * clearing the inbox is meant to feel like a finishable pass.
  */
 export default function InboxPage() {
   const queryClient = useQueryClient()
   const router = useRouter()
-  const [mode, setMode] = useState<Mode>('text')
-  const [text, setText] = useState('')
-  const [url, setUrl] = useState('')
-  const [file, setFile] = useState<File | null>(null)
-  // Track-first onboarding (DET-240): the track this capture is routed into.
-  const [trackId, setTrackId] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const inboxQuery = useQuery({ queryKey: ['inbox'], queryFn: api.listInbox })
-  // Active tracks to route a capture into (DET-240). Reading the list client-side
-  // keeps the picker in sync with whatever world is active.
-  const tracksQuery = useQuery({
-    queryKey: ['tracks'],
-    queryFn: () => api.listTracks('ACTIVE'),
-  })
-
-  // Preselect a track when arriving from a track's "import a source" link
-  // (/inbox?track=<id>). Read from the URL on mount to avoid a Suspense boundary.
-  useEffect(() => {
-    const param = new URLSearchParams(window.location.search).get('track')
-    if (param) setTrackId(param)
-  }, [])
-
-  function resetInputs() {
-    setText('')
-    setUrl('')
-    setFile(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  const capture = useMutation({
-    mutationFn: async () => {
-      const track = trackId || undefined
-      if (mode === 'text') return api.captureText({ text, trackId: track })
-      if (mode === 'url') return api.captureUrl({ url, trackId: track })
-      if (!file) throw new Error('Choose a PDF to capture')
-      return api.capturePdf(file, track)
-    },
-    onSuccess: () => {
-      resetInputs()
-      queryClient.invalidateQueries({ queryKey: ['inbox'] })
-    },
-  })
 
   const discard = useMutation({
     mutationFn: (id: string) => api.discardInboxItem(id),
@@ -113,14 +69,6 @@ export default function InboxPage() {
       else next.add(id)
       return next
     })
-  }
-
-  function onSubmit(e: FormEvent) {
-    e.preventDefault()
-    if (mode === 'text' && !text.trim()) return
-    if (mode === 'url' && !url.trim()) return
-    if (mode === 'pdf' && !file) return
-    capture.mutate()
   }
 
   const items = inboxQuery.data ?? []
@@ -212,108 +160,18 @@ export default function InboxPage() {
     <div className='screen'>
       <div className='page-head'>
         <div className='section-label'>§ Capture · Step 01</div>
-        <h1>Inbox</h1>
+        <h1>Add a source</h1>
         {items.length > 0 && (
           <div className='head-count'>{items.length} waiting</div>
         )}
         <p className='lede'>
-          A waiting room, not a library. Capture quickly — nothing here is
-          knowledge yet. You’ll earn it into a concept later.
+          One front door. Paste a quote, a link, or a PDF — it lands in the
+          queue below and is reshaped into a readable article in the background.
+          Nothing here is knowledge yet; you’ll earn it into a concept later.
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className='panel panel-raised capture'>
-        <div className='seg-row'>
-          {MODES.map((m) => (
-            <button
-              key={m.key}
-              type='button'
-              onClick={() => setMode(m.key)}
-              className={`seg${mode === m.key ? ' on' : ''}`}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-
-        {mode === 'text' && (
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder='Paste a quote, transcript, or idea fragment…'
-            rows={4}
-            className='fld'
-            style={{ marginTop: 14 }}
-          />
-        )}
-
-        {mode === 'url' && (
-          <input
-            type='url'
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder='https://example.com/article'
-            className='fld'
-            style={{ marginTop: 14 }}
-          />
-        )}
-
-        {mode === 'pdf' && (
-          <div className='file-drop' style={{ marginTop: 14 }}>
-            <input
-              ref={fileInputRef}
-              type='file'
-              accept='application/pdf'
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              style={{ display: 'none' }}
-              id='pdf-input'
-            />
-            <label htmlFor='pdf-input' style={{ cursor: 'pointer' }}>
-              {file ? file.name : 'Drop a PDF, or '}
-              {!file && <span className='u'>choose a file</span>}
-            </label>
-          </div>
-        )}
-
-        {/* Track-first onboarding (DET-240): optionally route this capture into a
-            track. When the earned concept is promoted, it auto-enrolls there as
-            an AI candidate with suggested domains. */}
-        {(tracksQuery.data?.length ?? 0) > 0 && (
-          <label className='capture-track' style={{ marginTop: 14 }}>
-            <span className='capture-track-label'>Add to track (optional)</span>
-            <select
-              className='fld'
-              value={trackId}
-              onChange={(e) => setTrackId(e.target.value)}
-            >
-              <option value=''>No track — just capture</option>
-              {tracksQuery.data?.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        {capture.isError && (
-          <p className='notice notice-error' style={{ marginTop: 14 }}>
-            {capture.error instanceof Error
-              ? capture.error.message
-              : 'Capture failed'}
-          </p>
-        )}
-
-        <button
-          type='submit'
-          disabled={capture.isPending}
-          className='btn-primary'
-          style={{ marginTop: 18 }}
-        >
-          {capture.isPending ? 'Capturing…' : 'Capture'}{' '}
-          <span className='ar'>→</span>
-        </button>
-      </form>
+      <CaptureCard />
 
       {inboxQuery.isLoading && <p className='notice'>Loading inbox…</p>}
       {inboxQuery.isError && (
@@ -416,6 +274,10 @@ const InboxRow = ({
   const domain = domainOf(item.sourceUrl)
   const mark = sourceMark(item)
   const length = lengthLabel(item.wordCount)
+  // Route by readiness (DET-300): a finished article surfaces a "Read" action; an
+  // in-flight companion source links to its pipeline so progress is reachable.
+  const articleReady =
+    item.latestArticleId !== null && item.latestArticleStatus === 'FINAL'
 
   return (
     // Deliberately distinct from earned concepts. We drop the per-row
@@ -490,6 +352,25 @@ const InboxRow = ({
         <Link href={`/inbox/${item.id}`} className='row-process'>
           Process <span className='ar'>→</span>
         </Link>
+        {/* Reading surface (DET-300): a ready article reads directly; otherwise
+            the companion source's pipeline is one click away. */}
+        {articleReady ? (
+          <Link
+            href={`/transformer/articles/${item.latestArticleId}`}
+            className='row-process'
+          >
+            Read <span className='ar'>→</span>
+          </Link>
+        ) : (
+          item.sourceId && (
+            <Link
+              href={`/transformer/${item.sourceId}`}
+              className='row-process'
+            >
+              View source <span className='ar'>→</span>
+            </Link>
+          )
+        )}
       </div>
     </li>
   )

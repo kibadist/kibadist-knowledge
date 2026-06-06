@@ -326,6 +326,14 @@ model Concept {
   // which creates this row as an INBOX "to learn" capture. Plain id (no FK) so
   // article regeneration/deletion never touches earned knowledge.
   originArticleId    String?
+  // Unified capture (DET-300): the TransformerSource captured alongside this inbox
+  // item. The single "Add a source" flow creates BOTH a TransformerSource (rich
+  // pipeline → article) and this INBOX concept atomically and links them here, so
+  // one inbox row can route to the source's article (read) AND to the promote gate
+  // (process). Plain id (no FK), mirroring `originArticleId`: deleting/regenerating
+  // a source never cascades into earned/queued inbox knowledge. Null for items with
+  // no companion source (forged merges, pre-DET-300 captures, article candidates).
+  sourceId           String?
   status             ConceptStatus  @default(INBOX)
   // The cognitive state machine (DET-194). ALWAYS set — every concept has a
   // state, never empty. A fresh capture is SEEN; the interrogator advances it to
