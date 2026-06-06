@@ -27,20 +27,31 @@ release.
 
 ---
 
-## 1. Create the app
+## 1. Create the database cluster
+
+The spec references a **production** database (`cluster_name: kibadist-db`),
+and App Platform only auto-provisions *dev* databases — a production cluster
+must already exist or `apps create` fails validation. Create it first:
+
+```bash
+doctl databases create kibadist-db --engine pg --version 16 \
+  --size db-s-1vcpu-1gb --num-nodes 1 --region nyc1
+```
+
+## 2. Create the app
 
 ```bash
 doctl apps create --spec .do/app.yaml
 ```
 
-This provisions the managed Postgres `db`, the `api` and `web` services, and the
-`migrate` pre-deploy job. Grab the app id:
+This attaches the managed Postgres `db` and provisions the `api` and `web`
+services and the `migrate` pre-deploy job. Grab the app id:
 
 ```bash
 doctl apps list
 ```
 
-## 2. Set the secrets
+## 3. Set the secrets
 
 The spec ships placeholders for the two secrets. Set real values (App → Settings
 → the `api` component → Environment Variables), or edit the spec and re-apply:
@@ -49,12 +60,12 @@ The spec ships placeholders for the two secrets. Set real values (App → Settin
 - `OPENAI_API_KEY` — your OpenAI key
 
 `DATABASE_URL` and `CORS_ORIGINS`/`NEXT_PUBLIC_API_URL` are wired automatically
-via the `${db.DATABASE_URL}`, `${web.PUBLIC_URL}`, and `${api.PUBLIC_URL}`
-bindings — no manual entry needed.
+via the `${db.DATABASE_URL}`, `${web.PUBLIC_URL}`, and `${APP_URL}` bindings —
+no manual entry needed.
 
-## 3. pgvector / the database
+## 4. pgvector / the database
 
-The spec provisions a **dedicated managed PostgreSQL cluster**
+The spec attaches the **dedicated managed PostgreSQL cluster** from step 1
 (`databases[0].production: true`, smallest size `db-s-1vcpu-1gb`). This is a
 paid resource (~$15/mo) and is deliberate: the app requires the pgvector
 extension, and DigitalOcean's shared **dev** databases don't reliably allow
@@ -67,7 +78,7 @@ To resize or change the DB, edit `databases[0]` and re-apply:
 doctl apps update <app-id> --spec .do/app.yaml
 ```
 
-## 4. Deploy
+## 5. Deploy
 
 `deploy_on_push: true` redeploys on every push to `main`. To trigger manually:
 
@@ -80,16 +91,19 @@ Deploy order handled by the platform: build images → run `migrate` (PRE_DEPLOY
 
 ---
 
-## 5. Verify (acceptance check)
+## 6. Verify (acceptance check)
+
+All components share the app's single domain (path-based ingress: `/api` +
+`/healthz` → api, everything else → web):
 
 ```bash
-doctl apps get <app-id>            # note the api + web public URLs
+doctl apps get <app-id>            # note the app's public URL
 
 # API liveness
-curl https://<api-url>/healthz
+curl https://<app-url>/healthz
 
 # End-to-end auth against the deployed API
-curl -X POST https://<api-url>/api/auth/register \
+curl -X POST https://<app-url>/api/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"you@example.com","password":"password123"}'
 ```

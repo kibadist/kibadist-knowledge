@@ -12,6 +12,29 @@
 name: kibadist-knowledge
 region: nyc
 
+# All components share the app's single domain; route by path prefix. The API
+# keeps its paths verbatim (preserve_path_prefix) since NestJS already serves
+# under the /api global prefix (plus the unprefixed /healthz probe).
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /api
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /healthz
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /
+      component:
+        name: web
+
 databases:
   - name: db
     engine: PG
@@ -73,10 +96,11 @@ services:
       http_path: /
     envs:
       # NEXT_PUBLIC_* is inlined at build time, so this must be BUILD-scoped and
-      # point at the deployed API (its global prefix is /api).
+      # point at the deployed API. With shared ingress the api is served from the
+      # app's own domain under /api (its NestJS global prefix), so bind APP_URL.
       - key: NEXT_PUBLIC_API_URL
         scope: BUILD_TIME
-        value: ${api.PUBLIC_URL}/api
+        value: ${APP_URL}/api
 
 # Runs database migrations once before each new deploy goes live, reusing the
 # API image (which carries the Prisma CLI, schema, and migrations).
