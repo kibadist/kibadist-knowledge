@@ -41,3 +41,6 @@ coverage/
 
 # claude code local artifacts
 .claude/scheduled_tasks.lock
+
+# mcp local artifacts
+.mcp/
