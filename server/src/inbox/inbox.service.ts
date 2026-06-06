@@ -1,4 +1,9 @@
-import { CaptureSource, ConceptStatus, type Prisma } from '@kibadist/prisma'
+import {
+  CaptureSource,
+  ConceptStatus,
+  type Prisma,
+  type TransformedArticleStatus,
+} from '@kibadist/prisma'
 import {
   BadRequestException,
   Injectable,
@@ -16,6 +21,7 @@ import {
   extractUrlDocument,
   type SourceDocument,
 } from '../source-document/source-document'
+import { TransformerService } from '../transformer/transformer.service'
 import type { CaptureTextDto } from './dto/capture-text.dto'
 import type { CaptureUrlDto } from './dto/capture-url.dto'
 import { extractPdfText } from './pdf-extract.util'
@@ -32,6 +38,15 @@ export interface InboxItem {
   /** Set when this capture was validated out of a source-preserving article
    *  (DET-283) — drives the inbox's "from article" badge + backlink. */
   originArticleId: string | null
+  /** Unified capture (DET-300): the TransformerSource captured alongside this
+   *  item, so the row can open the source pipeline. Null for forged merges and
+   *  pre-DET-300 captures. */
+  sourceId: string | null
+  /** The companion source's latest generated article + its status (DET-300),
+   *  so a ready article surfaces a "Read" action on the same row. Null until the
+   *  pipeline produces an article (or when there's no companion source). */
+  latestArticleId: string | null
+  latestArticleStatus: TransformedArticleStatus | null
   excerpt: string
   /** Word count of the raw material — a triage signal ("how long is this?").
    *  Derived from sourceText at read time; not persisted. */
@@ -58,6 +73,11 @@ export class InboxService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly conceptState: ConceptStateService,
+    // Unified capture (DET-300): every capture also ingests a TransformerSource so
+    // the same row can lead to a magazine-quality article. TransformerModule
+    // exports this service; InboxModule imports it (no cycle — Transformer never
+    // imports Inbox).
+    private readonly transformer: TransformerService,
   ) {}
 
   async captureText(
@@ -66,12 +86,23 @@ export class InboxService {
     dto: CaptureTextDto,
   ): Promise<InboxItem> {
     const title = dto.title?.trim() || deriveTitle(dto.text)
+    // Companion TransformerSource (DET-300): same raw text into the article
+    // pipeline. Created first so its id can be hard-linked onto the inbox concept.
+    const source = await this.transformer.createTextSource(
+      userId,
+      workspaceId,
+      {
+        text: dto.text,
+        title,
+      },
+    )
     return this.store(userId, workspaceId, {
       title,
       sourceText: dto.text,
       sourceDocument: extractTextDocument(dto.text),
       captureSource: CaptureSource.PASTE,
       trackId: dto.trackId,
+      sourceId: source.id,
     })
   }
 
@@ -89,6 +120,15 @@ export class InboxService {
     const { document, text } = await extractUrlDocument(dto.url, page.html)
     const title =
       document.title?.trim() || page.title?.trim() || hostPathLabel(dto.url)
+    // Companion TransformerSource (DET-300): reuse the page we just fetched so the
+    // URL isn't fetched twice.
+    const source = await this.transformer.createUrlSourceFromHtml(
+      userId,
+      workspaceId,
+      dto.url,
+      page.html,
+      page.title,
+    )
     return this.store(userId, workspaceId, {
       title,
       sourceText: text || page.text,
@@ -96,6 +136,7 @@ export class InboxService {
       sourceUrl: dto.url,
       captureSource: CaptureSource.URL,
       trackId: dto.trackId,
+      sourceId: source.id,
     })
   }
 
@@ -112,12 +153,21 @@ export class InboxService {
         .replace(/\.pdf$/i, '')
         .trim()
         .slice(0, 200) || 'PDF'
+    // Companion TransformerSource (DET-300): hand the PDF bytes to the article
+    // pipeline (it re-extracts from the bytes itself).
+    const source = await this.transformer.createPdfSource(
+      userId,
+      workspaceId,
+      filename,
+      buffer,
+    )
     return this.store(userId, workspaceId, {
       title,
       sourceText: text,
       sourceDocument: extractPdfDocument(text),
       captureSource: CaptureSource.PDF,
       trackId,
+      sourceId: source.id,
     })
   }
 
@@ -140,19 +190,32 @@ export class InboxService {
         captureSource: true,
         sourceUrl: true,
         originArticleId: true,
+        sourceId: true,
         createdAt: true,
       },
     })
-    return rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      captureSource: r.captureSource,
-      sourceUrl: r.sourceUrl,
-      originArticleId: r.originArticleId,
-      excerpt: excerpt(r.sourceText),
-      wordCount: countWords(r.sourceText),
-      createdAt: r.createdAt,
-    }))
+    // Unified capture (DET-300): batch-resolve the companion sources' latest
+    // articles so a ready article can surface a "Read" action on the row.
+    const articles = await this.latestArticlesBySource(
+      userId,
+      rows.map((r) => r.sourceId).filter((id): id is string => id !== null),
+    )
+    return rows.map((r) => {
+      const article = r.sourceId ? articles.get(r.sourceId) : undefined
+      return {
+        id: r.id,
+        title: r.title,
+        captureSource: r.captureSource,
+        sourceUrl: r.sourceUrl,
+        originArticleId: r.originArticleId,
+        sourceId: r.sourceId,
+        latestArticleId: article?.latestArticleId ?? null,
+        latestArticleStatus: article?.latestArticleStatus ?? null,
+        excerpt: excerpt(r.sourceText),
+        wordCount: countWords(r.sourceText),
+        createdAt: r.createdAt,
+      }
+    })
   }
 
   /** A single inbox item with its full raw material — for the processing view. */
@@ -167,16 +230,25 @@ export class InboxService {
         captureSource: true,
         sourceUrl: true,
         originArticleId: true,
+        sourceId: true,
         createdAt: true,
       },
     })
     if (!row) throw new NotFoundException('Inbox item not found')
+    const article = row.sourceId
+      ? (await this.latestArticlesBySource(userId, [row.sourceId])).get(
+          row.sourceId,
+        )
+      : undefined
     return {
       id: row.id,
       title: row.title,
       captureSource: row.captureSource,
       sourceUrl: row.sourceUrl,
       originArticleId: row.originArticleId,
+      sourceId: row.sourceId,
+      latestArticleId: article?.latestArticleId ?? null,
+      latestArticleStatus: article?.latestArticleStatus ?? null,
       sourceText: row.sourceText,
       sourceDocument: asSourceDocument(row.sourceDocument),
       excerpt: excerpt(row.sourceText),
@@ -319,6 +391,10 @@ export class InboxService {
       sourceUrl: concept.sourceUrl,
       // A forge merges raw captures — never article-derived provenance.
       originArticleId: null,
+      // A forged item composes existing captures; it has no companion source.
+      sourceId: null,
+      latestArticleId: null,
+      latestArticleStatus: null,
       excerpt: excerpt(concept.sourceText),
       wordCount: countWords(concept.sourceText),
       createdAt: concept.createdAt,
@@ -355,6 +431,8 @@ export class InboxService {
       captureSource: CaptureSource
       sourceUrl?: string
       trackId?: string
+      // Unified capture (DET-300): the companion TransformerSource id to hard-link.
+      sourceId?: string
     },
   ): Promise<InboxItem> {
     // Track-first onboarding (DET-240): if a target track was given, it must be a
@@ -382,6 +460,7 @@ export class InboxService {
             : undefined,
           captureSource: data.captureSource,
           sourceUrl: data.sourceUrl ?? null,
+          sourceId: data.sourceId ?? null,
           targetTrackId,
           status: ConceptStatus.INBOX,
         },
@@ -391,6 +470,7 @@ export class InboxService {
           sourceText: true,
           captureSource: true,
           sourceUrl: true,
+          sourceId: true,
           createdAt: true,
         },
       })
@@ -405,10 +485,59 @@ export class InboxService {
       // Fresh captures are raw material — article provenance only ever comes
       // from validating an article concept candidate (DET-283).
       originArticleId: null,
+      sourceId: concept.sourceId,
+      // The companion source's pipeline has only just been fired — no article yet.
+      latestArticleId: null,
+      latestArticleStatus: null,
       excerpt: excerpt(concept.sourceText),
       wordCount: countWords(concept.sourceText),
       createdAt: concept.createdAt,
     }
+  }
+
+  /**
+   * Resolve each inbox item's companion source (DET-300) into its latest generated
+   * article + status, batched. Plain id link (no FK relation), so this is a second
+   * query keyed by the sources still owned by the user. Returns a map from
+   * sourceId → { latestArticleId, latestArticleStatus }; sources with no article
+   * yet are simply absent.
+   */
+  private async latestArticlesBySource(
+    userId: string,
+    sourceIds: string[],
+  ): Promise<
+    Map<
+      string,
+      { latestArticleId: string; latestArticleStatus: TransformedArticleStatus }
+    >
+  > {
+    const ids = [...new Set(sourceIds)]
+    if (ids.length === 0) return new Map()
+    const sources = await this.prisma.transformerSource.findMany({
+      where: { id: { in: ids }, userId },
+      select: {
+        id: true,
+        articles: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { id: true, status: true },
+        },
+      },
+    })
+    const map = new Map<
+      string,
+      { latestArticleId: string; latestArticleStatus: TransformedArticleStatus }
+    >()
+    for (const s of sources) {
+      const latest = s.articles[0]
+      if (latest) {
+        map.set(s.id, {
+          latestArticleId: latest.id,
+          latestArticleStatus: latest.status,
+        })
+      }
+    }
+    return map
   }
 }
 

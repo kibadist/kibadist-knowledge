@@ -10,10 +10,12 @@ import {
   Post,
   Req,
 } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import type { FastifyRequest } from 'fastify'
 
 import type { AuthUser } from '../auth/auth.types'
 import { CurrentUser } from '../auth/current-user.decorator'
+import { AI_THROTTLE } from '../throttler/ai-throttle.constant'
 import { WorkspaceId } from '../workspaces/workspace-id.decorator'
 import { WorkspacesService } from '../workspaces/workspaces.service'
 import { CaptureTextDto } from './dto/capture-text.dto'
@@ -55,6 +57,10 @@ export class InboxController {
     return this.inbox.chunks(user.userId, id)
   }
 
+  // Unified capture (DET-300): capture now also fires the article pipeline (an
+  // LLM-backed call), so these endpoints opt into the `ai` throttle like the
+  // transformer's own source-creation routes.
+  @Throttle(AI_THROTTLE)
   @Post('text')
   async captureText(
     @CurrentUser() user: AuthUser,
@@ -68,6 +74,7 @@ export class InboxController {
     return this.inbox.captureText(user.userId, workspaceId, dto)
   }
 
+  @Throttle(AI_THROTTLE)
   @Post('url')
   async captureUrl(
     @CurrentUser() user: AuthUser,
@@ -81,6 +88,7 @@ export class InboxController {
     return this.inbox.captureUrl(user.userId, workspaceId, dto)
   }
 
+  @Throttle(AI_THROTTLE)
   @Post('pdf')
   async capturePdf(
     @CurrentUser() user: AuthUser,

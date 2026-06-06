@@ -9,10 +9,12 @@ import { useAuth } from '@/lib/auth-context'
 import { useWorkspace } from '@/lib/workspace-context'
 import { WorkspaceSwitcher } from './workspace-switcher'
 
+// Unified capture (DET-300): the Transformer no longer has its own front door —
+// capture + triage live on /inbox, and source/article views are reached from
+// inbox rows. So there's no standalone "Transformer" nav entry competing with it.
 const NAV_ITEMS = [
   { href: '/tracks', label: 'Tracks' },
   { href: '/inbox', label: 'Inbox' },
-  { href: '/transformer', label: 'Transformer' },
   { href: '/concepts', label: 'Concepts' },
   { href: '/domains', label: 'Domains' },
   { href: '/graph', label: 'Map' },
