@@ -1,3 +1,11 @@
+// Type-only imports: the snake_case learning-event contract (DET-278) is the
+// wire shape for `/article-learning/events`. Erased at compile, so the
+// api ↔ article-learning-events ↔ article-v2 type cycle has no runtime cost.
+import type {
+  ArticleLearningEvent,
+  ArticleLearningEventDraft,
+} from './article-learning-events'
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
 // NOTE: The access token is kept in localStorage for simplicity. localStorage is
@@ -1940,4 +1948,33 @@ export const api = {
       `/transformer/articles/${articleId}/sections/${sectionId}/concepts`,
       { method: 'POST' },
     ),
+
+  // --- Concept Library (DET-187) ---
+  // Create an INBOX "to learn" concept. Status is server-owned (always INBOX on
+  // create) — the gate (DET-189) owns promotion. Deep Reading Mode's concept
+  // extraction (DET-301) lands an approved candidate here as the real downstream
+  // write, distinct from the article_learning_events log that records the action.
+  createConcept: (input: {
+    title: string
+    summary?: string
+    sourceText?: string
+  }) =>
+    request<Concept>('/concepts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  // --- Article learning events (DET-278 / DET-301) ---
+  // The source-of-truth activity log for the learning modes. Deep Reading Mode
+  // hydrates from `list` on load (so completion markers survive a reload) and
+  // appends each interaction through `create`. `user_id` is taken from the JWT.
+  listArticleLearningEvents: (articleId: string) =>
+    request<ArticleLearningEvent[]>(
+      `/article-learning/events?articleId=${encodeURIComponent(articleId)}`,
+    ),
+  createArticleLearningEvent: (draft: ArticleLearningEventDraft) =>
+    request<ArticleLearningEvent>('/article-learning/events', {
+      method: 'POST',
+      body: JSON.stringify(draft),
+    }),
 }
