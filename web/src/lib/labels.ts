@@ -79,9 +79,12 @@ export const CONCEPT_STATUS_LABELS: Record<ConceptStatus, string> = {
 
 // Adaptive Friction levels (DET-197). The cognitive weight a captured item must
 // earn — surfaced as the friction picker's button labels and the proposal callout.
+// Humanized away from the internal SHOUTING enum (DET-305): MINIMAL/LIGHT read as
+// product jargon, so the two lightest tiers get plain-language labels ("Quick
+// save" / "Standard"). Wire values are unchanged — this is the copy layer only.
 export const FRICTION_LEVEL_LABELS: Record<FrictionLevel, string> = {
-  MINIMAL: 'Minimal',
-  LIGHT: 'Light',
+  MINIMAL: 'Quick save',
+  LIGHT: 'Standard',
   DEEP: 'Deep',
   RIGOROUS: 'Rigorous',
 }

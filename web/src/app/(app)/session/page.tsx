@@ -341,7 +341,7 @@ function SessionCard({
       ) : (
         <div className='reveal-block'>
           <div className='your-comp'>
-            <div className='label'>Your compression</div>
+            <div className='label'>Your words</div>
             {conceptQuery.isLoading ? (
               <p>Loading…</p>
             ) : articulation ? (
