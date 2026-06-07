@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
+  CANDIDATE_KIND_LABELS,
   CAPTURE_SOURCE_LABELS,
   CERTAINTY_LABELS,
   COGNITIVE_STATE_LABELS,
@@ -61,6 +62,18 @@ const ENUMS: Record<string, { map: Record<string, string>; keys: string[] }> = {
     map: FRICTION_LEVEL_LABELS,
     keys: ['MINIMAL', 'LIGHT', 'DEEP', 'RIGOROUS'],
   },
+  CandidateKind: {
+    map: CANDIDATE_KIND_LABELS,
+    keys: [
+      'CONCEPT',
+      'TERM',
+      'PERSON',
+      'METHOD',
+      'FORMULA',
+      'THEOREM',
+      'APPLICATION',
+    ],
+  },
   LinkStatus: {
     map: LINK_STATUS_LABELS,
     keys: ['SUGGESTED', 'CONFIRMED', 'REJECTED'],
@@ -108,14 +121,16 @@ describe('enum label maps', () => {
 })
 
 describe('no raw enum leaks in JSX', () => {
-  // Files that render these enums. A raw render ends the property access with
-  // `}` (a JSX child or string-attr value); routing through a label map ends it
-  // with `]` (a map lookup), so this regex only catches the un-humanized form.
+  // Files that render these enums. Each must route every enum through a label
+  // map. Three leak vectors are guarded (each one was a real DET-304 miss):
   const FILES = [
     'app/(app)/concepts/page.tsx',
     'app/(app)/concepts/[id]/page.tsx',
+    'app/(app)/inbox/[id]/page.tsx',
     'app/(app)/inbox/[id]/promote/page.tsx',
     'app/(app)/session/page.tsx',
+    'app/(app)/domains/[id]/page.tsx',
+    'app/(app)/tracks/[id]/page.tsx',
     'components/graph/graph-inspector.tsx',
     'components/graph/concept-graph-canvas.tsx',
     // The map's canvas node chip. Originally missed by this guard, which let a
@@ -123,23 +138,42 @@ describe('no raw enum leaks in JSX', () => {
     // the inspector showed "Dormant" two feet away. Now in scope (DET-304).
     'components/graph/concept-node.tsx',
   ]
-  // A direct render ends the property access with `}` (a JSX child / string-attr
-  // value); routing through a label map ends it with `]`, so this only catches
-  // the un-humanized form.
+
+  // `className`/`value` bindings legitimately carry the raw enum: a CSS class
+  // suffix (`ccert-${certainty.toLowerCase()}`) or a <select> control value
+  // (`value={row.status}`). Neither is visible prose, so strip them before
+  // scanning — only what's left can leak to the screen.
+  const stripNonDisplay = (src: string) =>
+    src
+      .replace(/className=\{[^}]*\}/g, '')
+      .replace(/className=("[^"]*"|'[^']*')/g, '')
+      .replace(/value=\{[^}]*\}/g, '')
+
+  // 1. Direct render: the property access ends with `}` (a JSX child / display
+  // string-attr value). Routing through a label map ends with `]`, so this only
+  // catches the un-humanized form.
   const FORBIDDEN =
     /\.(cognitiveState|certainty|gateMode|relationKind|status|level)\}/g
-  // The other way a raw enum leaks: a chip helper that assigns the bare enum var
-  // to its `label`/`children` (e.g. `label: state`) instead of a map lookup. This
-  // is exactly the indirection the original guard missed on concept-node.tsx.
+  // 2. Chip-helper indirection: a helper assigns the bare enum var to its
+  // `label`/`children` (e.g. `label: state`) instead of a map lookup — exactly
+  // the indirection the original guard missed on concept-node.tsx.
   const FORBIDDEN_INDIRECT =
     /\b(?:label|children):\s*(?:state|status|certainty|kind|level|relation|mode|gateMode|relationKind|cognitiveState)\b/g
+  // 3. Ad-hoc string transform: `enum.toLowerCase()` / `.replace(/_/g, ' ')` as
+  // a poor-man's humanization. The theme uppercases chips via text-transform, so
+  // a lowercased enum still SHIPS as ALL_CAPS on screen — the tracks/domains/
+  // inbox-candidate miss. The only legit transforms (CSS suffixes) are already
+  // stripped above with className.
+  const FORBIDDEN_TRANSFORM =
+    /\.(cognitiveState|certainty|gateMode|status|state|level|kind|relation|mode)\.(toLowerCase|toUpperCase|replace|replaceAll)\b/g
 
   for (const rel of FILES) {
     it(`${rel} routes every enum through a label map`, () => {
-      const source = readFileSync(`${srcDir}/${rel}`, 'utf8')
+      const source = stripNonDisplay(readFileSync(`${srcDir}/${rel}`, 'utf8'))
       const hits = [
         ...(source.match(FORBIDDEN) ?? []),
         ...(source.match(FORBIDDEN_INDIRECT) ?? []),
+        ...(source.match(FORBIDDEN_TRANSFORM) ?? []),
       ]
       expect(hits).toEqual([])
     })

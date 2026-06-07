@@ -14,6 +14,7 @@ import {
   type TrackConceptStatus,
   type TrackStatus,
 } from '@/lib/api'
+import { COGNITIVE_STATE_LABELS } from '@/lib/labels'
 import { useWorkspace } from '@/lib/workspace-context'
 
 const DEPTH_LABELS: Record<RequiredDepth, string> = {
@@ -315,18 +316,18 @@ function TrackConceptRowView({
         <div className='track-concept-meta'>
           <span
             className={`chip chip-depth${progress.met ? ' is-met' : ''}`}
-            title={`Now at ${progress.state}`}
+            title={`Now at ${COGNITIVE_STATE_LABELS[progress.state]}`}
           >
             {progress.met ? '✓ ' : ''}
             {DEPTH_LABELS[row.requiredDepth]}
           </span>
           {progress.needsAttention && (
             <span className='chip chip-warn'>
-              {progress.state.toLowerCase()}
+              {COGNITIVE_STATE_LABELS[progress.state]}
             </span>
           )}
           <span className='track-concept-statelabel'>
-            now: {concept.cognitiveState.toLowerCase()}
+            now: {COGNITIVE_STATE_LABELS[concept.cognitiveState]}
           </span>
         </div>
       </div>

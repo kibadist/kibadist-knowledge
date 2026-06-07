@@ -21,6 +21,7 @@ import {
   type SourceConceptCandidate,
   type SourceQuestion,
 } from '@/lib/api'
+import { CANDIDATE_KIND_LABELS } from '@/lib/labels'
 
 const KIND_LABEL: Record<string, string> = {
   central_claim: 'Central claim',
@@ -579,7 +580,9 @@ function CandidateRow({
     <li className='item-card'>
       <div className='flex flex-wrap items-center gap-2'>
         <span className='font-medium text-ink'>{candidate.label}</span>
-        <span className='chip chip-quiet'>{candidate.kind.toLowerCase()}</span>
+        <span className='chip chip-quiet'>
+          {CANDIDATE_KIND_LABELS[candidate.kind]}
+        </span>
         <span
           className={`chip ${candidate.importance === 'CORE' ? 'chip-cleared' : 'chip-quiet'}`}
         >

@@ -1,4 +1,5 @@
 import type {
+  CandidateKind,
   CaptureSource,
   Certainty,
   CognitiveState,
@@ -140,6 +141,18 @@ export function livingConceptStatusChip(status: LivingConceptStatus): {
     className: 'chip-pending',
     label: LIVING_CONCEPT_STATUS_LABELS[status],
   }
+}
+
+// What kind of thing an extracted concept candidate is (DET-211). Surfaced as
+// the candidate chip in the inbox source view.
+export const CANDIDATE_KIND_LABELS: Record<CandidateKind, string> = {
+  CONCEPT: 'Concept',
+  TERM: 'Term',
+  PERSON: 'Person',
+  METHOD: 'Method',
+  FORMULA: 'Formula',
+  THEOREM: 'Theorem',
+  APPLICATION: 'Application',
 }
 
 // Why a concept surfaced in a session's queue (DET-198).
