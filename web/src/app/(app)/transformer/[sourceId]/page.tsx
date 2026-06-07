@@ -27,9 +27,11 @@ import '../transformer.css'
 /**
  * Source pipeline view (DET-247…250). The ordered step indicator polls every 1.5s
  * while the pipeline is non-terminal, the extraction error surfaces prominently,
- * the blocks inspector exposes the debug detail (type, classification, removable +
- * reason, uncertain, location), and the article card surfaces the latest article
- * and a Transform / Re-run action that politely handles the 409 in-flight guard.
+ * and the article card surfaces the latest article and a Transform / Re-run action
+ * that politely handles the 409 in-flight guard. The blocks inspector still exposes
+ * the debug detail (type, classification, removable + reason, uncertain, location)
+ * but is demoted into a collapsed "Source fidelity details" panel (DET-303) so a
+ * non-technical reader sees status and errors first, not block-level apparatus.
  */
 export default function SourceDetailPage() {
   const { sourceId } = useParams<{ sourceId: string }>()
@@ -106,11 +108,6 @@ export default function SourceDetailPage() {
               {degraded && (
                 <span className='chip chip-pending'>degraded extraction</span>
               )}
-              {source.blocksVersion > 0 && (
-                <span className='mono-label'>
-                  {source.blockCount} blocks · v{source.blocksVersion}
-                </span>
-              )}
             </div>
           </div>
 
@@ -184,23 +181,43 @@ export default function SourceDetailPage() {
             </div>
           </section>
 
-          {/* Blocks inspector (DET-250). */}
-          <section className='panel tf-blocks'>
-            <h3 className='panel-h'>Blocks</h3>
-            {blocksQuery.isLoading && <p className='notice'>Loading blocks…</p>}
-            {(source.blocksVersion ?? 0) === 0 && !blocksQuery.isLoading && (
-              <p className='block-sub'>
-                Blocks appear once the source is segmented.
-              </p>
-            )}
-            {blocksQuery.data && blocksQuery.data.length > 0 && (
-              <ol className='tf-block-list'>
-                {blocksQuery.data.map((b) => (
-                  <BlockRow key={b.id} block={b} />
-                ))}
-              </ol>
-            )}
-          </section>
+          {/* Source fidelity details (DET-250 inspector, demoted by DET-303).
+              Block-level debug detail — type, classification, removable + reason,
+              and the blocks version — is appendix material for a non-technical
+              reader, so it lives in a collapsed panel that's hidden by default.
+              Status and the extraction-error panel above stay prominent. */}
+          <details className='panel tf-blocks tf-fidelity'>
+            <summary className='tf-fidelity-summary'>
+              <span className='tf-fidelity-kicker'>
+                Source fidelity details
+              </span>
+              {source.blocksVersion > 0 && (
+                <span className='mono-label'>
+                  {source.blockCount} blocks · v{source.blocksVersion}
+                </span>
+              )}
+              <span className='tf-fidelity-caret' aria-hidden='true'>
+                ▾
+              </span>
+            </summary>
+            <div className='tf-fidelity-body'>
+              {blocksQuery.isLoading && (
+                <p className='notice'>Loading blocks…</p>
+              )}
+              {(source.blocksVersion ?? 0) === 0 && !blocksQuery.isLoading && (
+                <p className='block-sub'>
+                  Blocks appear once the source is segmented.
+                </p>
+              )}
+              {blocksQuery.data && blocksQuery.data.length > 0 && (
+                <ol className='tf-block-list'>
+                  {blocksQuery.data.map((b) => (
+                    <BlockRow key={b.id} block={b} />
+                  ))}
+                </ol>
+              )}
+            </div>
+          </details>
         </>
       )}
     </div>
