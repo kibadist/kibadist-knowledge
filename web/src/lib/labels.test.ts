@@ -95,7 +95,7 @@ const ENUMS: Record<string, { map: Record<string, string>; keys: string[] }> = {
   },
   SessionItemReason: {
     map: SESSION_ITEM_REASON_LABELS,
-    keys: ['DUE', 'CONTESTED', 'REDISCOVERY', 'CHALLENGE'],
+    keys: ['DUE', 'CONTESTED', 'REDISCOVERY', 'CHALLENGE', 'ARTICLE_PROMPT'],
   },
   ReflectionKind: {
     map: REFLECTION_KIND_LABELS,

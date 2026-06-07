@@ -1,8 +1,17 @@
-import type { ReviewPrompt as PrismaReviewPrompt } from '@kibadist/prisma'
+import { type ReviewPrompt as PrismaReviewPrompt } from '@kibadist/prisma'
 import { Injectable } from '@nestjs/common'
 
 import { PrismaService } from '../prisma/prisma.service'
 import type { CreateReviewPromptDto } from './dto/create-review-prompt.dto'
+import { nextPromptReviewAt } from './review-prompt-schedule'
+
+/** An approved prompt the engine can resurface now — the minimal shape the
+ *  session queue builder needs (DET-310). */
+export interface DueReviewPrompt {
+  id: string
+  promptType: string
+  nextReviewAt: Date | null
+}
 
 /**
  * The snake_case wire shape returned to the client — the `ScheduledReviewPrompt`
@@ -92,6 +101,57 @@ export class ReviewPromptService {
       update: data,
     })
     return this.toWire(row)
+  }
+
+  /**
+   * Approved prompts due for resurfacing in a session (DET-310): status
+   * `approved` and either never scheduled (`nextReviewAt` null = immediately due)
+   * or whose next review has come. Soonest-due first, nulls leading. Returns the
+   * minimal shape the session queue builder + start-screen composition need.
+   */
+  async dueForUser(userId: string): Promise<DueReviewPrompt[]> {
+    const now = new Date()
+    const rows = await this.prisma.reviewPrompt.findMany({
+      where: {
+        userId,
+        status: 'approved',
+        OR: [{ nextReviewAt: null }, { nextReviewAt: { lte: now } }],
+      },
+      orderBy: { nextReviewAt: { sort: 'asc', nulls: 'first' } },
+      select: { id: true, promptType: true, nextReviewAt: true },
+    })
+    return rows
+  }
+
+  /** How many approved prompts are due now — for the session-start composition
+   *  line, without loading the rows. */
+  countDueForUser(userId: string): Promise<number> {
+    const now = new Date()
+    return this.prisma.reviewPrompt.count({
+      where: {
+        userId,
+        status: 'approved',
+        OR: [{ nextReviewAt: null }, { nextReviewAt: { lte: now } }],
+      },
+    })
+  }
+
+  /**
+   * Reschedule a prompt after it was reviewed in a session (DET-310). Scoped to
+   * the owner; the new cadence comes from the stateless prompt scheduler. Matches
+   * by primary key with the owner in the filter so a caller can't reschedule
+   * another user's prompt.
+   */
+  async reschedule(
+    userId: string,
+    id: string,
+    score: number,
+    from: Date = new Date(),
+  ): Promise<void> {
+    await this.prisma.reviewPrompt.updateMany({
+      where: { id, userId },
+      data: { nextReviewAt: nextPromptReviewAt(score, from) },
+    })
   }
 
   /** The one camelCase-row → snake_case-contract boundary. */

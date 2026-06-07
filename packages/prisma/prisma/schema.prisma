@@ -715,18 +715,27 @@ enum ReflectionKind {
 // surfaced and the recall grade once reviewed (null until reached — partial
 // sessions leave a tail unreviewed).
 model SessionItem {
-  id          String            @id @default(cuid())
-  sessionId   String
-  conceptId   String
+  id        String @id @default(cuid())
+  sessionId String
+  // One retrieval engine (DET-310): a session item is one of two kinds — a
+  // concept item (conceptId set, reason DUE/CONTESTED/REDISCOVERY/CHALLENGE) or
+  // an approved Spaced Review prompt item (reviewPromptId set, reason
+  // ARTICLE_PROMPT). conceptId is nullable because a prompt may target an article
+  // section that has no earned concept yet; a prompt that DOES name a concept
+  // keeps both set.
+  conceptId      String?
+  reviewPromptId String?
   position    Int
   reason      SessionItemReason @default(DUE)
   reviewedAt  DateTime?
   recallScore Int?
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  session      Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  concept      Concept?      @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  reviewPrompt ReviewPrompt? @relation(fields: [reviewPromptId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, position])
+  @@index([reviewPromptId])
   @@map("session_item")
 }
 
@@ -736,14 +745,16 @@ enum SessionStatus {
   ABANDONED
 }
 
-// Why a concept surfaced in a session (DET-198): a normal due review, a
-// priority contested concept, an occasional dormant "rediscovery", or an
-// empty-state Tutor challenge on a mastered concept.
+// Why an item surfaced in a session (DET-198): a normal due review, a
+// priority contested concept, an occasional dormant "rediscovery", an
+// empty-state Tutor challenge on a mastered concept, or — once the queue unified
+// (DET-310) — an approved Spaced Review prompt drawn from a deeply-read article.
 enum SessionItemReason {
   DUE
   CONTESTED
   REDISCOVERY
   CHALLENGE
+  ARTICLE_PROMPT
 }
 
 // How sure the user is of a concept (DET-199). Lets uncertainty be expressed
@@ -1163,11 +1174,18 @@ model ReviewPrompt {
   updatedAt             DateTime           @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // The session queue draws approved prompts in alongside concepts (DET-310);
+  // each appearance is a SessionItem pointing back here.
+  sessionItems SessionItem[]
 
   @@unique([userId, promptId])
   @@index([userId])
   @@index([userId, articleId])
   @@index([userId, status])
+  // Approved prompts the engine can resurface: scoped per user, soonest-due
+  // first (null = never scheduled, so immediately due). The session-start query
+  // reads this (DET-310).
+  @@index([userId, status, nextReviewAt])
   @@map("review_prompt")
 }
 

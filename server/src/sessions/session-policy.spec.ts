@@ -95,4 +95,78 @@ describe('buildQueue', () => {
     const queue = buildQueue({ contested: [], due, dormant: [] }, 10)
     expect(queue).toHaveLength(targetCount(10))
   })
+
+  // --- DET-310: approved review prompts in the same queue --------------------
+
+  it('interleaves approved prompts with concept items rather than batching', () => {
+    const queue = buildQueue(
+      {
+        contested: [],
+        due: [
+          { id: 'd1', nextReviewAt: null },
+          { id: 'd2', nextReviewAt: null },
+        ],
+        dormant: [],
+        prompts: [
+          { id: 'p1', nextReviewAt: null },
+          { id: 'p2', nextReviewAt: null },
+        ],
+      },
+      10,
+    )
+    // Concept leads each round, then a prompt: C P C P.
+    expect(queue).toEqual([
+      { conceptId: 'd1', reason: 'DUE' },
+      { reviewPromptId: 'p1', reason: 'ARTICLE_PROMPT' },
+      { conceptId: 'd2', reason: 'DUE' },
+      { reviewPromptId: 'p2', reason: 'ARTICLE_PROMPT' },
+    ])
+  })
+
+  it('keeps a CONTESTED concept first even when prompts are present', () => {
+    const queue = buildQueue(
+      {
+        contested: [{ id: 'k1', nextReviewAt: null }],
+        due: [],
+        dormant: [],
+        prompts: [{ id: 'p1', nextReviewAt: null }],
+      },
+      10,
+    )
+    expect(queue[0]).toEqual({ conceptId: 'k1', reason: 'CONTESTED' })
+    expect(queue[1]).toEqual({ reviewPromptId: 'p1', reason: 'ARTICLE_PROMPT' })
+  })
+
+  it('builds a prompt-only queue when there are no concepts', () => {
+    const queue = buildQueue(
+      {
+        contested: [],
+        due: [],
+        dormant: [],
+        prompts: [
+          { id: 'p1', nextReviewAt: new Date('2026-01-02') },
+          { id: 'p2', nextReviewAt: new Date('2026-01-01') },
+        ],
+      },
+      10,
+    )
+    // Soonest-due first.
+    expect(queue.map((e) => e.reviewPromptId)).toEqual(['p2', 'p1'])
+    expect(queue.every((e) => e.reason === 'ARTICLE_PROMPT')).toBe(true)
+  })
+
+  it('caps an interleaved queue at the target count, draining the longer stream', () => {
+    const due = Array.from({ length: 20 }, (_, i) => ({
+      id: `d${i}`,
+      nextReviewAt: null,
+    }))
+    const prompts = Array.from({ length: 2 }, (_, i) => ({
+      id: `p${i}`,
+      nextReviewAt: null,
+    }))
+    const queue = buildQueue({ contested: [], due, dormant: [], prompts }, 10)
+    expect(queue).toHaveLength(targetCount(10))
+    // Both prompts make it in (they interleave early), the rest are concepts.
+    expect(queue.filter((e) => e.reviewPromptId).length).toBe(2)
+  })
 })
