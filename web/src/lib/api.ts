@@ -1977,4 +1977,43 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(draft),
     }),
+
+  // --- Review prompts → Retrieval Engine (DET-301 / DET-288) ---
+  // The real downstream sink for an approved Spaced Review prompt. Distinct from
+  // the article_learning_events log (which records the approval ACTION): this
+  // hands the prompt to the Retrieval Engine, which owns the schedule. Idempotent
+  // server-side on the deterministic prompt_id, so re-approving updates in place.
+  scheduleReviewPrompt: (input: ReviewPromptDraft) =>
+    request<ReviewPromptWire>('/retrieval-events/prompts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+}
+
+// The snake_case fields the Retrieval Engine accepts for an approved prompt — a
+// subset of the DET-288 ScheduledReviewPrompt contract (id/schedule/user are
+// server-owned, so omitted). schedule_metadata / section_heading are not sent.
+export interface ReviewPromptDraft {
+  prompt_id: string
+  article_id: string
+  article_version_id?: string
+  section_id?: string
+  concept_id?: string
+  prompt_type: string
+  origin: string
+  subject: string
+  question: string
+  expected_answer_summary: string
+  source_span_ids?: string[]
+  created_from_event_id?: string
+}
+
+// The persisted prompt the engine returns (id/schedule/timestamps stamped on).
+export interface ReviewPromptWire extends ReviewPromptDraft {
+  id: string
+  user_id: string
+  status: string
+  next_review_at?: string
+  created_at: string
+  updated_at: string
 }

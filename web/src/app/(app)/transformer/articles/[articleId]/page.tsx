@@ -8,6 +8,7 @@ import {
   type ArticleProvenance,
   DeepReadingMode,
   type SavedConcept,
+  type ScheduledReviewPrompt,
 } from '@/components/deep-reading'
 import { CoveragePanel } from '@/components/transformer/coverage-panel'
 import { IllustrationPanel } from '@/components/transformer/illustration-panel'
@@ -160,6 +161,15 @@ export default function ArticlePage() {
       }),
   })
 
+  // Retrieval Engine sink (DET-301/DET-288): an approved Spaced Review prompt is
+  // handed to the engine — the real downstream store, distinct from the event log
+  // (which records the approval action). The engine owns the schedule; idempotent
+  // server-side on the deterministic prompt_id, so a re-approval updates in place.
+  const schedulePrompt = useMutation({
+    mutationFn: (p: ScheduledReviewPrompt) =>
+      api.scheduleReviewPrompt(toReviewPromptDraft(p)),
+  })
+
   // Suggestions not anchored inline → the drawer's management grid, so nothing
   // renders twice. Computed against the same placement the article view uses.
   const unplacedSuggestions = useMemo(() => {
@@ -267,6 +277,7 @@ export default function ArticlePage() {
                   initialEvents={eventsQuery.data ?? []}
                   onEmit={emitEvent}
                   onSaveConcept={(c) => saveConcept.mutate(c)}
+                  onSchedulePrompt={(p) => schedulePrompt.mutate(p)}
                 />
               ) : (
                 <p className='notice'>Loading your progress…</p>
@@ -377,6 +388,27 @@ function toEventDraft(event: ArticleLearningEvent): ArticleLearningEventDraft {
     user_answer: event.user_answer,
     ai_feedback: event.ai_feedback,
     metadata: event.metadata,
+  }
+}
+
+// Map an approved Spaced Review prompt to the Retrieval Engine draft (DET-301).
+// id/schedule/timestamps are server-owned; schedule_metadata and section_heading
+// are client-only display state and not persisted. The API whitelist rejects
+// extras, so we send exactly the contract fields.
+function toReviewPromptDraft(p: ScheduledReviewPrompt) {
+  return {
+    prompt_id: p.prompt_id,
+    article_id: p.article_id,
+    article_version_id: p.article_version_id,
+    section_id: p.section_id,
+    concept_id: p.concept_id,
+    prompt_type: p.prompt_type,
+    origin: p.origin,
+    subject: p.subject,
+    question: p.question,
+    expected_answer_summary: p.expected_answer_summary,
+    source_span_ids: p.source_span_ids,
+    created_from_event_id: p.created_from_event_id,
   }
 }
 
