@@ -9,17 +9,19 @@ import { useAuth } from '@/lib/auth-context'
 import { useWorkspace } from '@/lib/workspace-context'
 import { WorkspaceSwitcher } from './workspace-switcher'
 
-// Unified capture (DET-300): the Transformer no longer has its own front door —
-// capture + triage live on /inbox, and source/article views are reached from
-// inbox rows. So there's no standalone "Transformer" nav entry competing with it.
+// Nav as the core loop (DET-302): capture → read → earn → review, ≤5 items in
+// loop order. "Read" is the merged source/article surface (capture + triage on
+// /inbox since DET-300; source/article views open from its rows). "Progress" is
+// the renamed Understanding metrics. Tracks live on Today as the organizing
+// widget; Domains fold into the Map's DOMAIN scope control; Session is reached
+// from Today's "Start session" — all three routes stay reachable, just off the
+// top-level bar.
 const NAV_ITEMS = [
-  { href: '/tracks', label: 'Tracks' },
-  { href: '/inbox', label: 'Inbox' },
+  { href: '/today', label: 'Today' },
+  { href: '/inbox', label: 'Read' },
   { href: '/concepts', label: 'Concepts' },
-  { href: '/domains', label: 'Domains' },
   { href: '/graph', label: 'Map' },
-  { href: '/session', label: 'Session' },
-  { href: '/metrics', label: 'Understanding' },
+  { href: '/metrics', label: 'Progress' },
 ] as const
 
 /**
@@ -43,17 +45,25 @@ export function MastheadStrip() {
 export function AppNav() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
-  // Inbox "debt" badge (DET-241): a gentle count on §INBOX so unprocessed
-  // captures stay visible across the app. Shares the ['inbox'] cache with the
-  // inbox page, so it updates the moment an item is processed or discarded.
+  // Inbox "debt" badge (DET-241), now on §READ (DET-302): a gentle count of
+  // unprocessed captures. Shares the ['inbox'] cache with the Read page, so it
+  // updates the moment an item is processed or discarded.
   const inboxQuery = useQuery({ queryKey: ['inbox'], queryFn: api.listInbox })
   const inboxCount = inboxQuery.data?.length ?? 0
+  // Due-recall badge on §TODAY (DET-302): how many concepts are due to recall,
+  // so the daily habit stays visible. Shares the ['due-retrievals'] cache with
+  // the Today panel.
+  const dueQuery = useQuery({
+    queryKey: ['due-retrievals'],
+    queryFn: api.getDueRetrievals,
+  })
+  const dueCount = dueQuery.data?.length ?? 0
 
   return (
     <header className='app-nav-wrap'>
       <nav className='app-nav'>
         <div className='app-nav-left'>
-          <Link href='/tracks' className='nav-brand'>
+          <Link href='/today' className='nav-brand'>
             Kibadist
           </Link>
           <WorkspaceSwitcher />
@@ -71,6 +81,9 @@ export function AppNav() {
                   {item.label}
                   {item.href === '/inbox' && inboxCount > 0 && (
                     <span className='nav-badge'>{inboxCount}</span>
+                  )}
+                  {item.href === '/today' && dueCount > 0 && (
+                    <span className='nav-badge nav-badge-due'>{dueCount}</span>
                   )}
                 </Link>
               )

@@ -1255,7 +1255,9 @@ body {
   transform: translateX(3px);
 }
 
-/* §INBOX count badge in the app masthead. */
+/* §READ / §TODAY count badges in the app masthead. §READ carries the inbox
+   "debt" count (accent); §TODAY carries the due-recall count in olive — the
+   "there's recall to do" tone, distinct from the unprocessed-capture accent. */
 .kbapp .nav-badge {
   display: inline-block;
   margin-left: 6px;
@@ -1267,6 +1269,9 @@ body {
   background: var(--accent);
   color: var(--paper);
   vertical-align: middle;
+}
+.kbapp .nav-badge-due {
+  background: var(--olive);
 }
 
 /* ---------------- inbox focus mode / processing session (DET-241) ---------- */
@@ -2253,4 +2258,156 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--ink-muted);
+}
+
+/* ---------------- Today home (DET-302) ----------------
+   Three stacked panels walking the loop: due-for-recall, waiting-to-read, active
+   track. Each is a raised paper panel with a mono kicker + a count, a serif
+   title, a short live list, and a link into its surface. No streaks. */
+.kbapp .today-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.kbapp .today-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.kbapp .today-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kbapp .today-panel-title {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.kbapp .today-empty {
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+.kbapp .today-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.kbapp .today-due-row,
+.kbapp .today-read-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-top: 1px solid var(--rule-soft);
+}
+.kbapp .today-list > li:first-child {
+  border-top: none;
+}
+.kbapp .today-due-title,
+.kbapp .today-read-title {
+  font-family: var(--font-body), serif;
+  font-size: 16px;
+  color: var(--ink);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kbapp .today-due-title:hover,
+.kbapp .today-read-main:hover .today-read-title {
+  color: var(--accent);
+}
+.kbapp .today-read-main {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  text-decoration: none;
+  min-width: 0;
+}
+.kbapp .today-read-source {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  flex: none;
+}
+.kbapp .today-read-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.kbapp .today-read-len {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+.kbapp .today-cta {
+  margin-top: 4px;
+}
+.kbapp .today-more {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  text-decoration: none;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.kbapp .today-more:hover {
+  color: var(--accent-deep);
+}
+.kbapp .today-more .ar {
+  transition: transform 0.15s;
+}
+.kbapp .today-more:hover .ar {
+  transform: translateX(3px);
+}
+.kbapp .today-track-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.kbapp .today-track-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--rule);
+  background: var(--paper-hi);
+  border-radius: 3px;
+  padding: 16px 18px;
+  transition:
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+.kbapp .today-track-card:hover {
+  border-color: var(--ink-faint);
+  box-shadow: var(--shadow-sm);
+}
+.kbapp .today-track-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kbapp .today-track-name {
+  font-family: var(--font-display), serif;
+  font-size: 20px;
+  color: var(--ink);
 }
