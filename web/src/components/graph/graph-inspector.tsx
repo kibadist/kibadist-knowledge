@@ -1,24 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 
+import { api, type ConceptLinkEnd, type LinkRelation } from '@/lib/api'
+// Humanized labels (DET-304): one source of truth for every enum label.
 import {
-  api,
-  type ConceptLinkEnd,
-  type LinkRelation,
-  type LivingConceptStatus,
-} from '@/lib/api'
-import { RELATION_LABELS, relationChipClass } from './relation-labels'
-
-function personaStatusChip(status: LivingConceptStatus): {
-  className: string
-  label: string
-} {
-  if (status === 'USER_VALIDATED')
-    return { className: 'chip-cleared', label: 'Validated' }
-  if (status === 'ARCHIVED')
-    return { className: 'chip-quiet', label: 'Archived' }
-  return { className: 'chip-pending', label: 'Draft' }
-}
+  CERTAINTY_LABELS,
+  COGNITIVE_STATE_LABELS,
+  LINK_RELATION_LABELS,
+  LINK_STATUS_LABELS,
+  livingConceptStatusChip,
+  relationChipClass,
+} from '@/lib/labels'
 
 /**
  * The map's right-hand inspector. On a selected node it shows the concept's
@@ -132,8 +124,12 @@ function InspectorBody({
               {concept.title}
             </Link>
             <div className='flex flex-wrap items-center gap-2'>
-              <span className='chip chip-quiet'>{concept.cognitiveState}</span>
-              <span className='chip chip-quiet'>{concept.certainty}</span>
+              <span className='chip chip-quiet'>
+                {COGNITIVE_STATE_LABELS[concept.cognitiveState]}
+              </span>
+              <span className='chip chip-quiet'>
+                {CERTAINTY_LABELS[concept.certainty]}
+              </span>
               <span className='chip chip-quiet'>
                 Activation {Math.round(concept.currentActivation * 100)}%
               </span>
@@ -151,7 +147,7 @@ function InspectorBody({
               onConfirm={(id) => confirmMutation.mutate(id)}
               onReject={(id) => rejectMutation.mutate(id)}
               busy={linkBusy}
-              relationLabels={RELATION_LABELS}
+              relationLabels={LINK_RELATION_LABELS}
               relationChipClass={relationChipClass}
             />
           </section>
@@ -210,7 +206,7 @@ function InspectorBody({
                     {activePersona.personaName}
                   </span>
                   {(() => {
-                    const c = personaStatusChip(activePersona.status)
+                    const c = livingConceptStatusChip(activePersona.status)
                     return (
                       <span className={`chip ${c.className}`}>{c.label}</span>
                     )
@@ -397,7 +393,9 @@ function LinkRow({
         ) : (
           <span className='chip chip-cleared'>You drew this</span>
         )}
-        <span className='chip chip-quiet ml-auto'>{link.status}</span>
+        <span className='chip chip-quiet ml-auto'>
+          {LINK_STATUS_LABELS[link.status]}
+        </span>
       </div>
       {link.rationale && (
         <p className='pl-5 text-xs text-ink-muted'>{link.rationale}</p>

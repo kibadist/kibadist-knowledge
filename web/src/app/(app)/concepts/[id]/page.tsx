@@ -13,50 +13,31 @@ import {
   type ConceptDomainRow,
   type ConceptLinkEnd,
   type ConceptRetrievalEvent,
-  type LinkRelation,
   type Reflection,
-  type ReflectionKind,
   type StateTransition,
 } from '@/lib/api'
-
-// DET-191: typed relationship labels + distinct styling for contradiction /
-// redundancy so a conflicting or duplicative edge stands out in the graph view.
-const RELATION_LABELS: Record<LinkRelation, string> = {
-  ANALOGY: 'analogy',
-  CONTRADICTION: 'contradiction',
-  SUPPORTS: 'supports',
-  DEPENDS_ON: 'depends on',
-  REFINES: 'refines',
-  REDUNDANT: 'redundant',
-}
-
-// DET-196: human labels for the reflection kinds shown in "What changed".
-const REFLECTION_LABELS: Record<ReflectionKind, string> = {
-  CLEARER: 'got clearer',
-  LESS_CLEAR: 'less clear',
-  CONNECTED: 'connected',
-  CHALLENGE_NEXT: 'to challenge',
-}
+// Humanized labels (DET-304): one source of truth for every enum label.
+import {
+  CAPTURE_SOURCE_LABELS,
+  CERTAINTY_LABELS,
+  COGNITIVE_STATE_LABELS,
+  CONCEPT_STATUS_LABELS,
+  certaintyChipClass,
+  GATE_MODE_LABELS,
+  LINK_RELATION_LABELS,
+  LINK_STATUS_LABELS,
+  REFLECTION_KIND_LABELS,
+  relationChipClass,
+} from '@/lib/labels'
 
 // DET-199: the user's epistemic stance, in their own framing. Order is the
-// control's left-to-right options.
+// control's left-to-right options. "Unsure" reads softer here than the bare
+// "Uncertain" chip label, so it keeps its own copy.
 const CERTAINTY_OPTIONS: { value: Certainty; label: string }[] = [
   { value: 'ASSERTED', label: 'Asserted' },
   { value: 'TENTATIVE', label: 'Tentative' },
   { value: 'UNCERTAIN', label: 'Unsure' },
 ]
-
-function certaintyChipClass(certainty: Certainty): string {
-  if (certainty === 'UNCERTAIN') return 'chip-pending'
-  if (certainty === 'TENTATIVE') return 'chip-info'
-  return 'chip-cleared'
-}
-
-function relationChipClass(kind: LinkRelation): string {
-  if (kind === 'CONTRADICTION') return 'chip-contested'
-  if (kind === 'REDUNDANT') return 'chip-pending'
-  return 'chip-quiet'
-}
 
 /**
  * Concept view — a single unit of earned understanding and its proof-of-learning
@@ -109,17 +90,23 @@ export default function ConceptViewPage() {
         <h1>{concept?.title ?? 'Concept'}</h1>
         {concept && (
           <div className='flex flex-wrap items-center gap-2'>
-            <span className='chip chip-quiet'>{concept.status}</span>
+            <span className='chip chip-quiet'>
+              {CONCEPT_STATUS_LABELS[concept.status]}
+            </span>
             {concept.cognitiveState && (
-              <span className='chip chip-quiet'>{concept.cognitiveState}</span>
+              <span className='chip chip-quiet'>
+                {COGNITIVE_STATE_LABELS[concept.cognitiveState]}
+              </span>
             )}
             {concept.gateMode && (
-              <span className='chip chip-quiet'>{concept.gateMode}</span>
+              <span className='chip chip-quiet'>
+                {GATE_MODE_LABELS[concept.gateMode]}
+              </span>
             )}
             {/* Uncertainty (DET-199): the user's own stance, shown plainly so
                 what they're unsure of is never flattened into implied certainty. */}
             <span className={`chip ${certaintyChipClass(concept.certainty)}`}>
-              {concept.certainty}
+              {CERTAINTY_LABELS[concept.certainty]}
             </span>
             {/* Memory decay (DET-195): current activation, with a DORMANT
                 call-out + a Revive control when it has faded past the floor. */}
@@ -350,7 +337,9 @@ export default function ConceptViewPage() {
             </div>
             <div className='flex flex-wrap items-center gap-2'>
               {concept.captureSource && (
-                <span className='chip chip-quiet'>{concept.captureSource}</span>
+                <span className='chip chip-quiet'>
+                  {CAPTURE_SOURCE_LABELS[concept.captureSource]}
+                </span>
               )}
               {concept.sourceUrl ? (
                 <a
@@ -420,7 +409,7 @@ function ReflectionItem({ reflection }: { reflection: Reflection }) {
     <li className='item-card flex flex-col gap-1 text-sm'>
       <div className='flex flex-wrap items-center gap-2'>
         <span className='chip chip-quiet'>
-          {REFLECTION_LABELS[reflection.kind]}
+          {REFLECTION_KIND_LABELS[reflection.kind]}
         </span>
         <time className='u-mono ml-auto text-xs text-ink-faint'>
           {new Date(reflection.createdAt).toLocaleString()}
@@ -436,10 +425,10 @@ function ReflectionItem({ reflection }: { reflection: Reflection }) {
 function StateHistoryItem({ transition }: { transition: StateTransition }) {
   return (
     <li className='flex flex-wrap items-center gap-1.5'>
-      <span className='uppercase tracking-wide text-ink-muted'>
+      <span className='tracking-wide text-ink-muted'>
         {transition.from
-          ? `${transition.from} → ${transition.to}`
-          : transition.to}
+          ? `${COGNITIVE_STATE_LABELS[transition.from]} → ${COGNITIVE_STATE_LABELS[transition.to]}`
+          : COGNITIVE_STATE_LABELS[transition.to]}
       </span>
       <span className='text-ink-faint'>· {transition.trigger}</span>
       <time className='text-ink-faint'>
@@ -496,7 +485,7 @@ function LinkItem({
         )}
         {link.relationKind && (
           <span className={`chip ${relationChipClass(link.relationKind)}`}>
-            {RELATION_LABELS[link.relationKind]}
+            {LINK_RELATION_LABELS[link.relationKind]}
           </span>
         )}
         {link.relation && (
@@ -509,7 +498,9 @@ function LinkItem({
         ) : (
           <span className='chip chip-cleared'>You drew this</span>
         )}
-        <span className='chip chip-quiet ml-auto'>{link.status}</span>
+        <span className='chip chip-quiet ml-auto'>
+          {LINK_STATUS_LABELS[link.status]}
+        </span>
       </div>
       {link.rationale && (
         <p className='pl-5 text-xs text-ink-muted'>{link.rationale}</p>

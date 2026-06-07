@@ -1,4 +1,6 @@
 import type { CaptureSource } from '@/lib/api'
+// Humanized labels (DET-304): one source of truth for every enum label.
+import { CAPTURE_SOURCE_LABELS } from '@/lib/labels'
 
 import { isLexicalStateJSON } from '../editor/editor-state'
 
@@ -43,17 +45,11 @@ export function prepareMarkdown(content: string): string {
     .trim()
 }
 
-const SOURCE_LABELS: Record<CaptureSource, string> = {
-  PASTE: 'Pasted text',
-  URL: 'Web article',
-  PDF: 'PDF document',
-}
-
 /** Human label for where this source came from. */
 export function captureSourceLabel(
   source: CaptureSource | null | undefined,
 ): string | null {
-  return source ? (SOURCE_LABELS[source] ?? null) : null
+  return source ? (CAPTURE_SOURCE_LABELS[source] ?? null) : null
 }
 
 /** Display the host of a source URL (full URL is kept as the link target). */

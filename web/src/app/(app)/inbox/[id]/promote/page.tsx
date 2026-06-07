@@ -13,6 +13,12 @@ import {
   type PromotionState,
   type SuggestedConnection,
 } from '@/lib/api'
+// Humanized labels (DET-304): one source of truth for every enum label.
+import {
+  FRICTION_LEVEL_LABELS,
+  LINK_RELATION_LABELS,
+  relationChipClass,
+} from '@/lib/labels'
 
 // Adaptive Friction (DET-197): which gates each level requires. Mirrors the
 // server's requiredGates() so the UI shows a not-required gate as satisfied.
@@ -38,24 +44,6 @@ const FRICTION_BLURB: Record<FrictionLevel, string> = {
   LIGHT: 'Articulate and connect it to what you already know.',
   DEEP: 'The full gate: articulate, connect, recall, and validate.',
   RIGOROUS: 'Full gate plus a post-promotion Tutor + contradiction pass.',
-}
-
-// DET-191: relation chip styling. CONTRADICTION and REDUNDANT are flagged
-// distinctly (amber / red) so a conflicting or duplicative neighbor stands out
-// from ordinary structural relations.
-const RELATION_LABELS: Record<LinkRelation, string> = {
-  ANALOGY: 'analogy',
-  CONTRADICTION: 'contradiction',
-  SUPPORTS: 'supports',
-  DEPENDS_ON: 'depends on',
-  REFINES: 'refines',
-  REDUNDANT: 'redundant',
-}
-
-function relationChipClass(kind: LinkRelation): string {
-  if (kind === 'CONTRADICTION') return 'chip-contested'
-  if (kind === 'REDUNDANT') return 'chip-pending'
-  return 'chip-quiet'
 }
 
 /**
@@ -286,7 +274,8 @@ export default function PromoteConceptPage() {
             </div>
             <div className='callout'>
               <span className='font-medium text-ink'>
-                Suggested: {promotion.frictionProposal.level}
+                Suggested:{' '}
+                {FRICTION_LEVEL_LABELS[promotion.frictionProposal.level]}
               </span>
               {promotion.frictionProposal.reasons.length > 0 && (
                 <span className='text-ink-muted'>
@@ -303,7 +292,7 @@ export default function PromoteConceptPage() {
                   onClick={() => chooseLevel(lvl)}
                   className={`seg ${effectiveLevel === lvl ? 'on' : ''}`}
                 >
-                  {lvl}
+                  {FRICTION_LEVEL_LABELS[lvl]}
                   {promotion.frictionProposal.level === lvl && (
                     <span className='ml-1.5'>suggested</span>
                   )}
@@ -693,7 +682,7 @@ function SuggestionRow({
             <span
               className={`chip ${relationChipClass(suggestion.relationKind)}`}
             >
-              {RELATION_LABELS[suggestion.relationKind]}
+              {LINK_RELATION_LABELS[suggestion.relationKind]}
             </span>
             <span className='chip chip-quiet'>
               {Math.round(suggestion.similarity * 100)}%

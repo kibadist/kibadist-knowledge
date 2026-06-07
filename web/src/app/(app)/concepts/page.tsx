@@ -4,30 +4,12 @@ import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 
 import { api, type Concept } from '@/lib/api'
-
-// Humanized labels (DET-241): the API speaks in SHOUTING enums; the list reads
-// like prose. Title-case the cognitive state, name the gate, surface certainty.
-const STATE_LABEL: Record<string, string> = {
-  SEEN: 'Seen',
-  PARSED: 'Parsed',
-  EXPLAINED: 'Explained',
-  LINKED: 'Linked',
-  RETRIEVED: 'Retrieved',
-  DEFENDED: 'Defended',
-  INTERNALIZED: 'Internalized',
-  DORMANT: 'Dormant',
-  CONTESTED: 'Contested',
-  ARCHIVED: 'Archived',
-}
-const CERT_LABEL: Record<string, string> = {
-  ASSERTED: 'Asserted',
-  TENTATIVE: 'Tentative',
-  UNCERTAIN: 'Uncertain',
-}
-const GATE_LABEL: Record<string, string> = {
-  QUICK: 'Quick gate',
-  DEEP: 'Deep gate',
-}
+// Humanized labels (DET-304): one source of truth for every enum label.
+import {
+  CERTAINTY_LABELS,
+  COGNITIVE_STATE_LABELS,
+  GATE_MODE_LABELS,
+} from '@/lib/labels'
 
 /** A concept counts as "active" while it's above the fade floor and not dormant. */
 function isActive(c: Concept): boolean {
@@ -129,13 +111,13 @@ function ConceptRow({ concept }: { concept: Concept }) {
       <div className='concept-meta'>
         <span className={`cstate cstate-${tone}`}>
           <span className='cstate-dot' />
-          {STATE_LABEL[concept.cognitiveState] ?? concept.cognitiveState}
+          {COGNITIVE_STATE_LABELS[concept.cognitiveState]}
         </span>
         <span className={`ccert ccert-${concept.certainty.toLowerCase()}`}>
-          {CERT_LABEL[concept.certainty] ?? concept.certainty}
+          {CERTAINTY_LABELS[concept.certainty]}
         </span>
         {concept.gateMode && (
-          <span className='cgate'>{GATE_LABEL[concept.gateMode]}</span>
+          <span className='cgate'>{GATE_MODE_LABELS[concept.gateMode]}</span>
         )}
       </div>
 

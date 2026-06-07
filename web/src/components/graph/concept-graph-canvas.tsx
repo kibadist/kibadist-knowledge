@@ -23,12 +23,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, type GraphData } from '@/lib/api'
+import { LINK_RELATION_LABELS } from '@/lib/labels'
 import '@xyflow/react/dist/style.css'
 import './graph.css'
 import { ConceptNode, type ConceptNodeData } from './concept-node'
 import { GraphInspector } from './graph-inspector'
 import { layoutNodes } from './graph-layout'
-import { RELATION_LABELS } from './relation-labels'
 
 // The inspector overlays the right edge of the canvas (graph.css). When a node is
 // selected we bias the recenter left by half this width so the selected node lands
@@ -134,7 +134,7 @@ function Flow({
         // Curated label, shared with the inspector, so an edge reads "depends on"
         // not the raw "DEPENDS_ON" enum (DET-223).
         label: e.relationKind
-          ? RELATION_LABELS[e.relationKind]
+          ? LINK_RELATION_LABELS[e.relationKind]
           : (e.relation ?? undefined),
         className,
         animated: false,
