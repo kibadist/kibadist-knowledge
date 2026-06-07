@@ -11,6 +11,10 @@ import type {
   ReflectionKind,
   SessionItemReason,
 } from '@/lib/api'
+import {
+  REVIEW_PROMPT_TYPE_LABEL,
+  type ReviewPromptType,
+} from '@/lib/spaced-review'
 
 /**
  * Humanized enum labels (DET-304, finishing DET-241).
@@ -158,12 +162,21 @@ export const CANDIDATE_KIND_LABELS: Record<CandidateKind, string> = {
   APPLICATION: 'Application',
 }
 
-// Why a concept surfaced in a session's queue (DET-198).
+// Why an item surfaced in a session's queue (DET-198, unified in DET-310).
 export const SESSION_ITEM_REASON_LABELS: Record<SessionItemReason, string> = {
   DUE: 'due for review',
   CONTESTED: 'contested — resolve the conflict',
   REDISCOVERY: 'rediscovery',
   CHALLENGE: 'the Tutor will challenge this',
+  ARTICLE_PROMPT: 'from your article review',
+}
+
+// A review-prompt item's type (DET-310), humanized for the session card chip.
+// The wire `promptType` is the DET-288 ReviewPromptType vocabulary; this routes
+// it through the same display labels Spaced Review uses, with a safe fallback so
+// an unknown/extended type never leaks a raw token to the screen.
+export function promptTypeLabel(type: string): string {
+  return REVIEW_PROMPT_TYPE_LABEL[type as ReviewPromptType] ?? 'review prompt'
 }
 
 // Human labels for the reflection kinds shown in "What changed" (DET-196).

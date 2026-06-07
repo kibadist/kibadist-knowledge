@@ -598,18 +598,31 @@ export type SessionItemReason =
   | 'CONTESTED'
   | 'REDISCOVERY'
   | 'CHALLENGE'
+  // An approved Spaced Review prompt drawn from a deeply-read article (DET-310).
+  | 'ARTICLE_PROMPT'
 export type SessionStatus = 'ACTIVE' | 'COMPLETED' | 'ABANDONED'
 
-// One concept in a session's queue, in presentation order, with its grade once
-// reviewed (null until reached).
+// One item in a session's queue, in presentation order, with its grade once
+// reviewed (null until reached). An item is EITHER a concept item (conceptId
+// set) or a review-prompt item (reviewPromptId set) — one retrieval engine
+// (DET-310).
 export interface SessionItem {
   id: string
-  conceptId: string
+  // Set for a concept item; null for a prompt item with no earned concept yet.
+  conceptId: string | null
+  // Set for an approved-review-prompt item (DET-310); null for a concept item.
+  reviewPromptId: string | null
   title: string
   // The concept's current cognitive state (DET-199): lets the session view mark
   // a CONTESTED item, so the contested signal is visible everywhere a concept
-  // surfaces (detail, list, and here).
-  cognitiveState: CognitiveState
+  // surfaces (detail, list, and here). Null for a prompt item (no concept).
+  cognitiveState: CognitiveState | null
+  // Review-prompt fields (DET-310), null for a concept item: the prompt type
+  // (e.g. 'definition_recall'), the question to recall, and the user-authored
+  // expected answer revealed on demand.
+  promptType: string | null
+  question: string | null
+  expectedAnswer: string | null
   position: number
   reason: SessionItemReason
   reviewedAt: string | null
@@ -623,6 +636,15 @@ export interface Session {
   targetMinutes: number
   status: SessionStatus
   items: SessionItem[]
+}
+
+// What a session would hold right now (DET-310): the start-screen composition.
+export interface SessionPreview {
+  due: number
+  contested: number
+  rediscovery: number
+  prompts: number
+  total: number
 }
 
 // A row in the simple session history view.
@@ -1596,11 +1618,23 @@ export const api = {
       body: JSON.stringify(targetMinutes != null ? { targetMinutes } : {}),
     }),
   getActiveSession: () => request<Session | null>('/sessions/active'),
-  reviewSessionItem: (sessionId: string, conceptId: string, score: number) =>
-    request<GradeResult>(`/sessions/${sessionId}/review`, {
-      method: 'POST',
-      body: JSON.stringify({ conceptId, score }),
-    }),
+  // The start-screen composition (DET-310): what's due/contested/etc. right now.
+  getSessionPreview: () => request<SessionPreview>('/sessions/preview'),
+  // Review one item — a concept (conceptId) or an approved review prompt
+  // (reviewPromptId). One queue, one review call (DET-310). Returns the concept
+  // grade result, or a minimal ack for a prompt review.
+  reviewSessionItem: (
+    sessionId: string,
+    target: { conceptId: string } | { reviewPromptId: string },
+    score: number,
+  ) =>
+    request<GradeResult | { rescheduled: true }>(
+      `/sessions/${sessionId}/review`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ ...target, score }),
+      },
+    ),
   endSession: (sessionId: string) =>
     request<Session>(`/sessions/${sessionId}/end`, { method: 'POST' }),
   getSessionHistory: () => request<SessionSummary[]>('/sessions/history'),

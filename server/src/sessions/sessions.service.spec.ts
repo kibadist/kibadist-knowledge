@@ -27,13 +27,21 @@ function makeService() {
   }
   const concepts = {}
   const decay = { sweep: jest.fn().mockResolvedValue(0) }
+  // DET-310: the queue also draws approved review prompts; default to none so
+  // the concept-only cases are unchanged.
+  const reviewPrompts = {
+    dueForUser: jest.fn().mockResolvedValue([]),
+    countDueForUser: jest.fn().mockResolvedValue(0),
+    reschedule: jest.fn().mockResolvedValue(undefined),
+  }
   const service = new SessionsService(
     prisma as never,
     retrieval as never,
     concepts as never,
     decay as never,
+    reviewPrompts as never,
   )
-  return { service, prisma, retrieval, decay }
+  return { service, prisma, retrieval, decay, reviewPrompts }
 }
 
 describe('SessionsService.start', () => {
@@ -224,6 +232,129 @@ describe('SessionsService.reviewItem', () => {
     ).rejects.toBeInstanceOf(NotFoundException)
     // Critically: no retrieval grade/reschedule for a concept not in the session.
     expect(retrieval.grade).not.toHaveBeenCalled()
+  })
+})
+
+describe('SessionsService.start (DET-310 review prompts)', () => {
+  it('persists an approved review prompt as a SessionItem alongside concepts', async () => {
+    const { service, prisma, reviewPrompts } = makeService()
+    prisma.concept.findMany.mockResolvedValue([
+      { id: 'c1', cognitiveState: 'EXPLAINED', nextReviewAt: null },
+    ])
+    reviewPrompts.dueForUser.mockResolvedValue([
+      { id: 'p1', promptType: 'definition_recall', nextReviewAt: null },
+    ])
+    prisma.session.create.mockResolvedValue({ id: 's1' })
+    prisma.session.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 's1',
+      startedAt: new Date(),
+      endedAt: null,
+      targetMinutes: 10,
+      status: 'ACTIVE',
+      items: [],
+    })
+
+    await service.start('u1', 'ws1', 10)
+
+    const created = prisma.sessionItem.createMany.mock.calls[0][0].data
+    // Concept leads, the approved prompt interleaves after it.
+    expect(created).toEqual([
+      {
+        sessionId: 's1',
+        conceptId: 'c1',
+        reviewPromptId: undefined,
+        position: 0,
+        reason: 'DUE',
+      },
+      {
+        sessionId: 's1',
+        conceptId: undefined,
+        reviewPromptId: 'p1',
+        position: 1,
+        reason: 'ARTICLE_PROMPT',
+      },
+    ])
+  })
+
+  it('builds a prompt-only session when nothing concept-side is due', async () => {
+    const { service, prisma, reviewPrompts } = makeService()
+    prisma.concept.findMany.mockResolvedValue([])
+    reviewPrompts.dueForUser.mockResolvedValue([
+      { id: 'p1', promptType: 'transfer', nextReviewAt: null },
+    ])
+    prisma.session.create.mockResolvedValue({ id: 's1' })
+    prisma.session.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 's1',
+      startedAt: new Date(),
+      endedAt: null,
+      targetMinutes: 10,
+      status: 'ACTIVE',
+      items: [],
+    })
+
+    await service.start('u1', 'ws1', 10)
+
+    const created = prisma.sessionItem.createMany.mock.calls[0][0].data
+    expect(created).toEqual([
+      {
+        sessionId: 's1',
+        conceptId: undefined,
+        reviewPromptId: 'p1',
+        position: 0,
+        reason: 'ARTICLE_PROMPT',
+      },
+    ])
+  })
+})
+
+describe('SessionsService.reviewPromptItem', () => {
+  it('reschedules the prompt and marks the item reviewed', async () => {
+    const { service, prisma, reviewPrompts } = makeService()
+    prisma.session.findFirst.mockResolvedValue({ id: 's1' }) // owned + ACTIVE
+    prisma.sessionItem.findFirst.mockResolvedValue({ id: 'i1' }) // membership
+
+    const result = await service.reviewPromptItem('u1', 's1', 'p1', 5)
+
+    expect(reviewPrompts.reschedule).toHaveBeenCalledWith('u1', 'p1', 5)
+    const update = prisma.sessionItem.update.mock.calls[0][0]
+    expect(update.where).toEqual({ id: 'i1' })
+    expect(update.data.recallScore).toBe(5)
+    expect(update.data.reviewedAt).toBeInstanceOf(Date)
+    expect(result).toEqual({ rescheduled: true })
+  })
+
+  it('throws when the prompt is not part of the session, without rescheduling', async () => {
+    const { service, prisma, reviewPrompts } = makeService()
+    prisma.session.findFirst.mockResolvedValue({ id: 's1' }) // owned + ACTIVE
+    prisma.sessionItem.findFirst.mockResolvedValue(null) // not a member
+
+    await expect(
+      service.reviewPromptItem('u1', 's1', 'rogue', 4),
+    ).rejects.toBeInstanceOf(NotFoundException)
+    expect(reviewPrompts.reschedule).not.toHaveBeenCalled()
+  })
+})
+
+describe('SessionsService.preview (DET-310)', () => {
+  it('reports the queue composition: due, contested, rediscovery, prompts', async () => {
+    const { service, prisma, reviewPrompts } = makeService()
+    prisma.concept.findMany.mockResolvedValue([
+      { cognitiveState: 'CONTESTED', nextReviewAt: null },
+      { cognitiveState: 'EXPLAINED', nextReviewAt: null },
+      { cognitiveState: 'RETRIEVED', nextReviewAt: new Date('2099-01-01') }, // not due
+      { cognitiveState: 'DORMANT', nextReviewAt: null },
+    ])
+    reviewPrompts.countDueForUser.mockResolvedValue(2)
+
+    const result = await service.preview('u1', 'ws1')
+
+    expect(result).toEqual({
+      contested: 1,
+      due: 1,
+      rediscovery: 1,
+      prompts: 2,
+      total: 5,
+    })
   })
 })
 

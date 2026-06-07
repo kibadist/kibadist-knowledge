@@ -10,9 +10,10 @@ import {
   type ReflectionKind,
   type Session,
   type SessionItem,
+  type SessionPreview,
 } from '@/lib/api'
 // Humanized labels (DET-304): one source of truth for every enum label.
-import { SESSION_ITEM_REASON_LABELS } from '@/lib/labels'
+import { promptTypeLabel, SESSION_ITEM_REASON_LABELS } from '@/lib/labels'
 
 /**
  * Understanding Session (DET-198) — the daily 5–15 minute loop. The system
@@ -54,6 +55,15 @@ const TARGET_OPTIONS = [5, 10, 15, 20, 30] as const
 function StartScreen({ onStarted }: { onStarted: (s: Session) => void }) {
   const [targetMinutes, setTargetMinutes] = useState(10)
 
+  // What's waiting right now (DET-310): the queue is no longer just "concepts" —
+  // it interleaves earned concepts with approved review prompts from your
+  // articles. Show the composition so the start screen states what's due and why,
+  // not just a duration picker.
+  const previewQuery = useQuery({
+    queryKey: ['session', 'preview'],
+    queryFn: () => api.getSessionPreview(),
+  })
+
   const start = useMutation({
     mutationFn: () => api.startSession(targetMinutes),
     onSuccess: onStarted,
@@ -69,6 +79,8 @@ function StartScreen({ onStarted }: { onStarted: (s: Session) => void }) {
           understanding instead of rereading.
         </p>
       </div>
+
+      <QueueComposition preview={previewQuery.data} />
 
       <section className='panel panel-raised'>
         <h3 className='block-h'>How long do you have?</h3>
@@ -106,6 +118,48 @@ function StartScreen({ onStarted }: { onStarted: (s: Session) => void }) {
         )}
       </section>
     </div>
+  )
+}
+
+/**
+ * The start-screen queue composition (DET-310): "5 due · 1 contested · 2 from
+ * your articles". States what's waiting and why before the user commits to a
+ * length — the single retrieval engine surfaces concepts AND approved article
+ * review prompts in one queue, so the start screen reflects both sources.
+ */
+function QueueComposition({ preview }: { preview?: SessionPreview }) {
+  if (!preview) return null
+
+  const parts: string[] = []
+  if (preview.due > 0) parts.push(`${preview.due} due`)
+  if (preview.contested > 0) parts.push(`${preview.contested} contested`)
+  if (preview.rediscovery > 0)
+    parts.push(`${preview.rediscovery} to rediscover`)
+  if (preview.prompts > 0) {
+    parts.push(
+      `${preview.prompts} from your ${
+        preview.prompts === 1 ? 'article' : 'articles'
+      }`,
+    )
+  }
+
+  if (parts.length === 0) {
+    return (
+      <p className='notice' style={{ marginBottom: 18 }}>
+        Nothing is waiting yet. Earn a concept or finish a deep read, and it
+        resurfaces here when it’s due.
+      </p>
+    )
+  }
+
+  return (
+    <p
+      className='lede'
+      style={{ marginBottom: 18 }}
+      data-testid='queue-composition'
+    >
+      Waiting for you: <strong>{parts.join(' · ')}</strong>.
+    </p>
   )
 }
 
@@ -247,21 +301,35 @@ function SessionCard({
 }) {
   const [answer, setAnswer] = useState('')
 
+  // One retrieval engine, two item kinds (DET-310). A concept item draws its
+  // prompt + revealed answer from the user's compression (latest articulation);
+  // a review-prompt item carries its own question + expected answer inline, so it
+  // needs no concept fetch (and may have no concept at all).
+  const isPrompt = item.reviewPromptId !== null
+
   // The card prompt comes from the user's own compression, never the source.
+  // Concept items only — a prompt item already has its question.
   const cardsQuery = useQuery({
     queryKey: ['session-cards', item.conceptId],
-    queryFn: () => api.getRetrievalCards(item.conceptId),
+    queryFn: () => api.getRetrievalCards(item.conceptId as string),
+    enabled: !isPrompt && item.conceptId !== null,
   })
   // Their latest articulation is the "answer" revealed on demand — their words.
   const conceptQuery = useQuery({
     queryKey: ['session-concept', item.conceptId],
-    queryFn: () => api.getConcept(item.conceptId),
-    enabled: revealed,
+    queryFn: () => api.getConcept(item.conceptId as string),
+    enabled: revealed && !isPrompt && item.conceptId !== null,
   })
 
   const review = useMutation({
     mutationFn: (score: number) =>
-      api.reviewSessionItem(sessionId, item.conceptId, score),
+      api.reviewSessionItem(
+        sessionId,
+        isPrompt
+          ? { reviewPromptId: item.reviewPromptId as string }
+          : { conceptId: item.conceptId as string },
+        score,
+      ),
     onSuccess: onRated,
   })
 
@@ -280,8 +348,11 @@ function SessionCard({
     return () => window.removeEventListener('keydown', onKey)
   }, [revealed, review])
 
-  const prompt = cardsQuery.data?.[0]?.prompt
+  // The question to recall: the prompt's own for a review-prompt item, else the
+  // generated card prompt (with a plain fallback).
+  const conceptPrompt = cardsQuery.data?.[0]?.prompt
   const articulation = conceptQuery.data?.articulations[0]?.body
+  const revealedAnswer = isPrompt ? item.expectedAnswer : articulation
 
   return (
     <section className='panel panel-raised session-card'>
@@ -290,6 +361,14 @@ function SessionCard({
         <span className='chip chip-quiet'>
           {SESSION_ITEM_REASON_LABELS[item.reason]}
         </span>
+        {/* Prompt type (DET-310): label a review-prompt item by its kind
+            (recall / misconception repair / contrast / transfer) so the queue
+            reads as one engine, not two products. */}
+        {isPrompt && item.promptType && (
+          <span className='chip chip-info'>
+            {promptTypeLabel(item.promptType)}
+          </span>
+        )}
         {/* Contested (DET-199): mark a contested concept here too, so the signal
             is visible everywhere it surfaces — detail, list, and this view. */}
         {item.cognitiveState === 'CONTESTED' && (
@@ -304,9 +383,13 @@ function SessionCard({
         </p>
       )}
 
-      {cardsQuery.isLoading && <p className='prompt'>Loading the prompt…</p>}
-      {prompt ? (
-        <p className='prompt'>{prompt}</p>
+      {!isPrompt && cardsQuery.isLoading && (
+        <p className='prompt'>Loading the prompt…</p>
+      )}
+      {isPrompt ? (
+        <p className='prompt'>{item.question}</p>
+      ) : conceptPrompt ? (
+        <p className='prompt'>{conceptPrompt}</p>
       ) : (
         !cardsQuery.isLoading && (
           <p className='prompt'>
@@ -337,11 +420,13 @@ function SessionCard({
       ) : (
         <div className='reveal-block'>
           <div className='your-comp'>
-            <div className='label'>Your words</div>
-            {conceptQuery.isLoading ? (
+            <div className='label'>
+              {isPrompt ? 'The answer you saved' : 'Your words'}
+            </div>
+            {!isPrompt && conceptQuery.isLoading ? (
               <p>Loading…</p>
-            ) : articulation ? (
-              <p>{articulation}</p>
+            ) : revealedAnswer ? (
+              <p>{revealedAnswer}</p>
             ) : (
               <p>No articulation recorded yet.</p>
             )}
@@ -466,11 +551,16 @@ function ReflectionStep({
               className='fld'
             >
               <option value=''>— skip —</option>
-              {session.items.map((item) => (
-                <option key={item.conceptId} value={item.conceptId}>
-                  {item.title}
-                </option>
-              ))}
+              {/* Reflection is about earned concepts (DET-196); review-prompt
+                  items (DET-310) carry no concept, so they aren't reflectable
+                  options here. */}
+              {session.items
+                .filter((item) => item.conceptId !== null)
+                .map((item) => (
+                  <option key={item.conceptId} value={item.conceptId as string}>
+                    {item.title}
+                  </option>
+                ))}
             </select>
             {answers[p.kind].conceptId !== '' && (
               <input

@@ -11,6 +11,7 @@ import { DecayService } from '../decay/decay.service'
 import { PrismaService } from '../prisma/prisma.service'
 import type { GradeResult } from '../retrieval/retrieval.service'
 import { RetrievalService } from '../retrieval/retrieval.service'
+import { ReviewPromptService } from '../retrieval/review-prompt.service'
 import { buildQueue, type Candidate, type QueueReason } from './session-policy'
 
 /** Cognitive states excluded from the ordinary "due" pool — handled elsewhere
@@ -35,6 +36,7 @@ export class SessionsService {
     private readonly retrieval: RetrievalService,
     private readonly concepts: ConceptsService,
     private readonly decay: DecayService,
+    private readonly reviewPrompts: ReviewPromptService,
   ) {}
 
   /**
@@ -92,7 +94,15 @@ export class SessionsService {
       .filter((c) => c.cognitiveState === 'DORMANT')
       .map(toCandidate)
 
-    let queue = buildQueue({ contested, due, dormant }, targetMinutes)
+    // One retrieval engine (DET-310): approved Spaced Review prompts due now are
+    // drawn from the SAME queue, interleaved with the concept items by the policy.
+    const duePrompts = await this.reviewPrompts.dueForUser(userId)
+    const prompts = duePrompts.map((p) => ({
+      id: p.id,
+      nextReviewAt: p.nextReviewAt,
+    }))
+
+    let queue = buildQueue({ contested, due, dormant, prompts }, targetMinutes)
 
     // Empty state: keep the loop forward-moving with a single fallback item — a
     // mastered concept to challenge. (An empty queue already implies there were
@@ -115,9 +125,12 @@ export class SessionsService {
       })
       if (queue.length > 0) {
         await tx.sessionItem.createMany({
+          // A concept entry sets conceptId; a prompt entry sets reviewPromptId.
+          // The unused id stays `undefined` (omitted), never null.
           data: queue.map((entry, position) => ({
             sessionId: session.id,
             conceptId: entry.conceptId,
+            reviewPromptId: entry.reviewPromptId,
             position,
             reason: entry.reason as SessionItemReason,
           })),
@@ -179,6 +192,84 @@ export class SessionsService {
   }
 
   /**
+   * Review an approved Spaced Review prompt in a session (DET-310). Verifies the
+   * session is owned + ACTIVE and the prompt is actually part of THIS session,
+   * reschedules the prompt (so it leaves the "due" pool until its next cadence),
+   * and marks the matching SessionItem reviewed with the recall score. Unlike a
+   * concept review this never touches SM-2 or cognitive state — a prompt carries
+   * no per-concept schedule; the prompt scheduler owns its cadence.
+   */
+  async reviewPromptItem(
+    userId: string,
+    sessionId: string,
+    reviewPromptId: string,
+    score: number,
+  ): Promise<{ rescheduled: true }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, userId, status: SessionStatus.ACTIVE },
+      select: { id: true },
+    })
+    if (!session) throw new NotFoundException('Active session not found')
+
+    // The prompt must actually be part of THIS session — same guard as concept
+    // items, so a caller can't reschedule an arbitrary owned prompt "through" a
+    // session it isn't in.
+    const item = await this.prisma.sessionItem.findFirst({
+      where: { sessionId, reviewPromptId },
+      select: { id: true },
+    })
+    if (!item) {
+      throw new NotFoundException('Prompt is not part of this session')
+    }
+
+    await this.reviewPrompts.reschedule(userId, reviewPromptId, score)
+
+    await this.prisma.sessionItem.update({
+      where: { id: item.id },
+      data: { reviewedAt: new Date(), recallScore: score },
+    })
+
+    return { rescheduled: true }
+  }
+
+  /**
+   * What a session would hold right now, for the start screen (DET-310): how many
+   * concepts are due, contested, available as a rediscovery, and how many
+   * approved article prompts are due. Read-only — no decay sweep, no persistence;
+   * the sweep runs at actual {@link start}. Rediscovery is capped at 1 to match
+   * what a session actually surfaces.
+   */
+  async preview(userId: string, workspaceId: string) {
+    const now = new Date()
+    const concepts = await this.prisma.concept.findMany({
+      where: { userId, workspaceId, status: { not: ConceptStatus.INBOX } },
+      select: { cognitiveState: true, nextReviewAt: true },
+    })
+
+    const contested = concepts.filter(
+      (c) => c.cognitiveState === 'CONTESTED',
+    ).length
+    const due = concepts.filter(
+      (c) =>
+        !NON_DUE_STATES.includes(
+          c.cognitiveState as (typeof NON_DUE_STATES)[number],
+        ) &&
+        (c.nextReviewAt === null || c.nextReviewAt <= now),
+    ).length
+    const hasDormant = concepts.some((c) => c.cognitiveState === 'DORMANT')
+    const rediscovery = hasDormant ? 1 : 0
+    const prompts = await this.reviewPrompts.countDueForUser(userId)
+
+    return {
+      contested,
+      due,
+      rediscovery,
+      prompts,
+      total: contested + due + rediscovery + prompts,
+    }
+  }
+
+  /**
    * End a session: mark it COMPLETED with an end timestamp. Idempotent if it is
    * already completed. Deliberately minimal — DET-196 (Reflection) will extend
    * this to capture the post-session prompt.
@@ -222,8 +313,9 @@ export class SessionsService {
     }))
   }
 
-  /** Load a session with its items ordered by position, each carrying the
-   *  concept's title for the loop UI. */
+  /** Load a session with its items ordered by position. A concept item carries
+   *  the concept's title + cognitiveState; a review-prompt item (DET-310) carries
+   *  the prompt's subject, question, expected answer, and type for the loop UI. */
   private async loadSession(userId: string, sessionId: string) {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, userId },
@@ -233,8 +325,17 @@ export class SessionsService {
           // Provenance (DET-199): carry the concept's cognitiveState so the
           // session UI can mark a CONTESTED item across this view too — the
           // contested signal must be visible everywhere the concept appears.
+          // A prompt item has no concept; its display fields come from the prompt.
           include: {
             concept: { select: { title: true, cognitiveState: true } },
+            reviewPrompt: {
+              select: {
+                subject: true,
+                question: true,
+                expectedAnswerSummary: true,
+                promptType: true,
+              },
+            },
           },
         },
       },
@@ -249,8 +350,16 @@ export class SessionsService {
       items: session.items.map((item) => ({
         id: item.id,
         conceptId: item.conceptId,
-        title: item.concept.title,
-        cognitiveState: item.concept.cognitiveState,
+        reviewPromptId: item.reviewPromptId,
+        // Title is the concept's, else the prompt's subject (the thing being
+        // recalled). Falls back to a neutral label only if both are missing.
+        title: item.concept?.title ?? item.reviewPrompt?.subject ?? 'Review',
+        cognitiveState: item.concept?.cognitiveState ?? null,
+        // Review-prompt fields (null for concept items): the question to recall,
+        // the user's expected answer revealed on demand, and the prompt type.
+        promptType: item.reviewPrompt?.promptType ?? null,
+        question: item.reviewPrompt?.question ?? null,
+        expectedAnswer: item.reviewPrompt?.expectedAnswerSummary ?? null,
         position: item.position,
         reason: item.reason as QueueReason,
         reviewedAt: item.reviewedAt,
