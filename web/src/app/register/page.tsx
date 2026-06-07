@@ -16,7 +16,7 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (!loading && user) router.replace('/tracks')
+    if (!loading && user) router.replace('/today')
   }, [user, loading, router])
 
   async function onSubmit(e: FormEvent) {
@@ -25,7 +25,7 @@ export default function RegisterPage() {
     setSubmitting(true)
     try {
       await register(email, password, name || undefined)
-      router.replace('/tracks')
+      router.replace('/today')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')
     } finally {

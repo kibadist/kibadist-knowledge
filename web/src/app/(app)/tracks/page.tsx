@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { type FormEvent, useState } from 'react'
 
 import { api, type Track, type TrackStatus, type TrackType } from '@/lib/api'
+import { deriveTrackProgress } from '@/lib/today'
 import { useWorkspace } from '@/lib/workspace-context'
 
 // Human labels for the goal kinds + lifecycle, kept on the client so the
@@ -113,10 +114,7 @@ function TrackCard({ track }: { track: Track }) {
     queryKey: ['track-concepts', track.id],
     queryFn: () => api.listTrackConcepts(track.id),
   })
-  const rows = conceptsQuery.data ?? []
-  const total = rows.length
-  const met = rows.filter((r) => r.progress.met).length
-  const pct = total === 0 ? 0 : Math.round((met / total) * 100)
+  const { total, met, pct } = deriveTrackProgress(conceptsQuery.data ?? [])
 
   return (
     <li className='track-card'>

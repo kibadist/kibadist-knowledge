@@ -1,9 +1,11 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
 import { ApiError, api, type WaitlistSource } from '@/lib/api'
+import { useAuth } from '@/lib/auth-context'
 
 import './landing.css'
 
@@ -96,6 +98,15 @@ function WaitlistForm({
 
 export default function HomePage() {
   const rootRef = useRef<HTMLDivElement>(null)
+  const router = useRouter()
+  const { user, loading } = useAuth()
+
+  // Post-login landing is Today (DET-302): a signed-in visitor who hits the
+  // public landing is sent straight into their loop rather than the marketing
+  // page. Unauthenticated visitors see the landing as before.
+  useEffect(() => {
+    if (!loading && user) router.replace('/today')
+  }, [user, loading, router])
 
   useEffect(() => {
     const root = rootRef.current
