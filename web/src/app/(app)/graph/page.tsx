@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
+import { EmptyState } from '@/components/empty-state'
 import { ConceptGraphCanvas } from '@/components/graph/concept-graph-canvas'
 import { GraphLegend } from '@/components/graph/graph-legend'
 import { api, type GraphScope, type GraphView } from '@/lib/api'
@@ -133,14 +134,23 @@ export default function GraphPage() {
 
       {data && data.nodes.length === 0 && (
         <div className='graph-overlay'>
-          <div className='empty'>
-            {isScoped ? 'Nothing in this view.' : 'The map is empty.'}
-            <span>
-              {isScoped
-                ? 'Try a different scope, or add concepts to it.'
-                : 'Learn something from your inbox to place your first concept.'}
-            </span>
-          </div>
+          {isScoped ? (
+            // A scoped view is filtered, not stranded — the previous step is to
+            // widen the scope, and that control sits right here on the map, so
+            // no loop CTA (DET-308).
+            <EmptyState
+              message='Nothing in this view.'
+              hint='Try a different scope, or add concepts to it.'
+            />
+          ) : (
+            // The map plots concepts you've earned; one step back is reading
+            // (DET-308).
+            <EmptyState
+              message='The map is empty.'
+              hint='Concepts appear here as you earn them — read a source to place your first one.'
+              cta={{ href: '/inbox', label: 'Read your first source' }}
+            />
+          )}
         </div>
       )}
 

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+import { EmptyState } from '@/components/empty-state'
 import {
   api,
   type ReflectionKind,
@@ -143,31 +144,26 @@ function RunningSession({ session }: { session: Session }) {
           <div className='section-label'>§ Recall · The daily loop</div>
           <h1>Session</h1>
         </div>
-        <div className='empty'>
-          Nothing is due for review.
-          <span>
-            Concepts you articulate will resurface here when it’s time to recall
-            them.
-          </span>
-          <div
-            className='seg-row'
-            style={{ marginTop: 18, justifyContent: 'center' }}
+        {/* One step back in the loop (DET-308): recall practice needs an earned
+            concept first, so point at Concepts rather than dead-ending here. The
+            "End session" control rides alongside to clear the empty server
+            session. */}
+        <EmptyState
+          message='Nothing is due for review.'
+          hint='Recall builds on concepts you’ve earned. Earn one and it resurfaces here when it’s time to recall it.'
+          cta={{ href: '/concepts', label: 'Earn a concept first' }}
+        >
+          <button
+            type='button'
+            onClick={() =>
+              endSession.mutate(undefined, { onSuccess: leaveSession })
+            }
+            disabled={endSession.isPending}
+            className='btn-ghost empty-cta'
           >
-            <Link href='/inbox' className='btn-primary'>
-              Capture something <span className='ar'>→</span>
-            </Link>
-            <button
-              type='button'
-              onClick={() =>
-                endSession.mutate(undefined, { onSuccess: leaveSession })
-              }
-              disabled={endSession.isPending}
-              className='btn-ghost'
-            >
-              {endSession.isPending ? 'Ending…' : 'End session'}
-            </button>
-          </div>
-        </div>
+            {endSession.isPending ? 'Ending…' : 'End session'}
+          </button>
+        </EmptyState>
       </div>
     )
   }

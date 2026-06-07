@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { type FormEvent, useState } from 'react'
 
+import { EmptyState } from '@/components/empty-state'
 import { api, type Domain } from '@/lib/api'
 import { useWorkspace } from '@/lib/workspace-context'
 
@@ -46,13 +47,13 @@ export default function DomainsPage() {
       )}
 
       {!domainsQuery.isLoading && domains.length === 0 && (
-        <div className='empty'>
-          No domains yet.
-          <span>
-            Create one above, then tag concepts into it from a concept’s page —
-            or let the AI suggest domains for a concept.
-          </span>
-        </div>
+        // Domains are emergent, not a setup step (DET-308): no loop CTA — they
+        // accrue from concepts on their own, and the manual "new domain" control
+        // already sits above for anyone who wants to seed one early.
+        <EmptyState
+          message='No domains yet.'
+          hint='Domains appear as your concepts accrue — no setup needed. The AI suggests regions as they take shape, and you confirm them.'
+        />
       )}
 
       {domains.length > 0 && (
