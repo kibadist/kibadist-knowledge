@@ -10,6 +10,8 @@ import {
   type Session,
   type SessionItem,
 } from '@/lib/api'
+// Humanized labels (DET-304): one source of truth for every enum label.
+import { SESSION_ITEM_REASON_LABELS } from '@/lib/labels'
 
 /**
  * Understanding Session (DET-198) — the daily 5–15 minute loop. The system
@@ -104,13 +106,6 @@ function StartScreen({ onStarted }: { onStarted: (s: Session) => void }) {
       </section>
     </div>
   )
-}
-
-const REASON_LABELS: Record<SessionItem['reason'], string> = {
-  DUE: 'due for review',
-  CONTESTED: 'contested — resolve the conflict',
-  REDISCOVERY: 'rediscovery',
-  CHALLENGE: 'the Tutor will challenge this',
 }
 
 function RunningSession({ session }: { session: Session }) {
@@ -296,7 +291,9 @@ function SessionCard({
     <section className='panel panel-raised session-card'>
       <div className='row-top'>
         <h3 className='panel-h'>{item.title}</h3>
-        <span className='chip chip-quiet'>{REASON_LABELS[item.reason]}</span>
+        <span className='chip chip-quiet'>
+          {SESSION_ITEM_REASON_LABELS[item.reason]}
+        </span>
         {/* Contested (DET-199): mark a contested concept here too, so the signal
             is visible everywhere it surfaces — detail, list, and this view. */}
         {item.cognitiveState === 'CONTESTED' && (

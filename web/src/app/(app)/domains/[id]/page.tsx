@@ -7,6 +7,7 @@ import { useState } from 'react'
 
 import { ConceptGraphCanvas } from '@/components/graph/concept-graph-canvas'
 import { api } from '@/lib/api'
+import { COGNITIVE_STATE_LABELS } from '@/lib/labels'
 import { useWorkspace } from '@/lib/workspace-context'
 
 /**
@@ -110,7 +111,7 @@ export default function DomainDetailPage() {
               <li key={node.id} className='domain-concept-row'>
                 <Link href={`/concepts/${node.id}`}>{node.title}</Link>
                 <span className='track-concept-statelabel'>
-                  {node.cognitiveState.toLowerCase()}
+                  {COGNITIVE_STATE_LABELS[node.cognitiveState]}
                 </span>
               </li>
             ))}
