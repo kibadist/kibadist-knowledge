@@ -271,7 +271,12 @@ describe('ConceptLibraryService.generate', () => {
 
     const out = await service.generate('u1', 'c1')
 
-    expect(out).toEqual({ conceptId: 'c1', chunks: [], candidates: [] })
+    expect(out).toEqual({
+      conceptId: 'c1',
+      chunks: [],
+      candidates: [],
+      dismissedCandidates: [],
+    })
     expect(ai.complete).not.toHaveBeenCalled()
     // Still clears any stale rows; never creates chunks.
     expect(tx.sourceChunk.createMany).not.toHaveBeenCalled()
@@ -370,5 +375,93 @@ describe('ConceptLibraryService.dismiss', () => {
     await expect(service.dismiss('u1', 'cand0')).rejects.toBeInstanceOf(
       NotFoundException,
     )
+  })
+})
+
+describe('ConceptLibraryService.restore', () => {
+  it('flips a DISMISSED candidate back to CANDIDATE, scoped to the owner', async () => {
+    const { service, prisma } = makeService()
+    prisma.sourceConceptCandidate.updateMany.mockResolvedValue({ count: 1 })
+
+    await service.restore('u1', 'cand0')
+
+    // Scoped to currently-dismissed rows so a restore can never un-promote an
+    // earned (PROMOTED) candidate.
+    expect(prisma.sourceConceptCandidate.updateMany).toHaveBeenCalledWith({
+      where: { id: 'cand0', userId: 'u1', promotionStatus: 'DISMISSED' },
+      data: { promotionStatus: 'CANDIDATE' },
+    })
+    expect(prisma.concept.update).not.toHaveBeenCalled()
+  })
+
+  it('404s when nothing was restored (not dismissed / foreign)', async () => {
+    const { service, prisma } = makeService()
+    prisma.sourceConceptCandidate.updateMany.mockResolvedValue({ count: 0 })
+    await expect(service.restore('u1', 'cand0')).rejects.toBeInstanceOf(
+      NotFoundException,
+    )
+  })
+})
+
+describe('ConceptLibraryService.read (via library)', () => {
+  it('returns dismissed candidates in a separate dismissedCandidates list', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findFirst.mockResolvedValue({
+      id: 'c1',
+      sourceDocument: WIKI_DOC,
+    })
+    prisma.sourceChunk.findMany.mockResolvedValue([
+      {
+        id: 'sc0',
+        conceptId: 'c1',
+        title: 'Definition',
+        summary: null,
+        blockIds: ['b_def_p'],
+        kind: ChunkKind.DEFINITION,
+        importance: ChunkImportance.CORE,
+        position: 0,
+      },
+    ])
+    // First candidate query → active; second → dismissed.
+    prisma.sourceConceptCandidate.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'cand0',
+          conceptId: 'c1',
+          chunkId: 'sc0',
+          label: 'Spaced repetition',
+          definition: null,
+          aliases: [],
+          sourceBlockIds: ['b_def_p'],
+          kind: CandidateKind.METHOD,
+          importance: CandidateImportance.CORE,
+          generatedBy: Generator.AI,
+          promotionStatus: 'CANDIDATE',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'cand1',
+          conceptId: 'c1',
+          chunkId: 'sc0',
+          label: 'Cramming',
+          definition: null,
+          aliases: [],
+          sourceBlockIds: ['b_def_p'],
+          kind: CandidateKind.METHOD,
+          importance: CandidateImportance.PERIPHERAL,
+          generatedBy: Generator.AI,
+          promotionStatus: 'DISMISSED',
+        },
+      ])
+
+    const out = await service.library('u1', 'c1')
+
+    expect(out.candidates.map((c) => c.id)).toEqual(['cand0'])
+    expect(out.dismissedCandidates.map((c) => c.id)).toEqual(['cand1'])
+    // The dismissed read filters on DISMISSED explicitly.
+    expect(
+      prisma.sourceConceptCandidate.findMany.mock.calls[1][0].where,
+    ).toMatchObject({ promotionStatus: 'DISMISSED' })
   })
 })

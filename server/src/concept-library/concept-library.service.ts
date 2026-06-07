@@ -56,6 +56,10 @@ export interface ConceptLibraryDto {
   conceptId: string
   chunks: SourceChunkDto[]
   candidates: SourceConceptCandidateDto[]
+  // Soft-deleted candidates (DET-309): dismissal hides a candidate from the
+  // active list but never discards it, so the user can restore one cut by
+  // mistake. Surfaced separately for a collapsed "Dismissed" group.
+  dismissedCandidates: SourceConceptCandidateDto[]
 }
 
 /** Plain text of a chunk's blocks, for the classification prompt. */
@@ -122,13 +126,13 @@ export class ConceptLibraryService {
     if (!doc) {
       // No structured source to chunk: clear any stale library and return empty.
       await this.replaceLibrary(userId, conceptId, [], [])
-      return { conceptId, chunks: [], candidates: [] }
+      return { conceptId, chunks: [], candidates: [], dismissedCandidates: [] }
     }
 
     const chunks = chunkDocument(doc)
     if (chunks.length === 0) {
       await this.replaceLibrary(userId, conceptId, [], [])
-      return { conceptId, chunks: [], candidates: [] }
+      return { conceptId, chunks: [], candidates: [], dismissedCandidates: [] }
     }
 
     // Classify chunks + extract candidates. The classification, by index, maps
@@ -191,7 +195,7 @@ export class ConceptLibraryService {
     // empty library by definition, so we return it without re-running generate
     // (and its transaction) on every read.
     if (!asSourceDocument(concept.sourceDocument)) {
-      return { conceptId, chunks: [], candidates: [] }
+      return { conceptId, chunks: [], candidates: [], dismissedCandidates: [] }
     }
     return this.generate(userId, conceptId)
   }
@@ -210,10 +214,17 @@ export class ConceptLibraryService {
       where: { conceptId, userId, promotionStatus: { not: 'DISMISSED' } },
       orderBy: { createdAt: 'asc' },
     })
+    // Dismissed candidates are soft-deleted (DET-309), not gone — read them back
+    // separately so the client can offer a restorable "Dismissed" group.
+    const dismissed = await this.prisma.sourceConceptCandidate.findMany({
+      where: { conceptId, userId, promotionStatus: 'DISMISSED' },
+      orderBy: { createdAt: 'asc' },
+    })
     return {
       conceptId,
       chunks: chunks.map((c) => this.toChunkDto(c)),
       candidates: candidates.map((c) => this.toCandidateDto(c)),
+      dismissedCandidates: dismissed.map((c) => this.toCandidateDto(c)),
     }
   }
 
@@ -226,6 +237,20 @@ export class ConceptLibraryService {
     })
     if (updated.count === 0) {
       throw new NotFoundException('Candidate not found')
+    }
+  }
+
+  /** Restore a previously dismissed candidate (DET-309). Flips DISMISSED back to
+   *  CANDIDATE so it surfaces in the library again. Ownership-checked and scoped
+   *  to currently-dismissed rows only, so it can never un-promote (PROMOTED) or
+   *  touch a Concept row. */
+  async restore(userId: string, candidateId: string): Promise<void> {
+    const updated = await this.prisma.sourceConceptCandidate.updateMany({
+      where: { id: candidateId, userId, promotionStatus: 'DISMISSED' },
+      data: { promotionStatus: 'CANDIDATE' },
+    })
+    if (updated.count === 0) {
+      throw new NotFoundException('Dismissed candidate not found')
     }
   }
 

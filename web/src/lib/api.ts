@@ -277,6 +277,9 @@ export interface ConceptLibrary {
   conceptId: string
   chunks: SourceChunk[]
   candidates: SourceConceptCandidate[]
+  // Soft-deleted candidates (DET-309): dismissal is recoverable, so the library
+  // returns dismissed candidates separately for a restorable "Dismissed" group.
+  dismissedCandidates: SourceConceptCandidate[]
 }
 
 export interface IntakeQuestion {
@@ -1456,6 +1459,9 @@ export const api = {
     }),
   dismissCandidate: (id: string) =>
     request<void>(`/concept-candidates/${id}/dismiss`, { method: 'POST' }),
+  // Undo a dismissal (DET-309): flips the candidate back into the active library.
+  restoreCandidate: (id: string) =>
+    request<void>(`/concept-candidates/${id}/restore`, { method: 'POST' }),
 
   // --- Intake interrogation (DET-188) ---
   generateInterrogation: (conceptId: string) =>

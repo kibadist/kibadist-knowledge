@@ -129,6 +129,20 @@ export default function ConceptViewPage() {
             )}
           </div>
         )}
+        {/* Concept → Map navigation (DET-309): the inverse of the map's
+            concept link, so the two surfaces are reachable in both directions.
+            Opens the map focused on this concept's neighborhood. */}
+        {concept && (
+          <Link
+            href={`/graph?concept=${concept.id}&title=${encodeURIComponent(
+              concept.title,
+            )}`}
+            className='btn-ghost-xs w-fit'
+          >
+            View on Map
+            <span className='ar'>→</span>
+          </Link>
+        )}
         {reviveMutation.isError && (
           <p className='notice notice-error'>
             Could not revive this concept. Try again.

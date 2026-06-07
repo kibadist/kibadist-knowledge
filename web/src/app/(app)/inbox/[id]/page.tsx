@@ -13,6 +13,7 @@ import {
 import {
   api,
   type CandidateImportance,
+  type CandidatePromotionStatus,
   type ChunkImportance,
   type ChunkKind,
   type ConceptLibrary,
@@ -88,6 +89,18 @@ export default function ProcessInboxItemPage() {
     },
   })
 
+  // Promote gating (DET-309): the interrogation exists to provoke thinking, so
+  // promotion stays out of reach until the user has actually answered at least
+  // one question. We gate on the SAVED answer count (the server stores answers,
+  // so this survives reloads); if there are no questions to answer, or they
+  // failed to load, there's nothing to gate on and promotion is open.
+  const questions = questionsQuery.data
+  const hasQuestions = questionsQuery.isSuccess && (questions?.length ?? 0) > 0
+  const savedAnswerCount =
+    questions?.filter((q) => (q.answer ?? '').trim() !== '').length ?? 0
+  const questionsSettled = questionsQuery.isSuccess || questionsQuery.isError
+  const promoteUnlocked = !hasQuestions || savedAnswerCount > 0
+
   return (
     <div className='screen'>
       <div className='page-head'>
@@ -100,10 +113,6 @@ export default function ProcessInboxItemPage() {
           Answer in your own words. We ask the questions — we won’t write your
           understanding for you.
         </p>
-        <Link href={`/inbox/${id}/promote`} className='btn-primary'>
-          Promote to a concept
-          <span className='ar'>→</span>
-        </Link>
       </div>
 
       {itemQuery.isLoading && <ReaderSkeleton />}
@@ -212,7 +221,56 @@ export default function ProcessInboxItemPage() {
               <span className='notice notice-ok'>Saved.</span>
             )}
           </div>
+
+          {/* Forward motion on save (DET-309): "Saved." is a dead end — the loop
+              continues by earning a concept, so point straight at it. */}
+          {saved && !save.isPending && (
+            <Link
+              href={`/inbox/${id}/promote`}
+              className='inline-flex w-fit items-center gap-1 text-sm font-medium text-accent hover:underline'
+            >
+              Next: earn a concept from this
+              <span className='ar'>→</span>
+            </Link>
+          )}
         </form>
+      )}
+
+      {/* Promote step (DET-309): moved BELOW the interrogation, and gated until
+          at least one answer is saved — so the page can't be skipped past the
+          thinking it exists to provoke. */}
+      {itemQuery.data && questionsSettled && (
+        <section className='doc-section flat'>
+          <h2 className='panel-h'>Earn a concept</h2>
+          {promoteUnlocked ? (
+            <>
+              <p className='block-sub'>
+                When you’re ready, compress this into a concept in your own
+                words — that’s how it becomes knowledge you own.
+              </p>
+              <Link href={`/inbox/${id}/promote`} className='btn-primary w-fit'>
+                Promote to a concept
+                <span className='ar'>→</span>
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className='block-sub'>
+                Answer at least one question first. Promoting is for
+                understanding you’ve already put into your own words.
+              </p>
+              <button
+                type='button'
+                disabled
+                aria-disabled='true'
+                className='btn-primary w-fit'
+              >
+                Promote to a concept
+                <span className='ar'>→</span>
+              </button>
+            </>
+          )}
+        </section>
       )}
     </div>
   )
@@ -401,6 +459,8 @@ const IMPORTANCE_RANK: Record<CandidateImportance, number> = {
 function ConceptLibraryPanel({ inboxId }: { inboxId: string }) {
   const queryClient = useQueryClient()
   const router = useRouter()
+  // The most recent dismissal, surfaced as a transient 5s undo affordance.
+  const [undo, setUndo] = useState<{ id: string; label: string } | null>(null)
 
   const libraryQuery = useQuery({
     queryKey: ['concept-library', inboxId],
@@ -413,27 +473,82 @@ function ConceptLibraryPanel({ inboxId }: { inboxId: string }) {
       queryClient.setQueryData(['concept-library', inboxId], data),
   })
 
+  // Soft-delete + restore (DET-309). Dismissal no longer discards a candidate;
+  // it moves it into the restorable "Dismissed" group. Both mutations shuffle
+  // the candidate between the two lists optimistically so the UI responds
+  // instantly, and re-sync from the server if the write fails.
+  const moveCandidate = (candidateId: string, to: 'dismissed' | 'active') =>
+    queryClient.setQueryData<ConceptLibrary>(
+      ['concept-library', inboxId],
+      (prev) => {
+        if (!prev) return prev
+        const [from, dest] =
+          to === 'dismissed'
+            ? ([prev.candidates, prev.dismissedCandidates] as const)
+            : ([prev.dismissedCandidates, prev.candidates] as const)
+        const target = from.find((c) => c.id === candidateId)
+        if (!target) return prev
+        const moved = {
+          ...target,
+          promotionStatus: (to === 'dismissed'
+            ? 'DISMISSED'
+            : 'CANDIDATE') as CandidatePromotionStatus,
+        }
+        const remaining = from.filter((c) => c.id !== candidateId)
+        return to === 'dismissed'
+          ? {
+              ...prev,
+              candidates: remaining,
+              dismissedCandidates: [...dest, moved],
+            }
+          : {
+              ...prev,
+              dismissedCandidates: remaining,
+              candidates: [...dest, moved],
+            }
+      },
+    )
+
+  const resync = () =>
+    queryClient.invalidateQueries({ queryKey: ['concept-library', inboxId] })
+
   const dismiss = useMutation({
     mutationFn: (candidateId: string) => api.dismissCandidate(candidateId),
-    onSuccess: (_void, candidateId) => {
-      queryClient.setQueryData<ConceptLibrary>(
-        ['concept-library', inboxId],
-        (prev) =>
-          prev
-            ? {
-                ...prev,
-                candidates: prev.candidates.filter((c) => c.id !== candidateId),
-              }
-            : prev,
-      )
-    },
+    onMutate: (candidateId) => moveCandidate(candidateId, 'dismissed'),
+    onError: resync,
   })
+
+  const restore = useMutation({
+    mutationFn: (candidateId: string) => api.restoreCandidate(candidateId),
+    onMutate: (candidateId) => moveCandidate(candidateId, 'active'),
+    onError: resync,
+  })
+
+  const onDismiss = (candidate: SourceConceptCandidate) => {
+    setUndo({ id: candidate.id, label: candidate.label })
+    dismiss.mutate(candidate.id)
+  }
+  const onRestore = (candidateId: string) => {
+    setUndo((u) => (u?.id === candidateId ? null : u))
+    restore.mutate(candidateId)
+  }
+
+  // The undo affordance is transient — it fades after 5s, but the "Dismissed"
+  // group keeps the candidate restorable indefinitely.
+  useEffect(() => {
+    if (!undo) return
+    const timer = setTimeout(() => setUndo(null), 5000)
+    return () => clearTimeout(timer)
+  }, [undo])
 
   const library = libraryQuery.data
   // An empty or single-chunk library with no candidates gains nothing — hide it.
+  // Dismissed-only libraries still show, so the user can restore what they cut.
   if (
     !library ||
-    (library.chunks.length < 2 && library.candidates.length === 0)
+    (library.chunks.length < 2 &&
+      library.candidates.length === 0 &&
+      library.dismissedCandidates.length === 0)
   ) {
     return null
   }
@@ -472,6 +587,23 @@ function ConceptLibraryPanel({ inboxId }: { inboxId: string }) {
         </button>
       </div>
 
+      {/* Undo affordance (DET-309): a dismissal is recoverable, so confirm it
+          and offer an immediate one-click reversal for 5s. */}
+      {undo && (
+        <div className='callout-pending flex flex-wrap items-center justify-between gap-3'>
+          <span className='text-sm text-ink-muted'>
+            Dismissed “{undo.label}.”
+          </span>
+          <button
+            type='button'
+            onClick={() => onRestore(undo.id)}
+            className='btn-ghost-xs'
+          >
+            Undo
+          </button>
+        </div>
+      )}
+
       <ol className='flex flex-col gap-3'>
         {library.chunks.map((chunk) => (
           <ChunkGroup
@@ -484,10 +616,40 @@ function ConceptLibraryPanel({ inboxId }: { inboxId: string }) {
                 `/inbox/${inboxId}/promote?candidateId=${encodeURIComponent(candidateId)}`,
               )
             }
-            onDismiss={(candidateId) => dismiss.mutate(candidateId)}
+            onDismiss={onDismiss}
           />
         ))}
       </ol>
+
+      {/* Dismissed group (DET-309): collapsed by default; keeps every dismissed
+          candidate restorable from this same page. */}
+      {library.dismissedCandidates.length > 0 && (
+        <details className='item-card'>
+          <summary className='cursor-pointer u-mono text-xs uppercase text-ink-muted'>
+            Dismissed ({library.dismissedCandidates.length})
+          </summary>
+          <ul className='mt-3 flex flex-col gap-2'>
+            {library.dismissedCandidates.map((cand) => (
+              <li
+                key={cand.id}
+                className='item-card flex flex-wrap items-center gap-2'
+              >
+                <span className='font-medium text-ink-muted'>{cand.label}</span>
+                <span className='chip chip-quiet'>
+                  {CANDIDATE_KIND_LABELS[cand.kind]}
+                </span>
+                <button
+                  type='button'
+                  onClick={() => onRestore(cand.id)}
+                  className='btn-ghost-xs ml-auto'
+                >
+                  Restore
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </section>
   )
 }
@@ -503,7 +665,7 @@ function ChunkGroup({
   chunk: SourceChunk
   candidates: SourceConceptCandidate[]
   onCompress: (candidateId: string) => void
-  onDismiss: (candidateId: string) => void
+  onDismiss: (candidate: SourceConceptCandidate) => void
 }) {
   // Low-signal sections (references, boilerplate) collapse by default.
   const lowSignal = isLowSignalChunk(chunk.kind)
@@ -540,7 +702,7 @@ function ChunkGroup({
                 inboxId={inboxId}
                 candidate={cand}
                 onCompress={() => onCompress(cand.id)}
-                onDismiss={() => onDismiss(cand.id)}
+                onDismiss={() => onDismiss(cand)}
               />
             ))}
           </ul>

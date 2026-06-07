@@ -1,6 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
 import { EmptyState } from '@/components/empty-state'
@@ -37,8 +38,21 @@ const WORKSPACE_SCOPE: ScopeState = { scope: 'WORKSPACE', hops: 1 }
  * a selected node.
  */
 export default function GraphPage() {
+  const searchParams = useSearchParams()
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [scopeState, setScopeState] = useState<ScopeState>(WORKSPACE_SCOPE)
+  // Deep-link into a concept's neighborhood (DET-309): the concept detail page's
+  // "View on Map" link arrives as ?concept=<id>&title=<label>, so the map opens
+  // focused on that concept rather than the default workspace view.
+  const [scopeState, setScopeState] = useState<ScopeState>(() => {
+    const conceptId = searchParams.get('concept')
+    if (!conceptId) return WORKSPACE_SCOPE
+    return {
+      scope: 'CONCEPT_NEIGHBORHOOD',
+      centerConceptId: conceptId,
+      centerTitle: searchParams.get('title') ?? undefined,
+      hops: 1,
+    }
+  })
   const queryClient = useQueryClient()
 
   // Keep the WORKSPACE view on the bare ['graph'] key so the canvas's optimistic
