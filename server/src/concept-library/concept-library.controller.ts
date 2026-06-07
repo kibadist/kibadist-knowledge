@@ -35,4 +35,11 @@ export class ConceptLibraryController {
   async dismiss(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     await this.library.dismiss(user.userId, id)
   }
+
+  /** Restore a dismissed candidate so it surfaces in the library again (DET-309). */
+  @Post('concept-candidates/:id/restore')
+  @HttpCode(204)
+  async restore(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    await this.library.restore(user.userId, id)
+  }
 }
