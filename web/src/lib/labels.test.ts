@@ -118,14 +118,29 @@ describe('no raw enum leaks in JSX', () => {
     'app/(app)/session/page.tsx',
     'components/graph/graph-inspector.tsx',
     'components/graph/concept-graph-canvas.tsx',
+    // The map's canvas node chip. Originally missed by this guard, which let a
+    // raw-enum leak (DORMANT, CONTESTED…) ship on The Map node chips even while
+    // the inspector showed "Dormant" two feet away. Now in scope (DET-304).
+    'components/graph/concept-node.tsx',
   ]
+  // A direct render ends the property access with `}` (a JSX child / string-attr
+  // value); routing through a label map ends it with `]`, so this only catches
+  // the un-humanized form.
   const FORBIDDEN =
     /\.(cognitiveState|certainty|gateMode|relationKind|status|level)\}/g
+  // The other way a raw enum leaks: a chip helper that assigns the bare enum var
+  // to its `label`/`children` (e.g. `label: state`) instead of a map lookup. This
+  // is exactly the indirection the original guard missed on concept-node.tsx.
+  const FORBIDDEN_INDIRECT =
+    /\b(?:label|children):\s*(?:state|status|certainty|kind|level|relation|mode|gateMode|relationKind|cognitiveState)\b/g
 
   for (const rel of FILES) {
     it(`${rel} routes every enum through a label map`, () => {
       const source = readFileSync(`${srcDir}/${rel}`, 'utf8')
-      const hits = source.match(FORBIDDEN) ?? []
+      const hits = [
+        ...(source.match(FORBIDDEN) ?? []),
+        ...(source.match(FORBIDDEN_INDIRECT) ?? []),
+      ]
       expect(hits).toEqual([])
     })
   }

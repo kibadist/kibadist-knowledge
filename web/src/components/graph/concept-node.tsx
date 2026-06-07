@@ -1,6 +1,7 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react'
 
 import type { CognitiveState } from '@/lib/api'
+import { COGNITIVE_STATE_LABELS } from '@/lib/labels'
 
 // The data a concept node carries on the canvas. Mirrors the GraphNode signals
 // the map needs to render calm, state-aware paper cards.
@@ -14,22 +15,25 @@ export interface ConceptNodeData {
 
 // Map a cognitive state to a chip variant + human label. Retained depths read as
 // "cleared" (olive); CONTESTED is the one hot signal (accent); DORMANT is muted
-// pending (ochre). Everything else stays quiet — no bright fills.
+// pending (ochre). Everything else stays quiet — no bright fills. The label is
+// always the humanized form from the single labels module (DET-304) — the node
+// chip must never echo the raw SHOUTING enum the way the inspector doesn't.
 function stateChip(state: CognitiveState): {
   className: string
   label: string
 } {
+  const label = COGNITIVE_STATE_LABELS[state]
   switch (state) {
     case 'INTERNALIZED':
     case 'DEFENDED':
     case 'RETRIEVED':
-      return { className: 'chip-cleared', label: state }
+      return { className: 'chip-cleared', label }
     case 'CONTESTED':
-      return { className: 'chip-contested', label: state }
+      return { className: 'chip-contested', label }
     case 'DORMANT':
-      return { className: 'chip-pending', label: state }
+      return { className: 'chip-pending', label }
     default:
-      return { className: 'chip-quiet', label: state }
+      return { className: 'chip-quiet', label }
   }
 }
 
