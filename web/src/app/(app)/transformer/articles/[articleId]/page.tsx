@@ -2,11 +2,12 @@
 
 import { useMutation, useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import {
   type ArticleProvenance,
   DeepReadingMode,
+  type ReadingMode,
   type SavedConcept,
   type ScheduledReviewPrompt,
 } from '@/components/deep-reading'
@@ -56,6 +57,10 @@ import '../../transformer.css'
  */
 export default function ArticlePage() {
   const { articleId } = useParams<{ articleId: string }>()
+  // Deep-link entry (DET-307): the onboarding checklist routes each step here with
+  // `?mode=` so the reader opens straight into the relevant learning mode.
+  const searchParams = useSearchParams()
+  const initialMode = readingModeFromParam(searchParams.get('mode'))
   const [selection, setSelection] = useState<InspectorSelection | null>(null)
 
   // The "Behind the article" appendix drawer (coverage, structure, learning
@@ -274,6 +279,7 @@ export default function ArticlePage() {
                 <DeepReadingMode
                   article={learningArticle}
                   provenance={provenance}
+                  initialMode={initialMode}
                   initialEvents={eventsQuery.data ?? []}
                   onEmit={emitEvent}
                   onSaveConcept={(c) => saveConcept.mutate(c)}
@@ -354,6 +360,23 @@ export default function ArticlePage() {
       />
     </div>
   )
+}
+
+// Map a `?mode=` query value to a reading mode (DET-307 deep-links), ignoring
+// anything unrecognized so a stray param just opens the default deep view.
+const READING_MODES: ReadonlySet<ReadingMode> = new Set([
+  'deep',
+  'overview',
+  'predict',
+  'rewrite',
+  'compare',
+  'extract',
+  'review',
+])
+function readingModeFromParam(value: string | null): ReadingMode | undefined {
+  return value && READING_MODES.has(value as ReadingMode)
+    ? (value as ReadingMode)
+    : undefined
 }
 
 // The capture-source label the modes show (DET-278 §5). The transformer source

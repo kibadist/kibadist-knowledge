@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 
+import { OnboardingPanel } from '@/components/onboarding/onboarding-panel'
 import { api } from '@/lib/api'
 import { lengthLabel, sourceMark } from '@/lib/inbox-format'
 import {
@@ -30,6 +31,10 @@ export default function TodayPage() {
           what’s waiting, and keep your active track moving.
         </p>
       </div>
+
+      {/* First-run walkthrough (DET-307): renders only for a brand-new workspace
+          or an in-progress walkthrough; silent once dismissed/complete. */}
+      <OnboardingPanel />
 
       <div className='today-panels'>
         <DuePanel />
