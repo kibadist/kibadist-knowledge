@@ -22,7 +22,14 @@ function makePromotionService() {
       findMany: jest.fn().mockResolvedValue([]),
       // RIGOROUS friction (DET-197) flags a post-promotion Tutor pass here.
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      // Gentler defaults (DET-311): earned-concept count drives "new learner".
+      // Default high enough that the proposal uses the experienced path unless a
+      // test overrides it.
+      count: jest.fn().mockResolvedValue(50),
     },
+    // Track-pulled depth (DET-311): the destination track's demanded depth.
+    // Default null (no target track) so existing tests are unaffected.
+    track: { findFirst: jest.fn().mockResolvedValue(null) },
     promotionDraft: {
       findUnique: jest.fn(),
       update: jest.fn().mockResolvedValue({}),
@@ -235,6 +242,73 @@ describe('DET-197 — Adaptive Friction', () => {
     expect(state.draft.frictionLevel).toBe(FrictionLevel.DEEP)
     expect(Object.values(FrictionLevel)).toContain(state.frictionProposal.level)
     expect(state.frictionProposal.reasons.length).toBeGreaterThan(0)
+  })
+
+  // Gentler defaults (DET-311): a first-mile learner is proposed LIGHT.
+  it('proposes LIGHT for a first-mile learner, even with no articulation yet', async () => {
+    const { service, prisma } = makePromotionService()
+    prisma.concept.findFirst.mockResolvedValue(INBOX_CONCEPT)
+    // Few earned concepts ⇒ new learner; no articulation ⇒ novelty treated high.
+    prisma.concept.count.mockResolvedValue(0)
+    prisma.promotionDraft.findUnique.mockResolvedValue({
+      ...PASSING_DRAFT,
+      articulation: null,
+    })
+
+    const state = await service.getState('u1', 'c1')
+
+    expect(state.frictionProposal.level).toBe(FrictionLevel.LIGHT)
+    expect(state.frictionProposal.reasons.join(' ')).toMatch(/lightly/i)
+  })
+
+  // Gentler defaults (DET-311): a freshly-created draft adopts the proposal as
+  // its starting chosen level, so a passive first-miler commits at LIGHT — not
+  // the column default of DEEP.
+  it('initializes a fresh draft to the proposed level (LIGHT for a first-miler)', async () => {
+    const { service, prisma } = makePromotionService()
+    prisma.concept.findFirst.mockResolvedValue(INBOX_CONCEPT)
+    prisma.concept.count.mockResolvedValue(0)
+    // No existing draft → ensureDraft creates one.
+    prisma.promotionDraft.findUnique.mockResolvedValue(null)
+    prisma.promotionDraft.create.mockImplementation(
+      ({ data }: { data: unknown }) => Promise.resolve(data),
+    )
+
+    const state = await service.getState('u1', 'c1')
+
+    expect(prisma.promotionDraft.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        frictionLevel: FrictionLevel.LIGHT,
+        mode: 'QUICK',
+      }),
+    })
+    expect(state.frictionLevel).toBe(FrictionLevel.LIGHT)
+  })
+
+  // Track-pulled depth (DET-311): a deeper destination track escalates the
+  // proposal above LIGHT, with the reason naming the track.
+  it('escalates a first-mile learner when a track demands more depth', async () => {
+    const { service, prisma } = makePromotionService()
+    prisma.concept.findFirst.mockResolvedValue({
+      ...INBOX_CONCEPT,
+      targetTrackId: 't1',
+    })
+    prisma.concept.count.mockResolvedValue(0)
+    prisma.track.findFirst.mockResolvedValue({
+      name: 'Understand transformers',
+      requiredDepth: 'APPLY',
+    })
+    prisma.promotionDraft.findUnique.mockResolvedValue({
+      ...PASSING_DRAFT,
+      articulation: null,
+    })
+
+    const state = await service.getState('u1', 'c1')
+
+    expect(state.frictionProposal.level).toBe(FrictionLevel.DEEP)
+    expect(state.frictionProposal.reasons.join(' ')).toMatch(
+      /Understand transformers/,
+    )
   })
 
   it('setFriction updates the stored level (and keeps mode consistent)', async () => {

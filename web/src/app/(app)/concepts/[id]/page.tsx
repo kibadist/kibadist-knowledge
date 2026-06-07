@@ -15,7 +15,11 @@ import {
   type ConceptRetrievalEvent,
   type Reflection,
   type StateTransition,
+  type TutorChallenge,
 } from '@/lib/api'
+// Deepen path (DET-311): nudge a lightly-earned concept that keeps surviving
+// recalls toward connect + defend, instead of front-loading rigor at promotion.
+import { shouldSuggestDeepen } from '@/lib/deepen-nudge'
 // Humanized labels (DET-304): one source of truth for every enum label.
 import {
   CAPTURE_SOURCE_LABELS,
@@ -74,7 +78,17 @@ export default function ConceptViewPage() {
     },
   })
 
+  // Deepen path (DET-311): a concept earned lightly that keeps surviving recalls
+  // earns a defend challenge here. The Tutor poses one Socratic question (it
+  // never grades); answering it is the existing Tutor-respond flow on a session.
+  const [challenge, setChallenge] = useState<TutorChallenge | null>(null)
+  const challengeMutation = useMutation({
+    mutationFn: () => api.challengeTutor(id),
+    onSuccess: setChallenge,
+  })
+
   const concept = conceptQuery.data
+  const canDeepen = concept ? shouldSuggestDeepen(concept) : false
   const dormant = concept?.cognitiveState === 'DORMANT'
   // Contested (DET-199): a concept the user has flagged as conflicting with
   // something they hold. It must be unmistakable here, as it is in the list and
@@ -164,6 +178,44 @@ export default function ConceptViewPage() {
             This concept conflicts with something else you hold. It&apos;s
             flagged so the tension stays visible until you resolve it.
           </p>
+        </div>
+      )}
+
+      {/* Deepen path (DET-311): earn lightly, deepen on schedule. A concept
+          earned at a light gate that keeps surviving recalls is nudged to
+          deepen — connect it further and defend it under a Tutor challenge —
+          rather than having faced the full gate up front. No re-gating happens
+          here; the full re-gating flow is a follow-up. */}
+      {canDeepen && (
+        <div className='callout'>
+          <p className='mono-label'>Ready to deepen</p>
+          <p className='mt-1'>
+            You earned this lightly and have recalled it from memory several
+            times since. It’s proven its worth — deepen it now: connect it to
+            more of what you know, and defend it under a challenge.
+          </p>
+          <div className='mt-2 flex flex-wrap items-center gap-3'>
+            <button
+              type='button'
+              onClick={() => challengeMutation.mutate()}
+              disabled={challengeMutation.isPending}
+              className='btn-ghost-xs'
+            >
+              {challengeMutation.isPending
+                ? 'Thinking…'
+                : 'Challenge me to defend it'}
+            </button>
+          </div>
+          {challengeMutation.isError && (
+            <p className='notice notice-error mt-2'>
+              {challengeMutation.error instanceof Error
+                ? challengeMutation.error.message
+                : 'The tutor is unavailable right now — try again.'}
+            </p>
+          )}
+          {challenge && (
+            <p className='mt-2 font-medium text-ink'>{challenge.question}</p>
+          )}
         </div>
       )}
 

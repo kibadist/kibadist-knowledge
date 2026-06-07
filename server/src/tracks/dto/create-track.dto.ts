@@ -1,4 +1,4 @@
-import { TrackType } from '@kibadist/prisma'
+import { RequiredDepth, TrackType } from '@kibadist/prisma'
 import {
   IsEnum,
   IsOptional,
@@ -27,4 +27,10 @@ export class CreateTrackDto {
   @IsString()
   @MaxLength(2000)
   goal?: string
+
+  // How deeply this track wants its concepts understood by default (DET-311).
+  // Pulls a concept's earning friction up at promotion; defaults to EXPLAIN.
+  @IsOptional()
+  @IsEnum(RequiredDepth)
+  requiredDepth?: RequiredDepth
 }
