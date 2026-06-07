@@ -9,6 +9,7 @@ import {
   type LearningAffordance,
   orderedSections,
 } from '@/lib/article-v2'
+import { LEARNING_RATIONALE } from '@/lib/learning-rationale'
 import {
   isEmptyComparison,
   PREDICT_PROMPT,
@@ -169,6 +170,7 @@ export function PredictMode({
           will cover from its heading and key terms — then reveal the article
           and see how your model compares. Skipping is always fine.
         </p>
+        <p className='kb-pred-why'>{LEARNING_RATIONALE.predict}</p>
         <button type='button' className='kb-pred-cta' onClick={onStartReading}>
           Just read instead
           <span aria-hidden='true'> →</span>

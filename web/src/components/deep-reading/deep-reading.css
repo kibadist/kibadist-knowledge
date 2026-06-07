@@ -728,6 +728,18 @@
   color: var(--reader-muted);
 }
 
+/* Learning-science why-line (DET-306): a quiet rationale on its own full-width
+   row below the lede/CTA. `order` + 100% basis drops it under the flex row. */
+.kb-pred-why {
+  flex: 1 1 100%;
+  order: 1;
+  margin: 0;
+  font-size: 0.8125rem;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--reader-faint);
+}
+
 .kb-pred-cta,
 .kb-pred-submit,
 .kb-pred-skip {
@@ -1046,6 +1058,17 @@
   font-size: 0.95rem;
   line-height: 1.55;
   color: var(--reader-muted);
+}
+
+/* Learning-science why-line (DET-306): see .kb-pred-why — same full-width drop. */
+.kb-rw-why {
+  flex: 1 1 100%;
+  order: 1;
+  margin: 0;
+  font-size: 0.8125rem;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--reader-faint);
 }
 
 .kb-rw-cta {
