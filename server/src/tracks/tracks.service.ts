@@ -67,6 +67,8 @@ export class TracksService {
         description: dto.description?.trim() || null,
         type: dto.type,
         goal: dto.goal?.trim() || null,
+        // DET-311: the track's default demanded depth (defaults to EXPLAIN).
+        requiredDepth: dto.requiredDepth,
       },
     })
   }
@@ -87,6 +89,7 @@ export class TracksService {
             : dto.description.trim() || null,
         type: dto.type,
         goal: dto.goal === undefined ? undefined : dto.goal.trim() || null,
+        requiredDepth: dto.requiredDepth,
         status: dto.status,
       },
     })

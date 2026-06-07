@@ -1,4 +1,4 @@
-import { TrackStatus, TrackType } from '@kibadist/prisma'
+import { RequiredDepth, TrackStatus, TrackType } from '@kibadist/prisma'
 import {
   IsEnum,
   IsOptional,
@@ -30,6 +30,12 @@ export class UpdateTrackDto {
   @IsString()
   @MaxLength(2000)
   goal?: string
+
+  // The track's default demanded depth (DET-311). Changing it only affects how
+  // future promotions into this track propose friction — never earned concepts.
+  @IsOptional()
+  @IsEnum(RequiredDepth)
+  requiredDepth?: RequiredDepth
 
   @IsOptional()
   @IsEnum(TrackStatus)

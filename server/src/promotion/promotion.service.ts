@@ -38,7 +38,10 @@ import type { CommitPromotionDto } from './dto/commit-promotion.dto'
 import {
   type FrictionProposal,
   modeForLevel,
+  NEW_LEARNER_EARNED_THRESHOLD,
   proposeFriction,
+  type TrackPull,
+  trackPullForDepth,
 } from './friction'
 import {
   buildGradePrompt,
@@ -139,18 +142,43 @@ export class PromotionService {
     candidateId?: string,
   ): Promise<PromotionStateDto> {
     const concept = await this.requireInboxConcept(userId, conceptId)
-    const draft = await this.ensureDraft(userId, conceptId)
     // Adaptive Friction proposal (DET-197): the system SUGGESTS a level from
     // cheap signals — novelty (distance from what's already earned), and the
     // source's conceptual weight (length). Importance is the user escalating, so
     // there is no separate importance signal here. The user may override; the
     // stored draft.frictionLevel only changes via setFriction.
+    //
+    // Gentler defaults (DET-311): a first-mile learner (few earned concepts) is
+    // proposed LIGHT regardless of the push signals — they earn lightly and
+    // deepen on schedule — and depth is PULLED up only by a destination track
+    // that demands more. Both signals are resolved here and handed to the pure
+    // proposer; gate semantics (which gates each level needs) are untouched.
+    const [isNewLearner, track] = await Promise.all([
+      this.isNewLearner(userId),
+      this.trackPull(userId, concept.targetTrackId),
+    ])
+    // A freshly-created draft adopts the proposal as its STARTING chosen level
+    // (DET-311), so the effective default a passive learner commits at follows
+    // the suggestion (LIGHT for a first-miler) instead of the column default of
+    // DEEP. A fresh draft has no articulation, so novelty is unknown → high. The
+    // user still escalates/de-escalates via setFriction; an existing draft keeps
+    // whatever level the user already chose (never re-initialized here).
+    const initialLevel = proposeFriction({
+      novelty: 1,
+      importance: false,
+      sourceLength: concept.sourceText?.length ?? 0,
+      isNewLearner,
+      track,
+    }).level
+    const draft = await this.ensureDraft(userId, conceptId, initialLevel)
     const maxSimilarity = await this.maxSimilarity(userId, draft.articulation)
     const frictionProposal = proposeFriction({
       // No articulation yet → unknown novelty; treat as high so we lean DEEP.
       novelty: maxSimilarity == null ? 1 : 1 - maxSimilarity,
       importance: false,
       sourceLength: concept.sourceText?.length ?? 0,
+      isNewLearner,
+      track,
     })
     // Read-only feed-forward (DET-208): show prior reference Q&A as scaffold the
     // user may consult while articulating. This NEVER seeds draft.articulation —
@@ -698,20 +726,45 @@ export class PromotionService {
   private async requireInboxConcept(userId: string, conceptId: string) {
     const concept = await this.prisma.concept.findFirst({
       where: { id: conceptId, userId, status: ConceptStatus.INBOX },
-      select: { id: true, title: true, sourceText: true, sourceDocument: true },
+      select: {
+        id: true,
+        title: true,
+        sourceText: true,
+        sourceDocument: true,
+        // Track-pulled depth (DET-311): which track this is being earned into, if
+        // any — its demanded depth can escalate the friction proposal.
+        targetTrackId: true,
+      },
     })
     if (!concept) throw new NotFoundException('Inbox item not found')
     return concept
   }
 
-  /** Returns the draft for an inbox concept, creating an empty one if needed. */
-  private async ensureDraft(userId: string, conceptId: string) {
+  /**
+   * Returns the draft for an inbox concept, creating an empty one if needed.
+   * Gentler defaults (DET-311): an `initialLevel` (the friction proposal) sets a
+   * freshly-created draft's starting chosen level so the effective default
+   * follows the suggestion; `mode` is kept in lockstep. It is applied ONLY on
+   * creation — an existing draft keeps the user's chosen level untouched. Callers
+   * that don't pass it fall back to the column defaults.
+   */
+  private async ensureDraft(
+    userId: string,
+    conceptId: string,
+    initialLevel?: FrictionLevel,
+  ) {
     const existing = await this.prisma.promotionDraft.findUnique({
       where: { conceptId },
     })
     if (existing) return existing
     return this.prisma.promotionDraft.create({
-      data: { conceptId, userId },
+      data: {
+        conceptId,
+        userId,
+        ...(initialLevel
+          ? { frictionLevel: initialLevel, mode: modeForLevel(initialLevel) }
+          : {}),
+      },
     })
   }
 
@@ -721,6 +774,38 @@ export class PromotionService {
    * Returns null when there's no articulation yet (novelty is then unknown).
    * Best-effort: a search failure also yields null (treated as high novelty).
    */
+  /**
+   * Gentler defaults (DET-311): is this user still in their "first mile"? True
+   * while they have earned fewer than {@link NEW_LEARNER_EARNED_THRESHOLD}
+   * concepts — long enough to learn the loop without the full four-gate pass on
+   * every clip. Counted across the user's PERMANENT concepts.
+   */
+  private async isNewLearner(userId: string): Promise<boolean> {
+    const earned = await this.prisma.concept.count({
+      where: { userId, status: ConceptStatus.PERMANENT },
+    })
+    return earned < NEW_LEARNER_EARNED_THRESHOLD
+  }
+
+  /**
+   * Track-pulled depth (DET-311): if this concept is being earned into a track
+   * (its `targetTrackId`), resolve that track's demanded depth into a friction
+   * pull. Ownership-scoped through the workspace owner so a stale/foreign track
+   * id yields nothing. Returns null when there is no target track or it is gone.
+   */
+  private async trackPull(
+    userId: string,
+    targetTrackId: string | null,
+  ): Promise<TrackPull | null> {
+    if (!targetTrackId) return null
+    const track = await this.prisma.track.findFirst({
+      where: { id: targetTrackId, workspace: { ownerUserId: userId } },
+      select: { name: true, requiredDepth: true },
+    })
+    if (!track) return null
+    return trackPullForDepth(track.name, track.requiredDepth)
+  }
+
   private async maxSimilarity(
     userId: string,
     articulation: string | null,

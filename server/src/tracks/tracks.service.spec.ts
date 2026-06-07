@@ -3,6 +3,7 @@ import {
   Generator,
   RequiredDepth,
   TrackConceptStatus,
+  TrackType,
 } from '@kibadist/prisma'
 import { NotFoundException } from '@nestjs/common'
 
@@ -237,5 +238,37 @@ describe('TracksService.enrollPromotedConcept (DET-240 track-first onboarding)',
 
     expect(trackId).toBeNull()
     expect(prisma.trackConcept.upsert).not.toHaveBeenCalled()
+  })
+})
+
+describe('TracksService — track-level required depth (DET-311)', () => {
+  it('persists a chosen requiredDepth on create (defaults are left to Prisma)', async () => {
+    const { service, prisma } = makeService()
+    prisma.track.create.mockImplementation(({ data }: { data: unknown }) =>
+      Promise.resolve(data),
+    )
+
+    await service.create('ws1', {
+      name: 'Understand transformers',
+      type: TrackType.LEARNING,
+      requiredDepth: RequiredDepth.APPLY,
+    })
+
+    expect(prisma.track.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ requiredDepth: RequiredDepth.APPLY }),
+    })
+  })
+
+  it('updates requiredDepth without touching unrelated fields', async () => {
+    const { service, prisma } = makeService()
+    prisma.track.findFirst.mockResolvedValue({ id: 't1', workspaceId: 'ws1' })
+    prisma.track.update.mockResolvedValue({ id: 't1' })
+
+    await service.update('u1', 't1', { requiredDepth: RequiredDepth.TEACH })
+
+    expect(prisma.track.update).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: expect.objectContaining({ requiredDepth: RequiredDepth.TEACH }),
+    })
   })
 })

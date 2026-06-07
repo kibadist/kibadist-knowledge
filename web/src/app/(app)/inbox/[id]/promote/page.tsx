@@ -88,9 +88,12 @@ export default function PromoteConceptPage() {
 
   const promotion = promotionQuery.data
   // The chosen level comes from the server draft; local state mirrors it for
-  // optimistic UI between a click and the refetch.
+  // optimistic UI between a click and the refetch. Gentler default (DET-311):
+  // before the draft loads we fall back to LIGHT, not DEEP — a first-mile learner
+  // earns lightly, with DEEP one click away. The server's proposal (which knows
+  // novelty + track pull) still drives the actual suggestion below.
   const effectiveLevel: FrictionLevel =
-    level ?? promotion?.frictionLevel ?? 'DEEP'
+    level ?? promotion?.frictionLevel ?? 'LIGHT'
   const requiredGates = FRICTION_GATES[effectiveLevel]
 
   // Seed local state from a previously-saved draft so the flow is resumable

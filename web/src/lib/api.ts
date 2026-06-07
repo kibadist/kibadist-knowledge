@@ -527,6 +527,10 @@ export interface ConceptDetail extends Concept {
   retrievalEvents: ConceptRetrievalEvent[]
   stateHistory: StateTransition[]
   reflections: Reflection[]
+  // Spaced-retrieval reps (DET-192): consecutive successful recalls since the
+  // last miss. The deepen nudge (DET-311) uses it to tell a lightly-earned
+  // concept that keeps surviving recalls from one that hasn't yet.
+  reviewReps: number
   // Uncertainty signal (DET-199): how many of the user's supporting
   // compressions (Articulations) back this concept — a cheap, honest proxy for
   // how well-supported it is, beyond the user's own `certainty`. A richer

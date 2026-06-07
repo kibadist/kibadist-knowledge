@@ -192,6 +192,12 @@ model Track {
   type        TrackType
   // The user's own statement of the goal ("ship the feature", "pass the exam").
   goal        String?
+  // The depth this track DEMANDS of its concepts by default (DET-237/311). Used
+  // to PULL a concept's earning friction up at promotion time when it is being
+  // earned into this track (see server/src/promotion/friction.ts) — it never
+  // changes gate semantics or a concept's CognitiveState. A per-concept demand
+  // still lives on TrackConcept.requiredDepth.
+  requiredDepth RequiredDepth @default(EXPLAIN)
   status      TrackStatus @default(ACTIVE)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
