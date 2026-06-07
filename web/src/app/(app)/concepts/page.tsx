@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 
+import { EmptyState } from '@/components/empty-state'
 import { api, type Concept } from '@/lib/api'
 // Humanized labels (DET-304): one source of truth for every enum label.
 import {
@@ -55,12 +56,13 @@ export default function ConceptsPage() {
       )}
 
       {!conceptsQuery.isLoading && concepts.length === 0 && (
-        <div className='empty'>
-          No concepts yet.
-          <span>
-            Learn something from your inbox to create your first concept.
-          </span>
-        </div>
+        // One step back in the loop (DET-308): concepts are earned from reading,
+        // so hand the user the Read surface rather than naming an unseen one.
+        <EmptyState
+          message='No concepts yet.'
+          hint='Concepts are earned, not captured — read a source, then articulate what you understand in your own words.'
+          cta={{ href: '/inbox', label: 'Read your first source' }}
+        />
       )}
 
       {concepts.length > 0 && (

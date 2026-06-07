@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useState } from 'react'
 
+import { EmptyState } from '@/components/empty-state'
 import { ConceptGraphCanvas } from '@/components/graph/concept-graph-canvas'
 import { api } from '@/lib/api'
 import { COGNITIVE_STATE_LABELS } from '@/lib/labels'
@@ -84,13 +85,13 @@ export default function DomainDetailPage() {
         </p>
         {graphQuery.isLoading && <p className='notice'>Loading the map…</p>}
         {!graphQuery.isLoading && !hasNodes && (
-          <div className='empty'>
-            No concepts in this domain yet.
-            <span>
-              Tag concepts into it from a concept’s page, or accept an AI domain
-              suggestion there.
-            </span>
-          </div>
+          // Concepts are tagged into a domain from an individual concept (DET-308):
+          // point back to the Concepts surface rather than naming an unseen page.
+          <EmptyState
+            message='No concepts in this domain yet.'
+            hint='Open a concept and tag it into this region, or accept the AI’s suggestion there. Domains fill in as your concepts accrue.'
+            cta={{ href: '/concepts', label: 'Go to your concepts' }}
+          />
         )}
         {hasNodes && graphQuery.data && (
           <div className='track-graph-frame'>

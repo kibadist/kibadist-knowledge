@@ -921,6 +921,14 @@ body {
   font-size: 14px;
   color: var(--ink-faint);
 }
+/* The forward-pointing CTA inside an empty state (DET-308): the link that hands
+   the user the previous step of the loop. Centered, not stretched, and never
+   italic like the surrounding observation copy. */
+.kbapp .empty-cta {
+  align-self: center;
+  margin-top: 16px;
+  font-style: normal;
+}
 
 /* ---------------- inbox queue (DET-241) ---------------- */
 /* "N waiting" count beside the Inbox headline — turns the queue into something

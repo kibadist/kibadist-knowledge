@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { type FormEvent, useState } from 'react'
 
+import { EmptyState } from '@/components/empty-state'
 import { api, type Track, type TrackStatus, type TrackType } from '@/lib/api'
 import { deriveTrackProgress } from '@/lib/today'
 import { useWorkspace } from '@/lib/workspace-context'
@@ -81,13 +82,12 @@ export default function TracksPage() {
       )}
 
       {!tracksQuery.isLoading && tracks.length === 0 && (
-        <div className='empty'>
-          No tracks yet.
-          <span>
-            Start one above — name what you want to understand, then add
-            concepts to it.
-          </span>
-        </div>
+        // The "+ New track" control sits directly above, so the action is in
+        // reach without a loop CTA (DET-308).
+        <EmptyState
+          message='No tracks yet.'
+          hint='Start one above — name what you want to understand, then add concepts to it.'
+        />
       )}
 
       {byStatus.map((group) => (

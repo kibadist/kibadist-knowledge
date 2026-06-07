@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
+import { EmptyState } from '@/components/empty-state'
 import { CaptureCard } from '@/components/transformer/capture-card'
 import { api, type InboxItem } from '@/lib/api'
 import {
@@ -179,12 +180,13 @@ export default function InboxPage() {
       )}
 
       {!inboxQuery.isLoading && items.length === 0 && (
-        <div className='empty'>
-          Your inbox is empty.
-          <span>
-            Captured items wait here until you learn them into concepts.
-          </span>
-        </div>
+        // The first step of the loop — no step exists before capture, and the
+        // "Add a source" card sits directly above, so this is an aligned
+        // observation with no back-link (DET-308).
+        <EmptyState
+          message='Your reading queue is empty.'
+          hint='Add a source above — a quote, a link, or a PDF — and it lands here to read.'
+        />
       )}
 
       {items.length > 0 && (

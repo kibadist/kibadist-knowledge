@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
+import { EmptyState } from '@/components/empty-state'
 import { ConceptGraphCanvas } from '@/components/graph/concept-graph-canvas'
 import {
   api,
@@ -178,15 +179,18 @@ export default function TrackDetailPage() {
 
         {conceptsQuery.isLoading && <p className='notice'>Loading concepts…</p>}
         {!conceptsQuery.isLoading && rows.length === 0 && (
-          <div className='empty'>
-            No concepts in this track yet.
-            <span>
-              Add an earned concept above, or{' '}
-              <Link href={`/inbox?track=${trackId}`}>import a source</Link> into
-              this track — capture it, and when you promote it through the gate
-              it lands here as an earned concept.
-            </span>
-          </div>
+          // The "Add concept" control sits directly above; the inline link hands
+          // the previous loop step (reading a source into this track) (DET-308).
+          <EmptyState
+            message='No concepts in this track yet.'
+            hint={
+              <>
+                Add an earned concept above, or{' '}
+                <Link href={`/inbox?track=${trackId}`}>read a source</Link> into
+                this track — once you earn it through the gate it lands here.
+              </>
+            }
+          />
         )}
 
         {rows.length > 0 && (
@@ -214,10 +218,10 @@ export default function TrackDetailPage() {
         </p>
         {graphQuery.isLoading && <p className='notice'>Loading the map…</p>}
         {!graphQuery.isLoading && !hasNodes && (
-          <div className='empty'>
-            Nothing to map yet.
-            <span>Add concepts to this track to see them connected.</span>
-          </div>
+          <EmptyState
+            message='Nothing to map yet.'
+            hint='Add concepts to this track to see them connected.'
+          />
         )}
         {hasNodes && graphQuery.data && (
           <div className='track-graph-frame'>
