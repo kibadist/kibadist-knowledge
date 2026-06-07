@@ -22,6 +22,7 @@ import { IntakeModule } from './intake/intake.module'
 import { LinksModule } from './links/links.module'
 import { LivingConceptModule } from './living-concept/living-concept.module'
 import { MetricsModule } from './metrics/metrics.module'
+import { OnboardingModule } from './onboarding/onboarding.module'
 import { PrismaModule } from './prisma/prisma.module'
 import { PromotionModule } from './promotion/promotion.module'
 import { ReflectionModule } from './reflection/reflection.module'
@@ -114,6 +115,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module'
     SessionsModule,
     MetricsModule,
     WaitlistModule,
+    OnboardingModule,
   ],
   providers: [
     // Global authentication: every route requires a valid JWT unless marked @Public().

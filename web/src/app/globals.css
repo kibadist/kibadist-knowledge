@@ -2430,3 +2430,124 @@ body {
   font-size: 20px;
   color: var(--ink);
 }
+
+/* First-run onboarding panel (DET-307) — a guided checklist that leads the brand-
+   new user through one full loop to an earned concept. Sits above the Today panels
+   and reuses the editorial panel/chip/progress vocabulary. */
+.kbapp .onb-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 22px;
+  border-color: var(--accent);
+}
+.kbapp .onb-lede {
+  font-family: var(--font-body), serif;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  margin: 0;
+}
+.kbapp .onb-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.kbapp .onb-step {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--rule-soft);
+}
+.kbapp .onb-steps > li:first-child {
+  border-top: none;
+}
+.kbapp .onb-check {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--rule);
+  border-radius: 99px;
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  color: var(--ink-muted);
+  background: var(--paper-hi);
+}
+.kbapp .onb-step.is-done .onb-check {
+  background: var(--olive);
+  border-color: var(--olive);
+  color: var(--paper-hi);
+}
+.kbapp .onb-step.is-next .onb-check {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.kbapp .onb-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.kbapp .onb-step-title {
+  font-family: var(--font-display), serif;
+  font-size: 18px;
+  color: var(--ink);
+}
+.kbapp .onb-step.is-done .onb-step-title {
+  color: var(--ink-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--rule-soft);
+}
+.kbapp .onb-why {
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+.kbapp .onb-step-cta {
+  align-self: flex-start;
+  margin-top: 4px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.kbapp .onb-step-cta:hover {
+  color: var(--accent-deep);
+}
+.kbapp .onb-step-cta .ar {
+  transition: transform 0.15s;
+}
+.kbapp .onb-step-cta:hover .ar {
+  transform: translateX(3px);
+}
+.kbapp .onb-gone {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.kbapp .onb-dismiss {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-faint);
+}
+.kbapp .onb-dismiss:hover {
+  color: var(--ink-muted);
+}

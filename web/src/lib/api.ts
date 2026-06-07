@@ -1982,6 +1982,23 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  // --- First-run onboarding (DET-307) ---
+  // The guided "first source → first earned concept" walkthrough. Status reports a
+  // checklist DERIVED server-side from real activity; `seedOnboardingStarter` seeds
+  // the built-in starter article (idempotent) and returns its ids to deep-link in;
+  // `updateOnboarding` dismisses it forever or marks a data-trail-less step (Map).
+  getOnboarding: () => request<OnboardingStatus>('/onboarding'),
+  seedOnboardingStarter: () =>
+    request<OnboardingStarterSeed>('/onboarding/starter', { method: 'POST' }),
+  updateOnboarding: (input: {
+    dismissed?: boolean
+    completedStep?: OnboardingStepKey
+  }) =>
+    request<OnboardingStatus>('/onboarding', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
 }
 
 // The snake_case fields the Retrieval Engine accepts for an approved prompt — a
@@ -2000,6 +2017,45 @@ export interface ReviewPromptDraft {
   expected_answer_summary: string
   source_span_ids?: string[]
   created_from_event_id?: string
+}
+
+// --- First-run onboarding (DET-307) ---
+// Mirrors the server's ONBOARDING_STEP_KEYS (onboarding.steps.ts) — the guided
+// walkthrough in order. Keep in sync.
+export type OnboardingStepKey =
+  | 'read'
+  | 'predict'
+  | 'approve'
+  | 'earn'
+  | 'map'
+  | 'review'
+
+export interface OnboardingStep {
+  key: OnboardingStepKey
+  done: boolean
+}
+
+// The walkthrough status the Today checklist reads. `active` is the single show/
+// hide signal (not dismissed, not complete); `workspaceEmpty` + a seeded starter
+// gate whether a brand-new user sees the first-run CTA.
+export interface OnboardingStatus {
+  active: boolean
+  dismissed: boolean
+  completed: boolean
+  workspaceEmpty: boolean
+  starterSourceId: string | null
+  starterArticleId: string | null
+  starterConceptId: string | null
+  starterArticleStatus: TransformedArticleStatus | null
+  steps: OnboardingStep[]
+}
+
+// The seeded starter's ids (POST /onboarding/starter) — the article to deep-link
+// the walkthrough into, plus its source + companion inbox row.
+export interface OnboardingStarterSeed {
+  sourceId: string
+  articleId: string
+  conceptId: string
 }
 
 // The persisted prompt the engine returns (id/schedule/timestamps stamped on).

@@ -41,6 +41,7 @@ model User {
   articleLearningEvents ArticleLearningEvent[]
   reviewPrompts         ReviewPrompt[]
   transformerSources    TransformerSource[]
+  onboardingState       OnboardingState?
 
   @@map("user")
 }
@@ -1179,6 +1180,32 @@ enum SourceConfidence {
   user_authored_unsourced
   unsupported_or_invented
   needs_review
+}
+
+// First-run onboarding (DET-307): one row per user tracking the guided "first
+// source → first earned concept" walkthrough. The starter ids point at a real
+// seeded TransformerSource / TransformedArticle / companion INBOX Concept — plain
+// ids (no FK), because the starter is deletable like any source and deleting it
+// must NEVER cascade into this row (the checklist survives a deleted starter). The
+// guided steps are DERIVED live from observable data (article_learning_events,
+// promoted concepts, review prompts) rather than stored — only the surfaces a step
+// can't prove from data (e.g. viewing the Map) are recorded in `completedSteps`.
+// `dismissedAt`/`completedAt` make the checklist disappear forever once set.
+model OnboardingState {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  starterSourceId  String?
+  starterArticleId String?
+  starterConceptId String?
+  completedSteps   String[]
+  dismissedAt      DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("onboarding_state")
 }
 
 // Public waitlist (DET-270). Standalone — no relation to any user or workspace.
