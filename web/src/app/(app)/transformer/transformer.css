@@ -125,6 +125,38 @@
   margin-top: 18px;
 }
 
+/* ---------------- source fidelity details (collapsed inspector, DET-303) ---- */
+.kbapp .tf-fidelity-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.kbapp .tf-fidelity-summary::-webkit-details-marker {
+  display: none;
+}
+.kbapp .tf-fidelity-kicker {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--ink);
+}
+.kbapp .tf-fidelity-caret {
+  margin-left: auto;
+  color: var(--ink-muted);
+  font-size: 13px;
+  transition: transform 0.2s var(--ease);
+}
+.kbapp .tf-fidelity[open] .tf-fidelity-caret {
+  transform: rotate(180deg);
+}
+.kbapp .tf-fidelity-body {
+  margin-top: 14px;
+}
+
 /* ---------------- blocks inspector ---------------- */
 .kbapp .tf-block-list {
   list-style: none;

@@ -139,13 +139,6 @@ export interface Workspace {
   updatedAt: string
 }
 
-export interface Note {
-  id: string
-  title: string
-  body: string
-  createdAt: string
-}
-
 export type CaptureSource = 'PASTE' | 'URL' | 'PDF'
 
 // --- Structured source document (DET-210) ---
@@ -864,14 +857,16 @@ export interface ConceptDomainRow {
 }
 
 // --- Knowledge Organization: Graph scopes & saved views (DET-236/239) ---
+// Only the scopes the UI can actually request (DET-303): WORKSPACE (the default
+// map), TRACK and DOMAIN (the scope selector), and CONCEPT_NEIGHBORHOOD (entered
+// by focusing a node). The server-side `GraphScope` Prisma enum still defines
+// ARTICLE / MISCONCEPTION / REVIEW for the data model, but they have no UI, so the
+// client contract intentionally omits them rather than offer phantom surface area.
 export type GraphScope =
-  | 'ARTICLE'
   | 'TRACK'
   | 'DOMAIN'
   | 'WORKSPACE'
   | 'CONCEPT_NEIGHBORHOOD'
-  | 'MISCONCEPTION'
-  | 'REVIEW'
 
 // Parameters for a scoped graph read (DET-236). `scope` decides which target id
 // is required; the canvas just receives a different {nodes,edges} subset.
@@ -1411,13 +1406,6 @@ export const api = {
     }),
   deleteWorkspace: (id: string) =>
     request<void>(`/workspaces/${id}`, { method: 'DELETE' }),
-
-  listNotes: () => request<Note[]>('/notes'),
-  createNote: (input: { title: string; body?: string }) =>
-    request<Note>('/notes', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
 
   // --- Capture inbox (DET-187) ---
   // Track-first onboarding (DET-240): an optional `trackId` routes the capture
