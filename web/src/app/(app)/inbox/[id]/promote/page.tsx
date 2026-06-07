@@ -461,7 +461,7 @@ export default function PromoteConceptPage() {
                   >
                     {setMutationFriction.isPending
                       ? 'Switching…'
-                      : 'Drop to Minimal — this stands alone'}
+                      : `Drop to ${FRICTION_LEVEL_LABELS.MINIMAL} — this stands alone`}
                   </button>
                 )}
               </div>
