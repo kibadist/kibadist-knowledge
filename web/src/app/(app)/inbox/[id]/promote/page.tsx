@@ -19,6 +19,9 @@ import {
   LINK_RELATION_LABELS,
   relationChipClass,
 } from '@/lib/labels'
+// Learning-science why-lines (DET-306): one quiet rationale per gate, sourced
+// from the single copy module so the tone stays consistent and edits land once.
+import { LEARNING_RATIONALE } from '@/lib/learning-rationale'
 
 // Adaptive Friction (DET-197): which gates each level requires. Mirrors the
 // server's requiredGates() so the UI shows a not-required gate as satisfied.
@@ -316,6 +319,7 @@ export default function PromoteConceptPage() {
                 Explain it in your own words. Don’t quote the source — show that
                 you understand it.
               </p>
+              <p className='gate-why'>{LEARNING_RATIONALE.articulate}</p>
               {/* Compression facets (DET-190): what a strong own-words
                   articulation contains. Guidance only — we never write it for you. */}
               <ul className='mt-2 flex flex-col gap-0.5 text-xs text-ink-faint'>
@@ -385,7 +389,8 @@ export default function PromoteConceptPage() {
             {promotion.compression.verbatim &&
               promotion.compression.message && (
                 <p className='callout-pending'>
-                  {promotion.compression.message}
+                  {promotion.compression.message}{' '}
+                  {LEARNING_RATIONALE.articulateVerbatim}
                 </p>
               )}
             {saveArticulation.isError && (
@@ -424,6 +429,7 @@ export default function PromoteConceptPage() {
                 Tie this to what you already know. We suggest neighbors — you
                 decide which are real.
               </p>
+              <p className='gate-why'>{LEARNING_RATIONALE.connect}</p>
             </div>
 
             {suggestionsQuery.isLoading && (
@@ -499,6 +505,7 @@ export default function PromoteConceptPage() {
               )}
             </label>
 
+            <p className='gate-why'>{LEARNING_RATIONALE.validate}</p>
             {markReviewed.isError && (
               <p className='notice notice-error'>
                 {markReviewed.error instanceof Error
@@ -527,6 +534,7 @@ export default function PromoteConceptPage() {
               <p className='block-sub'>
                 Prove you can recall it from memory — without looking back.
               </p>
+              <p className='gate-why'>{LEARNING_RATIONALE.retrieve}</p>
             </div>
 
             {generate.isError && (

@@ -579,6 +579,17 @@ body {
   margin: 0;
   line-height: 1.5;
 }
+/* The learning-science "why this friction" line (DET-306). A quiet editorial
+   aside in the block-sub family — italic + faint so it reads as rationale,
+   distinct from the instruction line above it. */
+.kbapp .gate-why {
+  font-family: var(--font-body), serif;
+  font-size: 13.5px;
+  font-style: italic;
+  color: var(--ink-faint);
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
 .kbapp .panel-h {
   font-family: var(--font-display), serif;
   font-weight: 600;

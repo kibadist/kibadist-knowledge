@@ -9,6 +9,7 @@ import {
   orderedBlocks,
   orderedSections,
 } from '@/lib/article-v2'
+import { LEARNING_RATIONALE } from '@/lib/learning-rationale'
 import {
   REWRITE_PROMPT,
   type RewritableBlock,
@@ -180,6 +181,7 @@ export function RewriteMode({
           you can&apos;t copy it. Peek if you must; it&apos;s tracked.
           Submitting saves your rewrite for Compare &amp; Repair.
         </p>
+        <p className='kb-rw-why'>{LEARNING_RATIONALE.rewritePeek}</p>
         <button type='button' className='kb-rw-cta' onClick={onStartReading}>
           Back to reading
           <span aria-hidden='true'> →</span>
