@@ -1,10 +1,15 @@
 'use client'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useMemo, useState } from 'react'
-import { ArticleView } from '@/components/transformer/article-view'
+import { useCallback, useMemo, useState } from 'react'
+import {
+  type ArticleProvenance,
+  DeepReadingMode,
+  type SavedConcept,
+  type ScheduledReviewPrompt,
+} from '@/components/deep-reading'
 import { CoveragePanel } from '@/components/transformer/coverage-panel'
 import { IllustrationPanel } from '@/components/transformer/illustration-panel'
 import { placeIllustrations } from '@/components/transformer/illustration-placement'
@@ -15,16 +20,19 @@ import {
   SourceInspectorPanel,
 } from '@/components/transformer/source-inspector-panel'
 import {
-  ApiError,
   type ArticleJsonV2,
-  type ArticleSectionV2,
   type ArticleShape,
   api,
+  type CaptureSource,
   type FidelityFinding,
   type FidelityReport,
   type SectionRole,
   type TransformerBlockView,
 } from '@/lib/api'
+import type {
+  ArticleLearningEvent,
+  ArticleLearningEventDraft,
+} from '@/lib/article-learning-events'
 import {
   ARTICLE_STEPS,
   articleStatusChip,
@@ -33,6 +41,7 @@ import {
   isArticleTerminal,
   severityChip,
 } from '@/lib/transformer-format'
+import { transformerArticleToV2 } from '@/lib/transformer-to-article-v2'
 
 import '../../transformer.css'
 
@@ -48,33 +57,11 @@ import '../../transformer.css'
 export default function ArticlePage() {
   const { articleId } = useParams<{ articleId: string }>()
   const [selection, setSelection] = useState<InspectorSelection | null>(null)
-  const queryClient = useQueryClient()
 
-  // The "Behind the article" drawer is controlled so a successful extraction
-  // can open it — the candidates render inside it, and with the drawer closed
-  // the click would read as a no-op (the original DET-283 feedback bug).
+  // The "Behind the article" appendix drawer (coverage, structure, learning
+  // tools, illustrations) stays controlled so it remains usable around the new
+  // Deep Reading surface (DET-301).
   const [behindOpen, setBehindOpen] = useState(false)
-
-  // Per-section concept-extraction (DET-283). The mutation appends AI-assisted
-  // candidates to the article's learning layer; on success we invalidate the
-  // article query, open the appendix drawer and scroll the learning panel into
-  // view so the result is visible at the point of interaction.
-  const extractConcepts = useMutation({
-    mutationFn: (sectionId: string) =>
-      api.extractSectionConcepts(articleId, sectionId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['transformer-article', articleId],
-      })
-      setBehindOpen(true)
-      // Defer until the drawer has rendered open before scrolling to it.
-      setTimeout(() => {
-        document
-          .getElementById('learning-tools')
-          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 100)
-    },
-  })
 
   const articleQuery = useQuery({
     queryKey: ['transformer-article', articleId],
@@ -109,14 +96,79 @@ export default function ArticlePage() {
 
   const sourceUrl = sourceQuery.data?.url ?? null
 
-  // Distinct source blocks the article actually cites — drives the hero byline.
-  // Coverage's totalBlocks (the whole source) is the better number when present;
-  // fall back to counting distinct sourceBlockIds across the article body.
-  const sourceBlockCount = useMemo(() => {
-    if (article?.coverageReport) return article.coverageReport.totalBlocks
+  // DET-301: the reading surface is now Deep Reading Mode over the SAME v2
+  // article, adapted from the transformer's magazine shape into the learning
+  // contract. One adaptation boundary (lib/transformer-to-article-v2); section
+  // and block ids carry through so learning events anchor to the persisted ids.
+  const learningArticle = useMemo(() => {
     if (!article?.articleJson) return null
-    return countSourceBlocks(article.articleJson)
-  }, [article?.coverageReport, article?.articleJson])
+    return transformerArticleToV2(article.articleJson, {
+      articleId: article.id,
+      sourceId: article.sourceId,
+    })
+  }, [article?.articleJson, article?.id, article?.sourceId])
+
+  // Provenance carried into the modes (DET-278 §5): the source link, how it was
+  // captured, and whether the original spans are still available behind it.
+  const provenance = useMemo<ArticleProvenance>(
+    () => ({
+      sourceUrl,
+      captureSource: captureSourceForType(sourceQuery.data?.type),
+      sourceAvailable: (blocksQuery.data?.length ?? 0) > 0,
+    }),
+    [sourceUrl, sourceQuery.data?.type, blocksQuery.data],
+  )
+
+  // Hydrate the learner's prior activity so completion markers survive a reload
+  // (DET-301 acceptance). Gated on the article being readable; the surface waits
+  // for this to settle before mounting so the store seeds with the full history.
+  const eventsQuery = useQuery({
+    queryKey: ['article-learning-events', articleId],
+    queryFn: () => api.listArticleLearningEvents(articleId),
+    enabled: Boolean(
+      article?.articleJson &&
+        (article.status === 'FINAL' || article.status === 'BLOCKED'),
+    ),
+  })
+  const eventsReady = eventsQuery.isSuccess || eventsQuery.isError
+
+  // Persist every emitted event (fire-and-forget; the in-memory store already
+  // reflects it). id/timestamps/user are server-owned, so we send only the
+  // whitelisted draft fields — the API rejects extras.
+  const persistEvent = useMutation({
+    mutationFn: (draft: ArticleLearningEventDraft) =>
+      api.createArticleLearningEvent(draft),
+  })
+  const emitEvent = useCallback(
+    (event: ArticleLearningEvent) => {
+      persistEvent.mutate(toEventDraft(event))
+    },
+    [persistEvent],
+  )
+
+  // Concept Library sink (DET-283/301): an approved candidate becomes a real
+  // INBOX "to learn" concept — the gate (DET-189) owns promotion from there. The
+  // approval is also recorded in the event log; the two stores are distinct.
+  const saveConcept = useMutation({
+    mutationFn: (c: SavedConcept) =>
+      api.createConcept({
+        title: c.name,
+        summary: c.definition ? c.definition.slice(0, 500) : undefined,
+        sourceText:
+          (c.user_explanation && c.user_explanation.trim()) ||
+          c.definition ||
+          undefined,
+      }),
+  })
+
+  // Retrieval Engine sink (DET-301/DET-288): an approved Spaced Review prompt is
+  // handed to the engine — the real downstream store, distinct from the event log
+  // (which records the approval action). The engine owns the schedule; idempotent
+  // server-side on the deterministic prompt_id, so a re-approval updates in place.
+  const schedulePrompt = useMutation({
+    mutationFn: (p: ScheduledReviewPrompt) =>
+      api.scheduleReviewPrompt(toReviewPromptDraft(p)),
+  })
 
   // Suggestions not anchored inline → the drawer's management grid, so nothing
   // renders twice. Computed against the same placement the article view uses.
@@ -187,15 +239,19 @@ export default function ArticlePage() {
             <BlockedRibbon report={article.fidelityReport} />
           )}
 
-          {/* The article body renders for FINAL and BLOCKED. */}
-          {showBody && article.articleJson && (
-            <ArticleView
-              article={article.articleJson}
-              articleId={article.id}
-              illustrationPlan={article.illustrationPlan}
-              sourceBlockCount={sourceBlockCount}
-              masthead={
-                <>
+          {/* The reading surface renders for FINAL and BLOCKED. DET-301 swaps the
+              passive ArticleView for Deep Reading Mode over the same v2 article,
+              so the learner gets the overview / predict / rewrite / compare /
+              extract / review modes on their own material. The masthead chips
+              are kept here (the demoted status/fidelity rule), and the BLOCKED
+              ribbon above + the "Behind the article" drawer below stay in place. */}
+          {showBody && learningArticle && (
+            <>
+              <div className='tf-masthead'>
+                <span className='tf-masthead-kicker'>
+                  Source-preserving transform
+                </span>
+                <div className='tf-masthead-chips'>
                   <span className='chip chip-info'>Source-preserving</span>
                   <span className={`chip ${articleStatusChip(article.status)}`}>
                     {articleStatusLabel(article.status)}
@@ -211,34 +267,22 @@ export default function ArticlePage() {
                       Fidelity {article.fidelityReport.fidelityScore}
                     </span>
                   )}
-                </>
-              }
-              onInspect={setSelection}
-              onExtractConcepts={(sectionId) =>
-                extractConcepts.mutate(sectionId)
-              }
-              extractingSectionId={
-                extractConcepts.isPending
-                  ? (extractConcepts.variables ?? null)
-                  : null
-              }
-              extractedSectionId={
-                extractConcepts.isSuccess
-                  ? (extractConcepts.variables ?? null)
-                  : null
-              }
-              extractError={
-                extractConcepts.isError && extractConcepts.variables
-                  ? {
-                      sectionId: extractConcepts.variables,
-                      message:
-                        extractConcepts.error instanceof ApiError
-                          ? extractConcepts.error.message
-                          : 'Could not extract concepts — try again.',
-                    }
-                  : null
-              }
-            />
+                </div>
+              </div>
+
+              {eventsReady ? (
+                <DeepReadingMode
+                  article={learningArticle}
+                  provenance={provenance}
+                  initialEvents={eventsQuery.data ?? []}
+                  onEmit={emitEvent}
+                  onSaveConcept={(c) => saveConcept.mutate(c)}
+                  onSchedulePrompt={(p) => schedulePrompt.mutate(p)}
+                />
+              ) : (
+                <p className='notice'>Loading your progress…</p>
+              )}
+            </>
           )}
 
           {/* "Behind the article": the appendix drawer — coverage, original
@@ -312,25 +356,60 @@ export default function ArticlePage() {
   )
 }
 
-// Distinct source blocks cited anywhere in the article body — a byline signal
-// when coverage isn't available.
-function countSourceBlocks(article: ArticleJsonV2): number {
-  const ids = new Set<string>()
-  const add = (arr: string[]) => {
-    for (const id of arr) ids.add(id)
+// The capture-source label the modes show (DET-278 §5). The transformer source
+// `type` is the capture method; map it to the shared CaptureSource vocabulary.
+function captureSourceForType(
+  type: 'TEXT' | 'URL' | 'PDF' | undefined,
+): CaptureSource | null {
+  switch (type) {
+    case 'TEXT':
+      return 'PASTE'
+    case 'URL':
+      return 'URL'
+    case 'PDF':
+      return 'PDF'
+    default:
+      return null
   }
-  const addSection = (s: ArticleSectionV2) => {
-    add(s.sourceBlockIds)
-    for (const b of s.blocks) add(b.sourceBlockIds)
-    for (const sub of s.subsections ?? []) addSection(sub)
+}
+
+// Strip the server-owned fields before persisting (id/timestamps are stamped on
+// write; user comes from the JWT). The API whitelist rejects extras, so we send
+// exactly the draft contract.
+function toEventDraft(event: ArticleLearningEvent): ArticleLearningEventDraft {
+  return {
+    article_id: event.article_id,
+    article_version_id: event.article_version_id,
+    section_id: event.section_id,
+    block_id: event.block_id,
+    source_span_ids: event.source_span_ids,
+    event_type: event.event_type,
+    prompt: event.prompt,
+    user_answer: event.user_answer,
+    ai_feedback: event.ai_feedback,
+    metadata: event.metadata,
   }
-  if (article.subtitle) add(article.subtitle.sourceBlockIds)
-  for (const p of article.abstract) add(p.sourceBlockIds)
-  for (const s of article.sections) addSection(s)
-  for (const t of article.keyTerms) add(t.sourceBlockIds)
-  for (const e of article.sourceExamples) add(e.sourceBlockIds)
-  for (const c of article.caveats) add(c.sourceBlockIds)
-  return ids.size
+}
+
+// Map an approved Spaced Review prompt to the Retrieval Engine draft (DET-301).
+// id/schedule/timestamps are server-owned; schedule_metadata and section_heading
+// are client-only display state and not persisted. The API whitelist rejects
+// extras, so we send exactly the contract fields.
+function toReviewPromptDraft(p: ScheduledReviewPrompt) {
+  return {
+    prompt_id: p.prompt_id,
+    article_id: p.article_id,
+    article_version_id: p.article_version_id,
+    section_id: p.section_id,
+    concept_id: p.concept_id,
+    prompt_type: p.prompt_type,
+    origin: p.origin,
+    subject: p.subject,
+    question: p.question,
+    expected_answer_summary: p.expected_answer_summary,
+    source_span_ids: p.source_span_ids,
+    created_from_event_id: p.created_from_event_id,
+  }
 }
 
 // Editorial label for each genre shape + section role (DET-273), mirrored from

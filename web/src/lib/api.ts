@@ -1,3 +1,11 @@
+// Type-only imports: the snake_case learning-event contract (DET-278) is the
+// wire shape for `/article-learning/events`. Erased at compile, so the
+// api ↔ article-learning-events ↔ article-v2 type cycle has no runtime cost.
+import type {
+  ArticleLearningEvent,
+  ArticleLearningEventDraft,
+} from './article-learning-events'
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
 // NOTE: The access token is kept in localStorage for simplicity. localStorage is
@@ -1940,4 +1948,72 @@ export const api = {
       `/transformer/articles/${articleId}/sections/${sectionId}/concepts`,
       { method: 'POST' },
     ),
+
+  // --- Concept Library (DET-187) ---
+  // Create an INBOX "to learn" concept. Status is server-owned (always INBOX on
+  // create) — the gate (DET-189) owns promotion. Deep Reading Mode's concept
+  // extraction (DET-301) lands an approved candidate here as the real downstream
+  // write, distinct from the article_learning_events log that records the action.
+  createConcept: (input: {
+    title: string
+    summary?: string
+    sourceText?: string
+  }) =>
+    request<Concept>('/concepts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  // --- Article learning events (DET-278 / DET-301) ---
+  // The source-of-truth activity log for the learning modes. Deep Reading Mode
+  // hydrates from `list` on load (so completion markers survive a reload) and
+  // appends each interaction through `create`. `user_id` is taken from the JWT.
+  listArticleLearningEvents: (articleId: string) =>
+    request<ArticleLearningEvent[]>(
+      `/article-learning/events?articleId=${encodeURIComponent(articleId)}`,
+    ),
+  createArticleLearningEvent: (draft: ArticleLearningEventDraft) =>
+    request<ArticleLearningEvent>('/article-learning/events', {
+      method: 'POST',
+      body: JSON.stringify(draft),
+    }),
+
+  // --- Review prompts → Retrieval Engine (DET-301 / DET-288) ---
+  // The real downstream sink for an approved Spaced Review prompt. Distinct from
+  // the article_learning_events log (which records the approval ACTION): this
+  // hands the prompt to the Retrieval Engine, which owns the schedule. Idempotent
+  // server-side on the deterministic prompt_id, so re-approving updates in place.
+  scheduleReviewPrompt: (input: ReviewPromptDraft) =>
+    request<ReviewPromptWire>('/retrieval-events/prompts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+}
+
+// The snake_case fields the Retrieval Engine accepts for an approved prompt — a
+// subset of the DET-288 ScheduledReviewPrompt contract (id/schedule/user are
+// server-owned, so omitted). schedule_metadata / section_heading are not sent.
+export interface ReviewPromptDraft {
+  prompt_id: string
+  article_id: string
+  article_version_id?: string
+  section_id?: string
+  concept_id?: string
+  prompt_type: string
+  origin: string
+  subject: string
+  question: string
+  expected_answer_summary: string
+  source_span_ids?: string[]
+  created_from_event_id?: string
+}
+
+// The persisted prompt the engine returns (id/schedule/timestamps stamped on).
+export interface ReviewPromptWire extends ReviewPromptDraft {
+  id: string
+  user_id: string
+  status: string
+  next_review_at?: string
+  created_at: string
+  updated_at: string
 }

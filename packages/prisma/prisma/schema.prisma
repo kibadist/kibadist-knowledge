@@ -39,6 +39,7 @@ model User {
   livingConcepts        LivingConcept[]
   workspaces            Workspace[]
   articleLearningEvents ArticleLearningEvent[]
+  reviewPrompts         ReviewPrompt[]
   transformerSources    TransformerSource[]
 
   @@map("user")
@@ -1124,6 +1125,49 @@ enum ReviewPromptStatus {
   rejected
   scheduled
   retired
+}
+
+// A review prompt the learner approved into the Retrieval Engine (DET-301, the
+// downstream sink for DET-288's Spaced Review mode). Spaced Review proposes
+// prompts built from the learner's own rewrites, comparisons, and validated
+// concepts; on approval the prompt is handed to the Retrieval Engine, which OWNS
+// the schedule. Two distinct stores (DET-278): the `article_learning_event` log
+// records the `review_prompt_approved` ACTION (source of truth, consumed not
+// owned downstream), while THIS row is the engine's working copy — the prompt it
+// will later surface for recall. `promptId` is the deterministic id derived from
+// the section/concept + type + subject (never an array index), unique per user so
+// re-approving the same prompt UPSERTS rather than duplicating. `conceptId` is a
+// SOFT reference (no FK): a prompt may point at an inbox/un-promoted concept, a
+// real one, or none — so it must never break on a concept that doesn't (yet) exist.
+model ReviewPrompt {
+  id                    String             @id @default(cuid())
+  userId                String
+  articleId             String
+  articleVersionId      String?
+  sectionId             String?
+  conceptId             String?
+  promptId              String
+  promptType            String
+  origin                String
+  subject               String
+  question              String
+  expectedAnswerSummary String
+  sourceSpanIds         String[]
+  createdFromEventId    String?
+  status                ReviewPromptStatus @default(approved)
+  // When the Retrieval Engine should next surface this prompt (null = not yet
+  // scheduled; the engine assigns the cadence when it picks the prompt up).
+  nextReviewAt          DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, promptId])
+  @@index([userId])
+  @@index([userId, articleId])
+  @@index([userId, status])
+  @@map("review_prompt")
 }
 
 // How trustworthy a feedback claim is (DET-278 rule #5). Generated article prose

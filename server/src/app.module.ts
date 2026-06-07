@@ -6,6 +6,7 @@ import { LoggerModule } from 'nestjs-pino'
 import { stdSerializers } from 'pino'
 
 import { AiModule } from './ai/ai.module'
+import { ArticleLearningModule } from './article-learning/article-learning.module'
 import { ArticulationsModule } from './articulations/articulations.module'
 import { AuthModule } from './auth/auth.module'
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard'
@@ -90,6 +91,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module'
     AuthModule,
     UsersModule,
     NotesModule,
+    ArticleLearningModule,
     ConceptStateModule,
     ConceptsModule,
     ConceptLibraryModule,
