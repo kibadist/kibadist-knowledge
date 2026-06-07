@@ -395,7 +395,7 @@ const IMPORTANCE_RANK: Record<CandidateImportance, number> = {
  *
  * HARD BOUNDARY: everything shown here is SCAFFOLD / source material, never an
  * earned concept. A candidate's definition is a source-grounded reference gloss
- * — "Compress this" hands it to the gate as DISPLAY-ONLY context; it is never
+ * — "Learn this" hands it to the gate as DISPLAY-ONLY context; it is never
  * prefilled into your articulation (DET-190). Only the gate promotes knowledge.
  */
 function ConceptLibraryPanel({ inboxId }: { inboxId: string }) {
@@ -613,7 +613,7 @@ function CandidateRow({
           Ask about this
         </button>
         <button type='button' onClick={onCompress} className='btn-primary'>
-          Compress this
+          Learn this
           <span className='ar'>→</span>
         </button>
         <button type='button' onClick={onDismiss} className='btn-ghost-xs'>

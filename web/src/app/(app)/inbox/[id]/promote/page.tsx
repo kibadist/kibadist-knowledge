@@ -442,7 +442,7 @@ export default function PromoteConceptPage() {
                 <p className='block-sub'>
                   No neighbors suggested.{' '}
                   {requiredGates.connect
-                    ? 'This level needs a connection — drop to Minimal if this stands alone.'
+                    ? 'This level needs a connection — drop to Quick save if this stands alone.'
                     : 'You can mark this as a new conceptual root below.'}
                 </p>
                 {/* When there is nothing to link to AND this level requires a

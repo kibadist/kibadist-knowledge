@@ -182,7 +182,7 @@ export default function InboxPage() {
         <div className='empty'>
           Your inbox is empty.
           <span>
-            Captured items wait here until you compress them into concepts.
+            Captured items wait here until you learn them into concepts.
           </span>
         </div>
       )}
@@ -193,7 +193,7 @@ export default function InboxPage() {
             <div className='forge-bar'>
               <span className='forge-count'>
                 {selected.size} selected
-                {selected.size < 2 && ' — pick one more to forge'}
+                {selected.size < 2 && ' — pick one more to merge'}
               </span>
               <div className='forge-actions'>
                 <button
@@ -210,8 +210,8 @@ export default function InboxPage() {
                   className='forge-go'
                 >
                   {forge.isPending
-                    ? 'Forging…'
-                    : `Forge ${selected.size} into one`}{' '}
+                    ? 'Merging…'
+                    : `Merge ${selected.size} into one`}{' '}
                   <span className='ar'>→</span>
                 </button>
               </div>
@@ -295,7 +295,7 @@ const InboxRow = ({
           type='button'
           onClick={onToggleSelect}
           aria-pressed={selected}
-          aria-label={selected ? 'Deselect for forge' : 'Select for forge'}
+          aria-label={selected ? 'Deselect for merge' : 'Select for merge'}
           className={`row-select${selected ? ' is-on' : ''}`}
         >
           {selected ? '✓' : ''}

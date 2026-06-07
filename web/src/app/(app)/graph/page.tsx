@@ -138,7 +138,7 @@ export default function GraphPage() {
             <span>
               {isScoped
                 ? 'Try a different scope, or add concepts to it.'
-                : 'Compress something from your inbox to place your first concept.'}
+                : 'Learn something from your inbox to place your first concept.'}
             </span>
           </div>
         </div>

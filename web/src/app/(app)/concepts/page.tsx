@@ -58,7 +58,7 @@ export default function ConceptsPage() {
         <div className='empty'>
           No concepts yet.
           <span>
-            Compress something from your inbox to create your first concept.
+            Learn something from your inbox to create your first concept.
           </span>
         </div>
       )}

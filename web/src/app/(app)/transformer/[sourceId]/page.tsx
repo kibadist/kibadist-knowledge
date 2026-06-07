@@ -95,7 +95,7 @@ export default function SourceDetailPage() {
         <>
           <div className='page-head'>
             <div className='section-label'>
-              § Transformer · {sourceTypeLabel(source.type)}
+              § Reading · {sourceTypeLabel(source.type)}
             </div>
             <h1>{source.title ?? source.url ?? source.fileName ?? 'Source'}</h1>
             <div className='tf-detail-meta'>
