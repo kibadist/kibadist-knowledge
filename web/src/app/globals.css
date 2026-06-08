@@ -907,6 +907,25 @@ body {
 .kbapp .row-process:hover {
   color: var(--accent-deep);
 }
+
+/* Per-source learning glyph (DET-316): read → recalled → kept dots, shared by
+   the inbox rows and the Today reading panel. */
+.kbapp .inbox-glyph {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.kbapp .inbox-glyph-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  border: 1px solid var(--rule);
+  background: transparent;
+}
+.kbapp .inbox-glyph-dot.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
 .kbapp .empty {
   border: 1px dashed var(--rule-soft);
   padding: 48px;

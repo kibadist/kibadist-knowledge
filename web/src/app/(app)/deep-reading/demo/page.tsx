@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { type CSSProperties, useMemo, useState } from 'react'
 import type {
   LearningModeHandlers,
   ReadingMode,
@@ -20,6 +20,44 @@ import { useArticleLearningState } from '@/lib/article-learning-events'
  * reading surface lights up its completion markers. This demonstrates the
  * `article_learning_events` contract end to end without a backend.
  */
+// Dev harness controls grouped by the three stages (DET-314).
+const STAGE_HARNESS: {
+  stage: string
+  modes: { mode: ReadingMode; label: string }[]
+}[] = [
+  {
+    stage: 'Read',
+    modes: [
+      { mode: 'overview', label: 'overview' },
+      { mode: 'deep', label: 'deep' },
+    ],
+  },
+  {
+    stage: 'Recall',
+    modes: [
+      { mode: 'predict', label: 'predict' },
+      { mode: 'rewrite', label: 'rewrite' },
+      { mode: 'compare', label: 'compare' },
+    ],
+  },
+  {
+    stage: 'Keep',
+    modes: [
+      { mode: 'extract', label: 'extract' },
+      { mode: 'review', label: 'review' },
+    ],
+  },
+]
+
+const DEMO_STAGE_CAPTION: CSSProperties = {
+  alignSelf: 'center',
+  fontSize: '0.65rem',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  color: 'var(--ink-faint)',
+  minWidth: '3.5rem',
+}
+
 export default function DeepReadingDemoPage() {
   const [mode, setMode] = useState<ReadingMode>('deep')
   const [log, setLog] = useState<string[]>([])
@@ -49,15 +87,17 @@ export default function DeepReadingDemoPage() {
       <p className='section-label'>§ Deep Reading · Demo</p>
       <h1>Deep Reading Mode — demo</h1>
       <p className='lede'>
-        The polished generated-article reading surface (DET-284) with quiet
-        entry points into active learning. Hover a section to reveal its
-        actions; click one and watch its completion marker appear. Switch to{' '}
-        <strong>Overview</strong> for the DET-280 key-term skeleton: headings
-        and key terms stay crisp while the prose is blurred — click a term to
-        preview where it occurs, then start guided reading. Switch to{' '}
-        <strong>Predict</strong> for the DET-282 predict-before-reveal flow:
-        answer from the heading and key terms, then reveal the section and see
-        how your model compares. Switch to <strong>Rewrite</strong> for the
+        The polished generated-article reading surface (DET-284), now grouped
+        into the three-stage learning arc —{' '}
+        <strong>Read → Recall → Keep</strong> (DET-314) — with a progress rail
+        that lights each stage as its representative events land. Hover a
+        section to reveal its actions; click one and watch its completion marker
+        appear. Switch to <strong>Overview</strong> for the DET-280 key-term
+        skeleton: headings and key terms stay crisp while the prose is blurred —
+        click a term to preview where it occurs, then start guided reading.
+        Switch to <strong>Predict</strong> for the DET-282 predict-before-reveal
+        flow: answer from the heading and key terms, then reveal the section and
+        see how your model compares. Switch to <strong>Rewrite</strong> for the
         DET-285 active-recall flow: reconstruct each block from memory while the
         source blurs the moment you start writing — peek if you must, it&apos;s
         tracked. Then switch to <strong>Compare</strong> for the DET-286
@@ -73,56 +113,26 @@ export default function DeepReadingDemoPage() {
         transfer — that you approve before they enter your Retrieval Engine.
       </p>
 
+      {/* Harness grouped by the three stages (DET-314) so the dev controls
+          mirror the staged surface they drive. */}
+      {STAGE_HARNESS.map((group) => (
+        <div key={group.stage} className='seg-row'>
+          <span className='u-mono' style={DEMO_STAGE_CAPTION}>
+            {group.stage}
+          </span>
+          {group.modes.map((m) => (
+            <button
+              key={m.mode}
+              type='button'
+              onClick={() => setMode(m.mode)}
+              className={`seg${mode === m.mode ? ' on' : ''}`}
+            >
+              Open in {m.label}
+            </button>
+          ))}
+        </div>
+      ))}
       <div className='seg-row'>
-        <button
-          type='button'
-          onClick={() => setMode('deep')}
-          className={`seg${mode === 'deep' ? ' on' : ''}`}
-        >
-          Open in deep
-        </button>
-        <button
-          type='button'
-          onClick={() => setMode('overview')}
-          className={`seg${mode === 'overview' ? ' on' : ''}`}
-        >
-          Open in overview
-        </button>
-        <button
-          type='button'
-          onClick={() => setMode('predict')}
-          className={`seg${mode === 'predict' ? ' on' : ''}`}
-        >
-          Open in predict
-        </button>
-        <button
-          type='button'
-          onClick={() => setMode('rewrite')}
-          className={`seg${mode === 'rewrite' ? ' on' : ''}`}
-        >
-          Open in rewrite
-        </button>
-        <button
-          type='button'
-          onClick={() => setMode('compare')}
-          className={`seg${mode === 'compare' ? ' on' : ''}`}
-        >
-          Open in compare
-        </button>
-        <button
-          type='button'
-          onClick={() => setMode('extract')}
-          className={`seg${mode === 'extract' ? ' on' : ''}`}
-        >
-          Open in extract
-        </button>
-        <button
-          type='button'
-          onClick={() => setMode('review')}
-          className={`seg${mode === 'review' ? ' on' : ''}`}
-        >
-          Open in review
-        </button>
         <button
           type='button'
           onClick={() => setHighlight((h) => !h)}

@@ -65,6 +65,135 @@
   gap: 0.4rem;
 }
 
+/* DET-314 — the three-stage learning rail (Read · Recall · Keep) with its
+   per-stage completion markers, plus the active stage's sub-mode row below. */
+.kb-dr-stagebar {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.kb-dr-stages {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.kb-dr-stage {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.7rem;
+  background: transparent;
+  border: 1px solid var(--reader-rule);
+  border-radius: 9px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 0.15s var(--ease, ease),
+    background 0.15s var(--ease, ease);
+}
+
+.kb-dr-stage:hover {
+  border-color: var(--reader-muted);
+}
+
+.kb-dr-stage.is-active {
+  border-color: var(--reader-accent);
+  background: color-mix(in srgb, var(--reader-accent) 7%, transparent);
+}
+
+.kb-dr-stage-marker {
+  flex: none;
+  width: 1.4rem;
+  height: 1.4rem;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  border: 1px solid var(--reader-rule);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  color: var(--reader-muted);
+}
+
+.kb-dr-stage.is-active .kb-dr-stage-marker {
+  border-color: var(--reader-accent);
+  color: var(--reader-accent);
+}
+
+.kb-dr-stage.is-done .kb-dr-stage-marker {
+  background: var(--reader-accent);
+  border-color: var(--reader-accent);
+  color: var(--reader-paper);
+}
+
+.kb-dr-stage-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+
+.kb-dr-stage-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--reader-strong);
+  font-family: var(--font-display), Georgia, serif;
+}
+
+.kb-dr-stage-hint {
+  font-size: 0.625rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--reader-faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.kb-dr-submodes {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+/* The optional comprehension scaffold inside the Recall stage (DET-315). */
+.kb-dr-recall-aid {
+  margin-top: 1.5rem;
+}
+
+.kb-dr-recall-aid-panel {
+  border: 1px solid var(--reader-rule);
+  border-radius: 9px;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--reader-rule) 16%, transparent);
+}
+
+.kb-dr-recall-aid-panel > summary {
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.kb-dr-recall-aid-list {
+  margin: 0.75rem 0 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--reader-fg);
+}
+
+@media (max-width: 560px) {
+  .kb-dr-stage-hint {
+    display: none;
+  }
+}
+
 /* Header. */
 .kb-dr-header {
   margin-top: 1.1rem;

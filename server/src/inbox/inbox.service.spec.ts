@@ -24,6 +24,11 @@ function makeService() {
     transformerSource: {
       findMany: jest.fn().mockResolvedValue([]),
     },
+    // Per-source learning glyph (DET-316): the batched event query, empty by
+    // default so most tests see a null glyph.
+    articleLearningEvent: {
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
     track: { findFirst: jest.fn() },
     $transaction: jest.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
   }
@@ -100,6 +105,43 @@ describe('InboxService unified capture (DET-300)', () => {
     expect(items[0].sourceId).toBe('src1')
     expect(items[0].latestArticleId).toBe('a1')
     expect(items[0].latestArticleStatus).toBe('FINAL')
+    // No events yet → an empty (null) learning glyph.
+    expect(items[0].learning).toBeNull()
+  })
+
+  it('list() derives the read/recalled/kept glyph from the latest article events (DET-316)', async () => {
+    const { service, prisma } = makeService()
+    prisma.concept.findMany.mockResolvedValue([
+      {
+        id: 'c1',
+        title: 'A note',
+        sourceText: 'body',
+        captureSource: CaptureSource.PASTE,
+        sourceUrl: null,
+        originArticleId: null,
+        sourceId: 'src1',
+        createdAt: new Date('2026-06-06T00:00:00Z'),
+      },
+    ])
+    prisma.transformerSource.findMany.mockResolvedValue([
+      { id: 'src1', articles: [{ id: 'a1', status: 'FINAL' }] },
+    ])
+    // Read and recalled (rewrite submitted AND compared), but not yet kept.
+    prisma.articleLearningEvent.groupBy.mockResolvedValue([
+      { articleId: 'a1', eventType: 'section_revealed' },
+      { articleId: 'a1', eventType: 'block_rewrite_submitted' },
+      { articleId: 'a1', eventType: 'comparison_generated' },
+    ])
+
+    const items = await service.list('u1', 'w1')
+
+    expect(items[0].learning).toEqual({
+      read: true,
+      recalled: true,
+      kept: false,
+    })
+    // Batched, not per-row: one grouped event query for the whole list.
+    expect(prisma.articleLearningEvent.groupBy).toHaveBeenCalledTimes(1)
   })
 
   it('forge composes existing captures and never ingests a companion source', async () => {

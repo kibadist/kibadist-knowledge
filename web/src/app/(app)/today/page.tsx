@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 
+import { InboxProgressGlyph } from '@/components/inbox/progress-glyph'
 import { OnboardingPanel } from '@/components/onboarding/onboarding-panel'
 import { api } from '@/lib/api'
 import { lengthLabel, sourceMark } from '@/lib/inbox-format'
@@ -132,18 +133,15 @@ function ReadPanel() {
         items.length > 0 && (
           <ul className='today-list'>
             {items.slice(0, 4).map((item) => {
-              // Route by readiness (DET-300): a FINAL article reads directly;
-              // otherwise the triage row owns the next step.
+              // One destination (DET-313): every row opens the document workspace,
+              // which picks Source vs Article by readiness itself.
               const articleReady =
                 item.latestArticleId !== null &&
                 item.latestArticleStatus === 'FINAL'
-              const href = articleReady
-                ? `/transformer/articles/${item.latestArticleId}`
-                : `/inbox/${item.id}`
               const len = lengthLabel(item.wordCount)
               return (
                 <li key={item.id} className='today-read-row'>
-                  <Link href={href} className='today-read-main'>
+                  <Link href={`/read/${item.id}`} className='today-read-main'>
                     <span className='today-read-source'>
                       {sourceMark(item)}
                     </span>
@@ -151,6 +149,8 @@ function ReadPanel() {
                   </Link>
                   <span className='today-read-meta'>
                     {len && <span className='today-read-len'>{len}</span>}
+                    {/* Same read → recalled → kept glyph as the inbox (DET-316). */}
+                    <InboxProgressGlyph learning={item.learning} />
                     {articleReady && (
                       <span className='chip chip-cleared'>Ready</span>
                     )}
