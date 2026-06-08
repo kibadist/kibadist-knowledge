@@ -157,6 +157,37 @@
   flex-wrap: wrap;
 }
 
+/* The optional comprehension scaffold inside the Recall stage (DET-315). */
+.kb-dr-recall-aid {
+  margin-top: 1.5rem;
+}
+
+.kb-dr-recall-aid-panel {
+  border: 1px solid var(--reader-rule);
+  border-radius: 9px;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--reader-rule) 16%, transparent);
+}
+
+.kb-dr-recall-aid-panel > summary {
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.kb-dr-recall-aid-list {
+  margin: 0.75rem 0 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--reader-fg);
+}
+
 @media (max-width: 560px) {
   .kb-dr-stage-hint {
     display: none;

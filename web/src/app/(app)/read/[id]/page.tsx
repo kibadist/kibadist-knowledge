@@ -1,6 +1,6 @@
 'use client'
 
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useMemo, useRef, useState } from 'react'
@@ -16,6 +16,7 @@ import { ArticleReader } from '@/components/reader/article-reader'
 import {
   api,
   type CaptureSource,
+  type FrictionLevel,
   type TransformedArticleStatus,
 } from '@/lib/api'
 import type {
@@ -130,7 +131,11 @@ export default function ReadPage() {
             capturedAt={item.createdAt}
           />
 
-          <div className='read-toggle' role='tablist' aria-label='Source or Article'>
+          <div
+            className='read-toggle'
+            role='tablist'
+            aria-label='Source or Article'
+          >
             <button
               type='button'
               role='tab'
@@ -166,7 +171,11 @@ export default function ReadPage() {
               capturedAt={item.createdAt}
             />
           ) : articleId ? (
-            <ArticleView articleId={articleId} initialMode={initialMode} />
+            <ArticleView
+              articleId={articleId}
+              inboxItemId={id}
+              initialMode={initialMode}
+            />
           ) : (
             // No article row exists yet — the companion pipeline hasn't started
             // one. itemQuery is polling; this resolves to ArticleView shortly.
@@ -187,11 +196,15 @@ export default function ReadPage() {
  */
 function ArticleView({
   articleId,
+  inboxItemId,
   initialMode,
 }: {
   articleId: string
+  inboxItemId: string
   initialMode?: ReadingMode
 }) {
+  const router = useRouter()
+  const queryClient = useQueryClient()
   const articleQuery = useQuery({
     queryKey: ['transformer-article', articleId],
     queryFn: () => api.getTransformedArticle(articleId),
@@ -258,8 +271,35 @@ function ArticleView({
     [persistEvent],
   )
 
-  // Concept Library sink (DET-283/301): an approved candidate becomes a real
-  // INBOX "to learn" concept — the gate (DET-189) owns promotion from there.
+  // The single promotion gate (DET-315). Reading IS processing: approving a
+  // concept in Extract mode WITH the learner's own-words explanation earns the
+  // inbox item itself, reusing the existing promote service (DET-189) at MINIMAL
+  // friction — the explanation is the Articulate gate. No separate Process pass.
+  // The proof-of-learning invariant is preserved server-side: a verbatim or
+  // AI-authored articulation is rejected by the compression gate at commit.
+  const [earned, setEarned] = useState<{ id: string } | null>(null)
+  const earnConcept = useMutation({
+    mutationFn: async (explanation: string) => {
+      // Initialise/load the promotion draft, force the articulate-only friction
+      // level, save the learner's words, then commit it as a standalone concept.
+      await api.getPromotion(inboxItemId)
+      await api.setFriction(inboxItemId, 'MINIMAL' as FrictionLevel)
+      await api.saveArticulation(inboxItemId, explanation)
+      return api.commitPromotion(inboxItemId, { isRoot: true, connections: [] })
+    },
+    onSuccess: (concept) => {
+      setEarned({ id: concept.id })
+      // The item leaves the reading queue (badge + list). We intentionally do NOT
+      // invalidate ['inbox-item', inboxItemId] — the article is terminal so this
+      // page no longer polls, and refetching the now-earned (non-INBOX) item
+      // would 404 the surface the learner is still on.
+      queryClient.invalidateQueries({ queryKey: ['inbox'] })
+    },
+  })
+
+  // Fallback Concept Library write (DET-283): a candidate approved without an
+  // own-words explanation (or after the item is already earned) becomes a fresh
+  // INBOX "to learn" concept rather than promoting the source in place.
   const saveConcept = useMutation({
     mutationFn: (c: SavedConcept) =>
       api.createConcept({
@@ -271,6 +311,25 @@ function ArticleView({
           undefined,
       }),
   })
+
+  // Route an approved candidate: an explained, validated concept earns the item
+  // (once); anything else is a library write. Guards against double-promotion.
+  const handleSaveConcept = useCallback(
+    (c: SavedConcept) => {
+      const explanation = c.user_explanation?.trim()
+      if (
+        c.status === 'user_validated' &&
+        explanation &&
+        !earned &&
+        !earnConcept.isPending
+      ) {
+        earnConcept.mutate(explanation)
+      } else {
+        saveConcept.mutate(c)
+      }
+    },
+    [earned, earnConcept, saveConcept],
+  )
 
   // Retrieval Engine sink (DET-301/DET-288): an approved Spaced Review prompt is
   // handed to the engine; idempotent server-side on the deterministic prompt_id.
@@ -305,16 +364,73 @@ function ArticleView({
           Held back by the fidelity check — read it against the Source.
         </p>
       )}
+      {/* The single promotion gate's result (DET-315): earning leaves the queue
+          and lives in your concepts; a rejected articulation says why. */}
+      {earned && (
+        <p className='notice notice-ok'>
+          Earned — it’s in your concepts.{' '}
+          <Link href={`/concepts/${earned.id}`}>View concept →</Link>
+        </p>
+      )}
+      {earnConcept.isError && (
+        <p className='notice notice-error'>
+          {earnConcept.error instanceof Error
+            ? earnConcept.error.message
+            : 'Could not earn this yet — explain it in your own words first.'}
+        </p>
+      )}
       <DeepReadingMode
         article={learningArticle}
         provenance={provenance}
         initialMode={initialMode}
         initialEvents={eventsQuery.data ?? []}
         onEmit={emitEvent}
-        onSaveConcept={(c) => saveConcept.mutate(c)}
+        onSaveConcept={handleSaveConcept}
         onSchedulePrompt={(p) => schedulePrompt.mutate(p)}
+        recallAid={<InterrogationAid inboxItemId={inboxItemId} />}
       />
     </>
+  )
+}
+
+/**
+ * The demoted interrogation Q&A (DET-315) — once a mandatory Process pass, now an
+ * OPTIONAL comprehension scaffold inside the Recall stage. The AI asks questions
+ * to make you think; nothing here is saved as knowledge (earning happens in
+ * Extract concepts). The LLM call is deferred until the learner opens the aid.
+ */
+function InterrogationAid({ inboxItemId }: { inboxItemId: string }) {
+  const [open, setOpen] = useState(false)
+  const questionsQuery = useQuery({
+    queryKey: ['interrogation', inboxItemId],
+    queryFn: () => api.generateInterrogation(inboxItemId),
+    enabled: open,
+  })
+  return (
+    <details
+      className='kb-dr-recall-aid-panel'
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary>Comprehension scaffold · questions to make you think</summary>
+      <p className='block-sub'>
+        Optional. These prompts test your grasp before you reconstruct the
+        material — answer them in your head. They’re a reading aid, never saved
+        as knowledge; you earn a concept by explaining it in Extract concepts.
+      </p>
+      {questionsQuery.isLoading && (
+        <p className='notice'>Thinking up questions…</p>
+      )}
+      {questionsQuery.isError && (
+        <p className='notice notice-error'>Could not load questions right now.</p>
+      )}
+      {questionsQuery.data && questionsQuery.data.length > 0 && (
+        <ol className='kb-dr-recall-aid-list'>
+          {questionsQuery.data.map((q) => (
+            <li key={q.id}>{q.prompt}</li>
+          ))}
+        </ol>
+      )}
+    </details>
   )
 }
 
@@ -355,8 +471,8 @@ function ArticleProgress({
       </div>
       <p className='block-sub'>
         Modeling the source, planning the reshape, generating, then checking
-        every sentence against the source. Read the Source meanwhile — it’s ready
-        now.
+        every sentence against the source. Read the Source meanwhile — it’s
+        ready now.
       </p>
     </section>
   )
@@ -384,7 +500,12 @@ function ProvenanceEyebrow({
   if (label) parts.push(<span key='label'>{label}</span>)
   if (host)
     parts.push(
-      <a key='host' href={sourceUrl ?? undefined} target='_blank' rel='noopener noreferrer'>
+      <a
+        key='host'
+        href={sourceUrl ?? undefined}
+        target='_blank'
+        rel='noopener noreferrer'
+      >
         {host}
       </a>,
     )
@@ -395,7 +516,11 @@ function ProvenanceEyebrow({
       <span className='read-prov-dot' aria-hidden='true' />
       {parts.map((part, i) => (
         <span key={i} style={{ display: 'contents' }}>
-          {i > 0 && <span className='read-prov-sep' aria-hidden='true'>·</span>}
+          {i > 0 && (
+            <span className='read-prov-sep' aria-hidden='true'>
+              ·
+            </span>
+          )}
           {part}
         </span>
       ))}

@@ -1,6 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   captureSourceLabel,
   hostLabel,
@@ -115,6 +122,12 @@ export interface DeepReadingModeProps {
   onSaveConcept?: (concept: SavedConcept) => void
   /** Retrieval Engine sink — called when a review prompt is approved. */
   onSchedulePrompt?: (prompt: ScheduledReviewPrompt) => void
+  /**
+   * Optional comprehension aid shown only inside the Recall stage (DET-315) —
+   * e.g. the demoted interrogation Q&A. It is a scaffold, never a blocking step;
+   * surfaces that have no inbox context (the demo) simply omit it.
+   */
+  recallAid?: ReactNode
 }
 
 const EMPTY_HANDLERS: LearningModeHandlers = {}
@@ -186,6 +199,7 @@ export function DeepReadingMode({
   enableReview = true,
   onSaveConcept,
   onSchedulePrompt,
+  recallAid,
 }: DeepReadingModeProps) {
   const sections = useMemo(() => orderedSections(article), [article])
 
@@ -481,7 +495,11 @@ export function DeepReadingMode({
           shows where you are and which stages you've completed; the row beneath
           it exposes the active stage's sub-modes so all seven stay reachable. */}
       <div className='kb-dr-stagebar'>
-        <div className='kb-dr-stages' role='tablist' aria-label='Learning stage'>
+        <div
+          className='kb-dr-stages'
+          role='tablist'
+          aria-label='Learning stage'
+        >
           {visibleStages.map((stage, i) => {
             const isActive = activeStage === stage.key
             const done = stageDone[stage.key]
@@ -575,6 +593,12 @@ export function DeepReadingMode({
           {engaged > 0 && ` · ${engaged} engaged`}
         </p>
       </div>
+
+      {/* Optional comprehension scaffold, only within the Recall stage (DET-315):
+          the demoted interrogation Q&A — a reading aid, never a blocking step. */}
+      {activeStage === 'recall' && recallAid && (
+        <div className='kb-dr-recall-aid'>{recallAid}</div>
+      )}
 
       {mode === 'overview' ? (
         <KeyTermOverview
