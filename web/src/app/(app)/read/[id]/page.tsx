@@ -141,11 +141,11 @@ export default function ReadPage() {
   return (
     <div className='screen read-screen'>
       <Link href='/inbox' className='back-link'>
-        ← Back to Read
+        ← Back to Sources
       </Link>
 
       <div className='page-head'>
-        <span className='section-label'>§ Read</span>
+        <span className='section-label'>§ Sources</span>
         <h1>{item?.title ?? 'Reading…'}</h1>
       </div>
 
