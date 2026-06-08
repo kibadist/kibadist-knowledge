@@ -1,0 +1,86 @@
+/* DET-312 — the /read/[id] document workspace.
+ *
+ * One canonical reading route that wraps the cleaned Source and the refined
+ * Article behind a single two-way toggle. Styles here own only the workspace
+ * chrome (provenance eyebrow + Source⇄Article segmented control); the two views
+ * are the reused ArticleReader / DeepReadingMode surfaces, unchanged. Scoped
+ * under .kbapp like the rest of the app (light-only editorial theme). */
+
+/* Persistent provenance eyebrow — capture source · host · date. Always visible
+ * above the toggle so the student knows what they're reading on BOTH views. */
+.kbapp .read-prov {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: var(--tracking-mono, 0.08em);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.kbapp .read-prov-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--ochre);
+}
+.kbapp .read-prov-sep {
+  color: var(--rule);
+}
+.kbapp .read-prov a {
+  color: var(--ink-muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.kbapp .read-prov a:hover {
+  color: var(--accent);
+  border-bottom-color: currentColor;
+}
+
+/* Source ⇄ Article segmented control — the primary axis of the page. */
+.kbapp .read-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  margin: 0 0 1.5rem;
+  background: var(--paper-mute);
+  border: 1px solid var(--rule-soft);
+  border-radius: 10px;
+}
+.kbapp .read-toggle-opt {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0.45rem 1.1rem;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  letter-spacing: var(--tracking-mono, 0.08em);
+  text-transform: uppercase;
+  transition: color var(--dur-fast, 120ms) var(--ease, ease),
+    background var(--dur-fast, 120ms) var(--ease, ease);
+}
+.kbapp .read-toggle-opt:hover:not(.is-on):not(:disabled) {
+  color: var(--ink);
+}
+.kbapp .read-toggle-opt.is-on {
+  background: var(--paper-hi);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+.kbapp .read-toggle-opt:disabled {
+  cursor: default;
+  color: var(--ink-faint);
+  opacity: 0.6;
+}
+/* A generating Article still reads on the toggle, with a quiet pulse so the
+ * student sees it's on its way rather than missing. */
+.kbapp .read-toggle-pending {
+  margin-left: 0.4rem;
+  font-size: 0.62rem;
+  color: var(--ochre);
+}
