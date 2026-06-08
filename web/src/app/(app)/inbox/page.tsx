@@ -59,7 +59,7 @@ export default function InboxPage() {
     onSuccess: (merged) => {
       setSelected(new Set())
       queryClient.invalidateQueries({ queryKey: ['inbox'] })
-      router.push(`/inbox/${merged.id}`)
+      router.push(`/read/${merged.id}`)
     },
   })
 
@@ -111,8 +111,10 @@ export default function InboxPage() {
         e.preventDefault()
         setFocused((f) => Math.max(0, f - 1))
       } else if (e.key === 'p' || e.key === 'Enter') {
+        // One destination (DET-313): open the document workspace, which picks
+        // Source vs Article by readiness — no separate Process step.
         const item = items[focused]
-        if (item) router.push(`/inbox/${item.id}`)
+        if (item) router.push(`/read/${item.id}`)
       } else if (e.key === 'e') {
         const item = items[focused]
         if (item) discard.mutate(item.id)
@@ -276,10 +278,6 @@ const InboxRow = ({
   const domain = domainOf(item.sourceUrl)
   const mark = sourceMark(item)
   const length = lengthLabel(item.wordCount)
-  // Route by readiness (DET-300): a finished article surfaces a "Read" action; an
-  // in-flight companion source links to its pipeline so progress is reachable.
-  const articleReady =
-    item.latestArticleId !== null && item.latestArticleStatus === 'FINAL'
 
   return (
     // Deliberately distinct from earned concepts. We drop the per-row
@@ -333,7 +331,7 @@ const InboxRow = ({
         </button>
       </div>
 
-      <Link href={`/inbox/${item.id}`} className='row-title'>
+      <Link href={`/read/${item.id}`} className='row-title'>
         {item.title}
       </Link>
 
@@ -351,28 +349,12 @@ const InboxRow = ({
       {item.excerpt && <p className='row-excerpt'>{item.excerpt}</p>}
 
       <div className='row-foot'>
-        <Link href={`/inbox/${item.id}`} className='row-process'>
-          Process <span className='ar'>→</span>
+        {/* One destination (DET-313): a single forward action into the document
+            workspace. /read picks Source vs Article by readiness, so the row no
+            longer forks into Process / Read / View source. */}
+        <Link href={`/read/${item.id}`} className='row-process row-open'>
+          Open <span className='ar'>→</span>
         </Link>
-        {/* Reading surface (DET-300): a ready article reads directly; otherwise
-            the companion source's pipeline is one click away. */}
-        {articleReady ? (
-          <Link
-            href={`/transformer/articles/${item.latestArticleId}`}
-            className='row-process'
-          >
-            Read <span className='ar'>→</span>
-          </Link>
-        ) : (
-          item.sourceId && (
-            <Link
-              href={`/transformer/${item.sourceId}`}
-              className='row-process'
-            >
-              View source <span className='ar'>→</span>
-            </Link>
-          )
-        )}
       </div>
     </li>
   )
