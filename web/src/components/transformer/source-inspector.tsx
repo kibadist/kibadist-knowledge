@@ -53,8 +53,10 @@ export function SourceInspector({
   const sourceQuery = useQuery({
     queryKey: ['transformer-source', sourceId],
     queryFn: () => api.getTransformerSource(sourceId),
-    // Poll while the pipeline runs; stop the moment it settles.
+    // Poll while the pipeline runs; stop the moment it settles. Back off hard on
+    // error (esp. a 429 rate-limit) so the poll can't snowball into a storm.
     refetchInterval: (query) => {
+      if (query.state.status === 'error') return 15000
       const status = query.state.data?.status
       return status && isSourceTerminal(status) ? false : 1500
     },

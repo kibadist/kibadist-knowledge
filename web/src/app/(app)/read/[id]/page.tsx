@@ -46,6 +46,11 @@ type ReadView = 'source' | 'article' | 'exercise' | 'inspector'
 // surface to a coherent slice of the learning arc.
 const READ_MODES: ReadonlySet<ReadingMode> = new Set(['overview', 'deep'])
 
+// How long a generating-poll waits after an error before trying again. Far
+// slower than the 1.5s success cadence so a 429 (or any blip) can't snowball
+// into a request storm against the rate-limited API; the poll self-recovers.
+const ERROR_BACKOFF_MS = 15000
+
 // The three learning tabs, always present. The Inspector (the pipeline "behind
 // the article" view, V1 Decision 3) is NOT a peer tab — it's a quiet secondary
 // link beside the row, rendered below, that only turns loud on a fidelity block.
@@ -107,6 +112,10 @@ export default function ReadPage() {
     queryKey: ['inbox-item', id],
     queryFn: () => api.getInboxItem(id),
     refetchInterval: (query) => {
+      // Back off hard on error (esp. a 429 rate-limit) so a transient failure
+      // can't turn the generating-poll into a self-sustaining request storm —
+      // it eases off, the rate window clears, and it resumes on its own.
+      if (query.state.status === 'error') return ERROR_BACKOFF_MS
       const status = query.state.data?.latestArticleStatus
       return status && isArticleTerminal(status) ? false : 1500
     },
@@ -268,6 +277,7 @@ export default function ReadPage() {
  */
 function SourceUnavailable({ id, error }: { id: string; error: unknown }) {
   const notFound = error instanceof ApiError && error.status === 404
+  const rateLimited = error instanceof ApiError && error.status === 429
 
   const earnedQuery = useQuery({
     queryKey: ['concept', id],
@@ -275,6 +285,16 @@ function SourceUnavailable({ id, error }: { id: string; error: unknown }) {
     enabled: notFound,
     retry: false,
   })
+
+  // Rate-limited — transient. The poll has already backed off and will recover
+  // on its own, so say so rather than implying the source is broken.
+  if (rateLimited) {
+    return (
+      <p className='notice'>
+        Easing off — too many requests. Retrying shortly…
+      </p>
+    )
+  }
 
   // Transient / server error — not a "this is gone" signal. Keep it honest.
   if (!notFound) {
@@ -352,6 +372,8 @@ function ArticleView({
     queryKey: ['transformer-article', articleId],
     queryFn: () => api.getTransformedArticle(articleId),
     refetchInterval: (query) => {
+      // Same error backoff as the item poll: don't hammer a rate-limited API.
+      if (query.state.status === 'error') return ERROR_BACKOFF_MS
       const status = query.state.data?.status
       return status && isArticleTerminal(status) ? false : 1500
     },
