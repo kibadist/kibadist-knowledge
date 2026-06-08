@@ -148,6 +148,36 @@ function validLlmArticle() {
 }
 
 describe('ArticleGeneratorService', () => {
+  it('repairs benign LLM drift instead of failing the article (regression: the FAILED url article)', async () => {
+    // The reported failure: an empty subtitle, plus a container section that
+    // carries subsections with no ids and no blocks of its own. Pre-repair this
+    // FAILED zod validation after one retry; the repair hook normalizes the shape.
+    const drifted = validLlmArticle() as Record<string, unknown>
+    drifted.subtitle = { text: '', source: 'original', sourceBlockIds: [] }
+    const driftedSections = drifted.sections as unknown[]
+    driftedSections.push({
+      heading: 'Why it works',
+      headingSource: 'original',
+      sourceBlockIds: ['b1'],
+      subsections: [
+        { heading: 'Sub A', headingSource: 'original', sourceBlockIds: ['b2'] },
+        { heading: 'Sub B', headingSource: 'original', sourceBlockIds: ['b2'] },
+      ],
+    })
+
+    const article = await makeService(drifted).generate(plan, blocks)
+
+    // Empty subtitle dropped; the container section got an id + empty blocks;
+    // each subsection got an id — so the article is produced, not FAILED.
+    expect(article.subtitle).toBeUndefined()
+    const container = article.sections[1]
+    expect(container.id.length).toBeGreaterThan(0)
+    expect(container.blocks).toEqual([])
+    for (const sub of container.subsections ?? []) {
+      expect(sub.id.length).toBeGreaterThan(0)
+    }
+  })
+
   it('stamps schemaVersion v2 in code, re-derives originalStructure, strips later-wave fields', async () => {
     const service = makeService(validLlmArticle())
     const article = await service.generate(plan, blocks)

@@ -26,9 +26,20 @@ export async function completeJson<T>(
     prompt: string
     schema: ZodType<T>
     maxTokens?: number
+    /**
+     * Optional structural repair applied to the parsed JSON BEFORE zod
+     * validation. Use it to absorb benign LLM drift the schema would otherwise
+     * reject — generating missing anchor ids, defaulting an absent array,
+     * dropping an empty optional field — WITHOUT weakening the schema's
+     * guarantees for downstream consumers. Must be pure (no I/O); it runs on
+     * every attempt, so the retry isn't the only thing standing between a model
+     * slip and a FAILED pipeline. Never trust it to invent meaning — only to
+     * normalize shape.
+     */
+    repair?: (parsed: unknown) => unknown
   },
 ): Promise<T> {
-  const { system, schema, maxTokens } = opts
+  const { system, schema, maxTokens, repair } = opts
   let prompt = opts.prompt
   let lastError = ''
 
@@ -40,7 +51,7 @@ export async function completeJson<T>(
       maxTokens,
     })
 
-    const result = tryParse(text, schema)
+    const result = tryParse(text, schema, repair)
     if (result.ok) return result.value
 
     lastError = result.error
@@ -62,7 +73,11 @@ Return ONLY valid JSON that satisfies the required schema. No prose, no code fen
 
 type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
-function tryParse<T>(raw: string, schema: ZodType<T>): ParseResult<T> {
+function tryParse<T>(
+  raw: string,
+  schema: ZodType<T>,
+  repair?: (parsed: unknown) => unknown,
+): ParseResult<T> {
   const stripped = stripFence(raw)
   if (!stripped) return { ok: false, error: 'empty response' }
 
@@ -78,7 +93,9 @@ function tryParse<T>(raw: string, schema: ZodType<T>): ParseResult<T> {
     }
   }
 
-  const validated = schema.safeParse(parsed)
+  // Normalize benign shape drift before validating (caller-supplied; pure).
+  const candidate = repair ? repair(parsed) : parsed
+  const validated = schema.safeParse(candidate)
   if (!validated.success) {
     return { ok: false, error: formatZodError(validated.error) }
   }

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 
 import { AiService } from '../ai/ai.service'
 import { buildArticlePrompt } from './article-generator.prompt'
+import { repairArticleLlmV2 } from './article-llm-repair.util'
 import { completeJson } from './llm-json.util'
 import type { ArticleLlmV2, ReshapingPlan } from './schemas'
 import { ArticleLlmV2Schema } from './schemas'
@@ -62,6 +63,10 @@ export class ArticleGeneratorService {
       system,
       prompt,
       schema: ArticleLlmV2Schema,
+      // Absorb benign shape drift (missing anchor ids, a container section with no
+      // blocks, an empty subtitle) before validating, so one model slip doesn't
+      // FAIL the whole article (DET-251 fails loudly only on real breakage).
+      repair: repairArticleLlmV2,
       // Tables/code can be large; give the model headroom over the v1 budget.
       maxTokens: 10000,
     })
