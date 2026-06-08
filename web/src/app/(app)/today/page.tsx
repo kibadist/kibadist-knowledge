@@ -7,12 +7,8 @@ import { InboxProgressGlyph } from '@/components/inbox/progress-glyph'
 import { OnboardingPanel } from '@/components/onboarding/onboarding-panel'
 import { api } from '@/lib/api'
 import { lengthLabel, sourceMark } from '@/lib/inbox-format'
-import {
-  deriveTrackProgress,
-  dueReasonSummary,
-  pickActiveTrack,
-} from '@/lib/today'
-import { useWorkspace } from '@/lib/workspace-context'
+import { deriveTrackProgress, dueReasonSummary } from '@/lib/today'
+import { useTracks } from '@/lib/tracks-context'
 
 /**
  * Today (DET-302) — the post-login home and the answer to the returning user's
@@ -187,14 +183,10 @@ const TRACK_TYPE_LABELS: Record<string, string> = {
  * organizing widget; their full pages stay reachable from here.
  */
 function TrackPanel() {
-  const { activeWorkspaceId } = useWorkspace()
-  const tracksQuery = useQuery({
-    // Scope to the active workspace so switching worlds swaps the track, sharing
-    // the cache key with the Tracks list.
-    queryKey: ['tracks', activeWorkspaceId],
-    queryFn: () => api.listTracks(),
-  })
-  const active = pickActiveTrack(tracksQuery.data ?? [])
+  // The toolbar's focused track drives this panel (the provider falls back to
+  // the first ACTIVE track when nothing is chosen), so Today and the switcher
+  // always agree on which track is in view.
+  const { activeTrack: active, loading: tracksLoading } = useTracks()
 
   const conceptsQuery = useQuery({
     queryKey: ['track-concepts', active?.id],
@@ -213,12 +205,9 @@ function TrackPanel() {
       </div>
       <h2 className='today-panel-title'>Active track</h2>
 
-      {tracksQuery.isLoading && <p className='block-sub'>Loading…</p>}
-      {tracksQuery.isError && (
-        <p className='today-empty'>Could not load your tracks.</p>
-      )}
+      {tracksLoading && <p className='block-sub'>Loading…</p>}
 
-      {!tracksQuery.isLoading && !tracksQuery.isError && !active ? (
+      {!tracksLoading && !active ? (
         <div className='today-track-empty'>
           <p className='today-empty'>
             No active track. Name what you’re trying to understand and the loop
