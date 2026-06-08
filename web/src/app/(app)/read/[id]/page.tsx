@@ -382,8 +382,20 @@ function ArticleView({
     (article.status === 'FINAL' || article.status === 'BLOCKED')
 
   if (articleQuery.isLoading) return <p className='notice'>Loading article…</p>
+  // A miss here is almost always transient: the companion article is still being
+  // (re)generated, or the inbox poll handed us an id that a regeneration has just
+  // replaced. The query keeps polling (refetchInterval ignores the error), so we
+  // self-heal rather than dead-end — and the Source tab is always readable now.
   if (articleQuery.isError)
-    return <p className='notice notice-error'>Could not load this article.</p>
+    return (
+      <section className='panel panel-raised tf-progress'>
+        <div className='tf-progress-label'>Catching up to the article…</div>
+        <p className='block-sub'>
+          It’s still settling — most likely finishing generation. Read the
+          Source meanwhile; this view refreshes on its own.
+        </p>
+      </section>
+    )
   if (!article) return null
 
   // Still generating / failed — never a dead wait; the Source view is one toggle
