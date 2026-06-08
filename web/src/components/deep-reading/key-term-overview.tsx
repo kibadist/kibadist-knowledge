@@ -39,36 +39,39 @@ export interface KeyTermOverviewProps {
   article: ArticleV2
   activeSectionId: string | null
   completedBySection: (sectionId: string) => Set<LearningAffordance>
-  /** Enter Deep Reading anchored at a section (optionally a specific block). */
-  onSelectSection: (sectionId: string, blockId?: string) => void
-  /** Primary CTA: begin guided reading from the current position. */
-  onStartReading: () => void
 }
 
 export function KeyTermOverview({
   article,
   activeSectionId,
   completedBySection,
-  onSelectSection,
-  onStartReading,
 }: KeyTermOverviewProps) {
   const skeletons = useMemo(() => deriveArticleSkeleton(article), [article])
   const totalTerms = useMemo(
     () => skeletons.reduce((n, s) => n + s.keyTerms.length, 0),
     [skeletons],
   )
+  // Deep Reading was folded into this surface: the skeleton blurs the prose and
+  // each section unblurs in place. "Unblur all" reveals every section at once —
+  // the same full content the separate Deep Reading mode used to show.
+  const [revealAll, setRevealAll] = useState(false)
 
   return (
     <div className='kb-kto'>
       <div className='kb-kto-intro'>
         <p className='kb-kto-lede'>
           The skeleton first. Scan the headings and key terms to build a mental
-          map, then start guided reading to fill in the detail. Explanatory
-          prose is dimmed and examples are folded away until you read.
+          map, then unblur a section to fill in its detail. Explanatory prose is
+          dimmed and examples folded away until you unblur.
         </p>
-        <button type='button' className='kb-kto-cta' onClick={onStartReading}>
-          Start guided reading
-          <span aria-hidden='true'> →</span>
+        <button
+          type='button'
+          className={`kb-kto-cta${revealAll ? ' is-on' : ''}`}
+          aria-pressed={revealAll}
+          onClick={() => setRevealAll((v) => !v)}
+        >
+          {revealAll ? 'Blur all' : 'Unblur all'}
+          {!revealAll && <span aria-hidden='true'> →</span>}
         </button>
       </div>
 
@@ -80,7 +83,7 @@ export function KeyTermOverview({
             index={i + 1}
             isActive={skeleton.section.section_id === activeSectionId}
             completed={completedBySection(skeleton.section.section_id)}
-            onSelectSection={onSelectSection}
+            forceReveal={revealAll}
           />
         ))}
       </ol>
@@ -98,7 +101,8 @@ interface OverviewSectionProps {
   index: number
   isActive: boolean
   completed: Set<LearningAffordance>
-  onSelectSection: (sectionId: string, blockId?: string) => void
+  /** Force this section revealed (driven by the overview's "Unblur all"). */
+  forceReveal: boolean
 }
 
 function OverviewSection({
@@ -106,12 +110,16 @@ function OverviewSection({
   index,
   isActive,
   completed,
-  onSelectSection,
+  forceReveal,
 }: OverviewSectionProps) {
   const { section, keyTerms, summarySentence, relationships } = skeleton
   const blocks = useMemo(() => orderedBlocks(section), [section])
   const [selectedTerm, setSelectedTerm] = useState<string | null>(null)
   const [openExamples, setOpenExamples] = useState<Set<string>>(() => new Set())
+  // Unblur this section in place — the fold that replaced Deep Reading. A local
+  // toggle, or forced on by the overview-level "Unblur all".
+  const [revealed, setRevealed] = useState(false)
+  const isRevealed = forceReveal || revealed
   const previewId = useId()
 
   const active = keyTerms.find((t) => t.term === selectedTerm) ?? null
@@ -134,8 +142,8 @@ function OverviewSection({
         <button
           type='button'
           className='kb-kto-heading'
-          onClick={() => onSelectSection(section.section_id)}
-          title='Read this section'
+          onClick={() => setRevealed((r) => !r)}
+          title={isRevealed ? 'Blur this section' : 'Unblur this section'}
         >
           {section.heading}
         </button>
@@ -183,9 +191,7 @@ function OverviewSection({
         <TermPreview
           id={previewId}
           term={active}
-          onReadInContext={() =>
-            onSelectSection(section.section_id, active.occurrence?.block_id)
-          }
+          onReadInContext={() => setRevealed(true)}
         />
       )}
 
@@ -206,7 +212,9 @@ function OverviewSection({
             return <DeepReadingBlock key={block.block_id} block={block} />
           }
           if (isExampleBlock(block)) {
-            const open = openExamples.has(block.block_id)
+            // Unblurring a section opens its examples too, so the revealed
+            // section shows the same full content the old Deep Reading mode did.
+            const open = isRevealed || openExamples.has(block.block_id)
             return (
               <div key={block.block_id} className='kb-kto-example'>
                 <button
@@ -227,12 +235,17 @@ function OverviewSection({
             )
           }
           if (isProseBlock(block)) {
-            // Secondary explanation: layout preserved, content blurred. `inert`
-            // takes the dimmed prose out of the tab order and the a11y tree (so
-            // no focus lands on blurred links and screen readers skip the
-            // decorative scaffold); the full text is read in Deep Reading Mode.
+            // Secondary explanation: layout preserved, content blurred until the
+            // section is unblurred. While blurred, `inert` takes the dimmed prose
+            // out of the tab order and the a11y tree (so no focus lands on
+            // blurred links and screen readers skip the decorative scaffold);
+            // unblurring restores it to a normal, readable block.
             return (
-              <div key={block.block_id} className='kb-kto-prose' inert>
+              <div
+                key={block.block_id}
+                className={`kb-kto-prose${isRevealed ? ' is-revealed' : ''}`}
+                inert={isRevealed ? undefined : true}
+              >
                 <DeepReadingBlock block={block} />
               </div>
             )
@@ -241,14 +254,19 @@ function OverviewSection({
         })}
       </div>
 
-      <button
-        type='button'
-        className='kb-kto-read'
-        onClick={() => onSelectSection(section.section_id)}
-      >
-        Start guided reading from here
-        <span aria-hidden='true'> →</span>
-      </button>
+      {/* While "Unblur all" is on, the per-section toggle would be a no-op, so
+          it's hidden — the overview-level control owns the reveal then. */}
+      {!forceReveal && (
+        <button
+          type='button'
+          className={`kb-kto-read${isRevealed ? ' is-on' : ''}`}
+          aria-pressed={isRevealed}
+          onClick={() => setRevealed((r) => !r)}
+        >
+          {isRevealed ? 'Blur section' : 'Unblur section'}
+          {!isRevealed && <span aria-hidden='true'> →</span>}
+        </button>
+      )}
     </li>
   )
 }

@@ -43,8 +43,10 @@ type ReadView = 'source' | 'article' | 'exercise' | 'inspector'
 
 // The Read-stage modes (the Article tab); everything else is an Exercise mode.
 // Used to route `?mode=` deep-links to the right tab and to scope each tab's
-// surface to a coherent slice of the learning arc.
-const READ_MODES: ReadonlySet<ReadingMode> = new Set(['overview', 'deep'])
+// surface to a coherent slice of the learning arc. The Article tab is a single
+// unblurrable reading surface now — Deep Reading was folded into Overview (you
+// reveal a section in place), so `overview` is the only Read-stage mode.
+const READ_MODES: ReadonlySet<ReadingMode> = new Set(['overview'])
 
 // How long a generating-poll waits after an error before trying again. Far
 // slower than the 1.5s success cadence so a 429 (or any blip) can't snowball
@@ -583,7 +585,7 @@ const SURFACE_EYEBROW: Record<'article' | 'exercise', string> = {
   exercise: 'Active recall · earn what you keep',
 }
 const SURFACE_DEFAULT_MODE: Record<'article' | 'exercise', ReadingMode> = {
-  article: 'deep',
+  article: 'overview',
   exercise: 'predict',
 }
 

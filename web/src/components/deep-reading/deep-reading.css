@@ -749,6 +749,26 @@
   }
 }
 
+/* Unblurred in place — Deep Reading folded into the overview, so a section is
+   read here rather than in a separate mode. Restores the prose to a normal,
+   crisp, selectable, interactive block (overrides the reduced-motion blur too
+   on specificity). */
+.kb-kto-prose.is-revealed {
+  filter: none;
+  opacity: 1;
+  user-select: auto;
+  pointer-events: auto;
+  overflow: visible;
+}
+
+/* Active state for the unblur toggles (per-section and the overview-level
+   "Unblur all"), so a revealed section reads as deliberately on. */
+.kb-kto-read.is-on,
+.kb-kto-cta.is-on {
+  border-color: var(--reader-accent);
+  color: var(--reader-accent);
+}
+
 .kb-kto-example {
   margin: 1.1em 0;
 }

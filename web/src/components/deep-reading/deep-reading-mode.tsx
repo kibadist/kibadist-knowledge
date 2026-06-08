@@ -160,7 +160,9 @@ const STAGES: {
     key: 'read',
     label: 'Read',
     hint: 'Orient, then read',
-    modes: ['overview', 'deep'],
+    // Deep Reading was folded into Overview: the skeleton blurs the prose and
+    // each section unblurs in place, so a separate full-prose mode is redundant.
+    modes: ['overview'],
   },
   {
     key: 'recall',
@@ -211,7 +213,7 @@ const MODE_LABEL: Record<ReadingMode, string> = {
 
 export function DeepReadingMode({
   article,
-  initialMode = 'deep',
+  initialMode = 'overview',
   provenance,
   handlers = EMPTY_HANDLERS,
   learningState,
@@ -362,17 +364,6 @@ export function DeepReadingMode({
     [learning],
   )
 
-  const handleSelectFromOverview = useCallback(
-    (sectionId: string, blockId?: string) => {
-      // Prefer a block anchor when a key-term jump supplied one, so the reader
-      // lands on the exact occurrence; otherwise anchor to the section top.
-      pendingScroll.current = blockId ?? sectionId
-      setActiveSectionId(sectionId)
-      setMode('deep')
-    },
-    [],
-  )
-
   const handleStartReading = useCallback(() => {
     pendingScroll.current = activeSectionId
     setMode('deep')
@@ -501,6 +492,12 @@ export function DeepReadingMode({
   const visibleStages = STAGES.filter(
     (s) => stageAllowed(s.key) && stageModes(s.key).length > 0,
   )
+  // Only show the navigation rails when there's an actual choice to make. A
+  // single-stage surface (the Article tab, now just Read → Overview) shows no
+  // stage rail, and a stage with a single sub-mode shows no sub-mode bar — so
+  // the Article tab carries no "Read · orient, then read" chrome at all.
+  const showStageRail = visibleStages.length > 1
+  const showSubmodeBar = stageModes(activeStage).length > 1
 
   // Stage completion from the persisted event log (DET-314): Read once any
   // section has been revealed; Recall once a rewrite was submitted AND compared;
@@ -537,56 +534,62 @@ export function DeepReadingMode({
           Read → Recall → Keep, each a group of the original modes. The rail
           shows where you are and which stages you've completed; the row beneath
           it exposes the active stage's sub-modes so all seven stay reachable. */}
-      <div className='kb-dr-stagebar'>
-        <div
-          className='kb-dr-stages'
-          role='tablist'
-          aria-label='Learning stage'
-        >
-          {visibleStages.map((stage, i) => {
-            const isActive = activeStage === stage.key
-            const done = stageDone[stage.key]
-            return (
-              <button
-                key={stage.key}
-                type='button'
-                role='tab'
-                aria-selected={isActive}
-                className={`kb-dr-stage${isActive ? ' is-active' : ''}${
-                  done ? ' is-done' : ''
-                }`}
-                onClick={() => enterStage(stage.key)}
-              >
-                <span className='kb-dr-stage-marker' aria-hidden='true'>
-                  {done ? '✓' : i + 1}
-                </span>
-                <span className='kb-dr-stage-text'>
-                  <span className='kb-dr-stage-label'>{stage.label}</span>
-                  <span className='kb-dr-stage-hint'>{stage.hint}</span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
-        <div
-          className='kb-dr-submodes'
-          role='tablist'
-          aria-label={`${activeStage} steps`}
-        >
-          {stageModes(activeStage).map((m) => (
-            <button
-              key={m}
-              type='button'
-              role='tab'
-              aria-selected={mode === m}
-              className={`seg${mode === m ? ' on' : ''}`}
-              onClick={() => handleToggle(m)}
+      {(showStageRail || showSubmodeBar) && (
+        <div className='kb-dr-stagebar'>
+          {showStageRail && (
+            <div
+              className='kb-dr-stages'
+              role='tablist'
+              aria-label='Learning stage'
             >
-              {MODE_LABEL[m]}
-            </button>
-          ))}
+              {visibleStages.map((stage, i) => {
+                const isActive = activeStage === stage.key
+                const done = stageDone[stage.key]
+                return (
+                  <button
+                    key={stage.key}
+                    type='button'
+                    role='tab'
+                    aria-selected={isActive}
+                    className={`kb-dr-stage${isActive ? ' is-active' : ''}${
+                      done ? ' is-done' : ''
+                    }`}
+                    onClick={() => enterStage(stage.key)}
+                  >
+                    <span className='kb-dr-stage-marker' aria-hidden='true'>
+                      {done ? '✓' : i + 1}
+                    </span>
+                    <span className='kb-dr-stage-text'>
+                      <span className='kb-dr-stage-label'>{stage.label}</span>
+                      <span className='kb-dr-stage-hint'>{stage.hint}</span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {showSubmodeBar && (
+            <div
+              className='kb-dr-submodes'
+              role='tablist'
+              aria-label={`${activeStage} steps`}
+            >
+              {stageModes(activeStage).map((m) => (
+                <button
+                  key={m}
+                  type='button'
+                  role='tab'
+                  aria-selected={mode === m}
+                  className={`seg${mode === m ? ' on' : ''}`}
+                  onClick={() => handleToggle(m)}
+                >
+                  {MODE_LABEL[m]}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       <header className='kb-dr-header'>
         <h1 className='kb-dr-title'>{article.title}</h1>
@@ -648,8 +651,6 @@ export function DeepReadingMode({
           article={article}
           activeSectionId={activeSectionId}
           completedBySection={completedBySection}
-          onSelectSection={handleSelectFromOverview}
-          onStartReading={handleStartReading}
         />
       ) : mode === 'predict' ? (
         <PredictMode
