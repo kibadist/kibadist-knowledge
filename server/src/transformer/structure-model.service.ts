@@ -10,6 +10,7 @@ import {
   buildStructureModelPrompt,
   type PromptBlock,
 } from './structure-model.prompt'
+import { repairStructureModel } from './traceability-repair.util'
 
 /** A classified block as the structure modeler consumes it. */
 export interface ClassifiedBlockInput {
@@ -47,6 +48,12 @@ export class StructureModelService {
       system,
       prompt,
       schema: SourceStructureModelSchema,
+      // Drop references to block ids the source can't back BEFORE validating, so a
+      // single hallucinated id doesn't FAIL an otherwise-faithful model (the same
+      // benign-drift philosophy as the generator's repair, applied to provenance:
+      // invented refs are pruned, never fabricated). assertKnownIds still guards
+      // what survives.
+      repair: (parsed) => repairStructureModel(parsed, known),
       maxTokens: 4000,
     })
 
