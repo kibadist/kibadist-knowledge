@@ -7,10 +7,12 @@ import {
 } from './structure-model.service'
 
 /**
- * Direct unit tests for the code-side traceability guards (DET-251/253): a
- * schema-VALID response that cites a non-existent block id must throw (→ the
- * article pipeline marks the article FAILED). The schema tests cover shape;
- * these cover the "ids must reference REAL blocks" half of the guarantee.
+ * Direct unit tests for the code-side traceability guards (DET-251/253). The
+ * generator's guard still fails loudly on an untraceable id; the two pre-generator
+ * stages (structure model, reshaping plan) instead REPAIR benign drift — an
+ * invented id is pruned and an entry left unsourced is dropped, so a single
+ * hallucinated cuid no longer sinks an otherwise-faithful model. The schema tests
+ * cover shape; these cover the "ids must reference REAL blocks" half.
  */
 
 function stubAi(response: unknown): AiService {
@@ -38,10 +40,15 @@ const blocks: ClassifiedBlockInput[] = [
 ]
 
 describe('StructureModelService traceability guard', () => {
-  it('throws on a schema-valid model citing an unknown block id', async () => {
+  it('drops a hallucinated id instead of failing, keeping the real citation', async () => {
     const service = new StructureModelService(
       stubAi({
-        claims: [{ text: 'claim', sourceBlockIds: ['ghost'] }],
+        // First claim's only ref is invented → the claim is dropped; the second
+        // mixes a real and an invented id → the invented one is pruned.
+        claims: [
+          { text: 'invented', sourceBlockIds: ['ghost'] },
+          { text: 'real', sourceBlockIds: ['b1', 'ghost'] },
+        ],
         definitions: [],
         examples: [],
         caveats: [],
@@ -51,7 +58,10 @@ describe('StructureModelService traceability guard', () => {
         uncertainBlockIds: [],
       }),
     )
-    await expect(service.build(blocks)).rejects.toThrow(/unknown block ids/i)
+    const model = await service.build(blocks)
+    expect(model.claims).toHaveLength(1)
+    expect(model.claims[0].text).toBe('real')
+    expect(model.claims[0].sourceBlockIds).toEqual(['b1'])
   })
 
   it('accepts a model whose every citation resolves', async () => {

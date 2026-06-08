@@ -82,14 +82,23 @@ describe('ReshapingPlanService guards', () => {
     expect(plan.warnings.some((w) => w.includes('b2'))).toBe(true)
   })
 
-  it('throws (→ FAILED) when a section references an unknown block id', async () => {
+  it('drops a section with no traceable reference and builds from the valid ones', async () => {
+    // One real section, one whose only citation is invented → the invented
+    // section is pruned before Guard A rather than failing the whole article.
     const { service } = makeService({
       titleProposal: { text: 'T', source: 'original' },
       sections: [
         {
-          heading: 'H',
+          heading: 'Keep',
+          headingSource: 'original',
+          headingSourceBlockIds: ['b1'],
+          sourceBlockIds: ['b1'],
+          allowedTransformations: [],
+        },
+        {
+          heading: 'Drop',
           headingSource: 'inferred',
-          headingInferenceReason: 'no source heading',
+          headingInferenceReason: 'invented',
           sourceBlockIds: ['ghost'],
           allowedTransformations: [],
         },
@@ -98,12 +107,32 @@ describe('ReshapingPlanService guards', () => {
       warnings: [],
     })
 
-    await expect(service.build(structureModel, blocks)).rejects.toThrow(
-      /unknown block ids/i,
-    )
+    const plan = await service.build(structureModel, blocks)
+    expect(plan.sections.map((s) => s.heading)).toEqual(['Keep'])
   })
 
-  it('throws when a subsection references an unknown block id', async () => {
+  it('still FAILS when no section has a traceable reference (nothing to build)', async () => {
+    const { service } = makeService({
+      titleProposal: { text: 'T', source: 'original' },
+      sections: [
+        {
+          heading: 'H',
+          headingSource: 'inferred',
+          headingInferenceReason: 'invented',
+          sourceBlockIds: ['ghost'],
+          allowedTransformations: [],
+        },
+      ],
+      removedBlocks: [],
+      warnings: [],
+    })
+
+    // Every section is pruned → the schema's sections.min(1) rejects the empty
+    // plan, so the article still fails loudly when nothing is traceable.
+    await expect(service.build(structureModel, blocks)).rejects.toThrow()
+  })
+
+  it('drops an untraceable subsection, keeping its parent section', async () => {
     const { service } = makeService({
       titleProposal: { text: 'T', source: 'original' },
       sections: [
@@ -115,7 +144,14 @@ describe('ReshapingPlanService guards', () => {
           allowedTransformations: [],
           subsections: [
             {
-              heading: 'Sub',
+              heading: 'Keep sub',
+              headingSource: 'original',
+              headingSourceBlockIds: ['b2'],
+              sourceBlockIds: ['b2'],
+              allowedTransformations: [],
+            },
+            {
+              heading: 'Drop sub',
               headingSource: 'inferred',
               headingInferenceReason: 'gap fill',
               sourceBlockIds: ['ghost'],
@@ -128,9 +164,11 @@ describe('ReshapingPlanService guards', () => {
       warnings: [],
     })
 
-    await expect(service.build(headingedModel, blocks)).rejects.toThrow(
-      /unknown block ids/i,
-    )
+    const plan = await service.build(headingedModel, blocks)
+    expect(plan.sections).toHaveLength(1)
+    expect(plan.sections[0].subsections?.map((s) => s.heading)).toEqual([
+      'Keep sub',
+    ])
   })
 
   it('warns (does not fail) when the source has headings but the plan is all-inferred (DET-276)', async () => {

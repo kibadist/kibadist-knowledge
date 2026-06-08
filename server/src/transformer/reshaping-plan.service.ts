@@ -10,6 +10,7 @@ import {
   type SourceStructureModel,
 } from './schemas'
 import type { ClassifiedBlockInput } from './structure-model.service'
+import { repairReshapingPlan } from './traceability-repair.util'
 
 /**
  * Protected classes whose blocks may NEVER be removed by the plan — even if the
@@ -109,6 +110,11 @@ export class ReshapingPlanService {
       system,
       prompt,
       schema: ReshapingPlanSchema,
+      // Prune section/heading/subsection references the source can't back BEFORE
+      // validating, so a single hallucinated id doesn't FAIL the article in Guard
+      // A below; a section left with no real provenance is dropped. Invented refs
+      // are removed, never fabricated.
+      repair: (parsed) => repairReshapingPlan(parsed, known),
       maxTokens: 4000,
     })
 
