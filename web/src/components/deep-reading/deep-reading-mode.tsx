@@ -128,6 +128,17 @@ export interface DeepReadingModeProps {
    * surfaces that have no inbox context (the demo) simply omit it.
    */
   recallAid?: ReactNode
+  /**
+   * Restrict which learning stages (and their sub-modes) are reachable. Defaults
+   * to all three. The /read document workspace splits this surface across two
+   * top-level tabs: **Article** mounts `['read']` (the worked example — Overview +
+   * Deep reading), **Exercise** mounts `['recall', 'keep']` (the active-recall and
+   * keep exercises, where concept candidates are extracted). Each tab thus owns a
+   * coherent slice of the arc rather than all seven modes at once.
+   */
+  stages?: StageKey[]
+  /** Eyebrow label above the stage rail. Defaults to the worked-example line. */
+  eyebrow?: string
 }
 
 const EMPTY_HANDLERS: LearningModeHandlers = {}
@@ -135,7 +146,9 @@ const EMPTY_HANDLERS: LearningModeHandlers = {}
 // DET-314 — the seven modes read as three named stages, the natural learning arc
 // (orient → retrieve → keep) rather than seven peer tabs. Each stage owns its
 // sub-modes; the stage rail shows where you are and what's already complete.
-type StageKey = 'read' | 'recall' | 'keep'
+export type StageKey = 'read' | 'recall' | 'keep'
+
+const ALL_STAGES: StageKey[] = ['read', 'recall', 'keep']
 
 const STAGES: {
   key: StageKey
@@ -200,14 +213,29 @@ export function DeepReadingMode({
   onSaveConcept,
   onSchedulePrompt,
   recallAid,
+  stages,
+  eyebrow = 'Generated article · worked example',
 }: DeepReadingModeProps) {
   const sections = useMemo(() => orderedSections(article), [article])
+  const allowedStages = stages ?? ALL_STAGES
+  const stageAllowed = useCallback(
+    (key: StageKey) => allowedStages.includes(key),
+    [allowedStages],
+  )
 
   // Always call the hook; use the external store when one is provided.
   const internalState = useArticleLearningState({ onEmit, initialEvents })
   const learning = learningState ?? internalState
 
-  const [mode, setMode] = useState<ReadingMode>(initialMode)
+  // Clamp the opening mode to the permitted stages so a stray `initialMode`
+  // (e.g. a `?mode=` deep-link that doesn't belong to this tab) lands on the
+  // first reachable mode rather than a stage the rail no longer shows.
+  const [mode, setMode] = useState<ReadingMode>(() => {
+    const stagesIn = stages ?? ALL_STAGES
+    if (stagesIn.includes(MODE_STAGE[initialMode])) return initialMode
+    const firstStage = STAGES.find((s) => stagesIn.includes(s.key))
+    return firstStage?.modes[0] ?? initialMode
+  })
   const [activeSectionId, setActiveSectionId] = useState<string | null>(
     sections[0]?.section_id ?? null,
   )
@@ -457,7 +485,9 @@ export function DeepReadingMode({
       (m) => modeEnabled[m],
     )
   const activeStage = MODE_STAGE[mode]
-  const visibleStages = STAGES.filter((s) => stageModes(s.key).length > 0)
+  const visibleStages = STAGES.filter(
+    (s) => stageAllowed(s.key) && stageModes(s.key).length > 0,
+  )
 
   // Stage completion from the persisted event log (DET-314): Read once any
   // section has been revealed; Recall once a rewrite was submitted AND compared;
@@ -486,7 +516,7 @@ export function DeepReadingMode({
       <div className='kb-dr-bar'>
         <p className='kb-dr-eyebrow'>
           <span className='kb-dr-eyebrow-dot' aria-hidden='true' />
-          Generated article · worked example
+          {eyebrow}
         </p>
       </div>
 
@@ -667,10 +697,15 @@ export function DeepReadingMode({
         </div>
       )}
 
-      <p className='kb-dr-footnote'>
-        This is the worked example — the polished explanation. Later modes fade
-        this support and ask you to reconstruct the meaning yourself.
-      </p>
+      {/* The "worked example" footnote belongs to the Read stage (the Article
+          tab). The Exercise tab's recall/keep modes already carry their own
+          framing, so it's hidden there to avoid contradicting them. */}
+      {stageAllowed('read') && (
+        <p className='kb-dr-footnote'>
+          This is the worked example — the polished explanation. Later modes
+          fade this support and ask you to reconstruct the meaning yourself.
+        </p>
+      )}
     </article>
   )
 }

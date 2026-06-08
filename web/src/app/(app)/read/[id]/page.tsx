@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import {
   type ArticleProvenance,
@@ -11,6 +11,7 @@ import {
   type ReadingMode,
   type SavedConcept,
   type ScheduledReviewPrompt,
+  type StageKey,
 } from '@/components/deep-reading'
 import { ArticleReader } from '@/components/reader/article-reader'
 import {
@@ -19,10 +20,12 @@ import {
   type FrictionLevel,
   type TransformedArticleStatus,
 } from '@/lib/api'
-import type {
-  ArticleLearningEvent,
-  ArticleLearningEventDraft,
+import {
+  type ArticleLearningEvent,
+  type ArticleLearningEventDraft,
+  useArticleLearningState,
 } from '@/lib/article-learning-events'
+import type { ArticleV2 } from '@/lib/article-v2'
 import {
   ARTICLE_STEPS,
   articleStatusLabel,
@@ -34,24 +37,41 @@ import { transformerArticleToV2 } from '@/lib/transformer-to-article-v2'
 import '../../transformer/transformer.css'
 import './read.css'
 
-type ReadView = 'source' | 'article'
+type ReadView = 'source' | 'article' | 'exercise'
+
+// The Read-stage modes (the Article tab); everything else is an Exercise mode.
+// Used to route `?mode=` deep-links to the right tab and to scope each tab's
+// surface to a coherent slice of the learning arc.
+const READ_MODES: ReadonlySet<ReadingMode> = new Set(['overview', 'deep'])
+
+const READ_TABS: { view: ReadView; label: string }[] = [
+  { view: 'source', label: 'Source' },
+  { view: 'article', label: 'Article' },
+  { view: 'exercise', label: 'Exercise' },
+]
 
 /**
  * The document workspace (DET-312). One canonical reading route that resolves an
  * inbox item → its companion source → the latest generated article, and wraps
- * the two existing surfaces behind a single Source ⇄ Article toggle:
+ * three surfaces behind a single Source · Article · Exercise toggle:
  *
- *  - **Source** — the cleaned original, reused verbatim via `ArticleReader`.
- *  - **Article** — the refined transformer output, reused verbatim via
- *    `<DeepReadingMode>` fed through `transformerArticleToV2` (the single
- *    adaptation boundary — never duplicated here).
+ *  - **Source** — the cleaned original (noise removed), reused verbatim via
+ *    `ArticleReader`.
+ *  - **Article** — the refined transformer output as a worked example to *read*:
+ *    `<DeepReadingMode>` scoped to the Read stage (Overview + Deep reading), fed
+ *    through `transformerArticleToV2` (the single adaptation boundary).
+ *  - **Exercise** — the *active* learning surface over that same article:
+ *    `<DeepReadingMode>` scoped to the Recall + Keep stages (predict / rewrite /
+ *    compare, then extract concept candidates / spaced review). This is where
+ *    reading turns into kept knowledge.
  *
- * Source is readable the instant the page opens; the Article view shows the
- * pipeline-progress state while it's still generating and auto-advances to the
- * reading surface once the article reaches FINAL. A persistent provenance
- * eyebrow sits above the toggle so the student always knows what they're reading
- * on both views. `?view=source|article` and `?mode=` are carried in the URL so
- * deep-links (onboarding, DET-307) open straight into the right view + mode.
+ * Source is readable the instant the page opens; the Article/Exercise tabs show
+ * the pipeline-progress state while the article is still generating and the page
+ * defaults to Article once it reaches FINAL. A persistent provenance eyebrow sits
+ * above the toggle so the student always knows what they're reading on every
+ * view. `?view=source|article|exercise` and `?mode=` are carried in the URL so
+ * deep-links (onboarding, DET-307) open straight into the right view + mode — a
+ * recall/keep `?mode=` implies the Exercise tab, a read mode the Article tab.
  */
 export default function ReadPage() {
   const { id } = useParams<{ id: string }>()
@@ -60,8 +80,19 @@ export default function ReadPage() {
 
   const viewParam = params.get('view')
   const explicitView: ReadView | null =
-    viewParam === 'source' || viewParam === 'article' ? viewParam : null
+    viewParam === 'source' ||
+    viewParam === 'article' ||
+    viewParam === 'exercise'
+      ? viewParam
+      : null
   const initialMode = readingModeFromParam(params.get('mode'))
+  // A `?mode=` deep-link implies a tab: a read mode → Article, anything else
+  // (predict/rewrite/compare/extract/review) → Exercise.
+  const modeView: ReadView | null = initialMode
+    ? READ_MODES.has(initialMode)
+      ? 'article'
+      : 'exercise'
+    : null
 
   // Resolve the source by inbox item id (the companion sourceId + latest article
   // id ride along on the detail). Poll while the companion article is still
@@ -87,15 +118,15 @@ export default function ReadPage() {
     articleStatus === null || !isArticleTerminal(articleStatus)
 
   // The toggle is the only thing that pins a view. Until the student picks one,
-  // the view follows readiness: Source while generating (readable now), Article
-  // the moment it's FINAL — which is exactly the DET-312 auto-advance, achieved
-  // by derivation rather than an effect that could fight the URL. A `?mode=`
-  // deep-link implies the Article (you asked for a learning mode).
-  const [pinnedView, setPinnedView] = useState<ReadView | null>(explicitView)
-  const sawMode = useRef(initialMode !== undefined)
+  // the view follows the deep-link (`?mode=` → Article or Exercise) and then
+  // readiness: Source while generating (readable now), Article the moment it's
+  // FINAL — the DET-312 auto-advance, achieved by derivation rather than an
+  // effect that could fight the URL.
+  const [pinnedView, setPinnedView] = useState<ReadView | null>(
+    explicitView ?? modeView,
+  )
   const effectiveView: ReadView =
-    pinnedView ??
-    (sawMode.current ? 'article' : articleFinal ? 'article' : 'source')
+    pinnedView ?? modeView ?? (articleFinal ? 'article' : 'source')
 
   const pickView = useCallback(
     (next: ReadView) => {
@@ -134,29 +165,24 @@ export default function ReadPage() {
           <div
             className='read-toggle'
             role='tablist'
-            aria-label='Source or Article'
+            aria-label='Source, Article, or Exercise'
           >
-            <button
-              type='button'
-              role='tab'
-              aria-selected={effectiveView === 'source'}
-              className={`read-toggle-opt${effectiveView === 'source' ? ' is-on' : ''}`}
-              onClick={() => pickView('source')}
-            >
-              Source
-            </button>
-            <button
-              type='button'
-              role='tab'
-              aria-selected={effectiveView === 'article'}
-              className={`read-toggle-opt${effectiveView === 'article' ? ' is-on' : ''}`}
-              onClick={() => pickView('article')}
-            >
-              Article
-              {articleGenerating && (
-                <span className='read-toggle-pending'>· generating</span>
-              )}
-            </button>
+            {READ_TABS.map((tab) => (
+              <button
+                key={tab.view}
+                type='button'
+                role='tab'
+                aria-selected={effectiveView === tab.view}
+                className={`read-toggle-opt${effectiveView === tab.view ? ' is-on' : ''}`}
+                onClick={() => pickView(tab.view)}
+              >
+                {tab.label}
+                {/* Article + Exercise both ride on the generated article. */}
+                {tab.view !== 'source' && articleGenerating && (
+                  <span className='read-toggle-pending'>· generating</span>
+                )}
+              </button>
+            ))}
           </div>
 
           {effectiveView === 'source' ? (
@@ -171,9 +197,14 @@ export default function ReadPage() {
               capturedAt={item.createdAt}
             />
           ) : articleId ? (
+            // Article + Exercise are the same resolved article, scoped to a
+            // different slice of the learning arc by `surface`. ArticleView stays
+            // mounted across an Article⇄Exercise switch (same element position),
+            // so learning progress carries over between the two tabs.
             <ArticleView
               articleId={articleId}
               inboxItemId={id}
+              surface={effectiveView}
               initialMode={initialMode}
             />
           ) : (
@@ -188,19 +219,27 @@ export default function ReadPage() {
 }
 
 /**
- * The Article view — the refined transformer output as the Deep Reading surface,
- * with the polling + provenance + learning-event wiring lifted from the standalone
- * article page (DET-301). It owns only the reading surface: the in-progress state
- * and `<DeepReadingMode>` over the same v2 article. The transformer's "Behind the
- * article" appendix stays on its own page — this workspace is for reading.
+ * The Article + Exercise views — the refined transformer output as the Deep
+ * Reading surface, with the polling + provenance + learning-event wiring lifted
+ * from the standalone article page (DET-301). It owns the data + gates (status,
+ * progress hydration, the promotion gate) and hands the resolved article to a
+ * `ReadingSurface` scoped to the requested `surface`:
+ *  - `'article'` → the Read stage (Overview + Deep reading): read the worked example.
+ *  - `'exercise'` → the Recall + Keep stages: predict / rewrite / compare, then
+ *    extract concept candidates / spaced review.
+ *
+ * The transformer's "Behind the article" appendix stays on its own page — this
+ * workspace is for reading and exercising, not inspecting the pipeline.
  */
 function ArticleView({
   articleId,
   inboxItemId,
+  surface,
   initialMode,
 }: {
   articleId: string
   inboxItemId: string
+  surface: 'article' | 'exercise'
   initialMode?: ReadingMode
 }) {
   const router = useRouter()
@@ -343,8 +382,20 @@ function ArticleView({
     (article.status === 'FINAL' || article.status === 'BLOCKED')
 
   if (articleQuery.isLoading) return <p className='notice'>Loading article…</p>
+  // A miss here is almost always transient: the companion article is still being
+  // (re)generated, or the inbox poll handed us an id that a regeneration has just
+  // replaced. The query keeps polling (refetchInterval ignores the error), so we
+  // self-heal rather than dead-end — and the Source tab is always readable now.
   if (articleQuery.isError)
-    return <p className='notice notice-error'>Could not load this article.</p>
+    return (
+      <section className='panel panel-raised tf-progress'>
+        <div className='tf-progress-label'>Catching up to the article…</div>
+        <p className='block-sub'>
+          It’s still settling — most likely finishing generation. Read the
+          Source meanwhile; this view refreshes on its own.
+        </p>
+      </section>
+    )
   if (!article) return null
 
   // Still generating / failed — never a dead wait; the Source view is one toggle
@@ -379,7 +430,8 @@ function ArticleView({
             : 'Could not earn this yet — explain it in your own words first.'}
         </p>
       )}
-      <DeepReadingMode
+      <ReadingSurface
+        surface={surface}
         article={learningArticle}
         provenance={provenance}
         initialMode={initialMode}
@@ -390,6 +442,75 @@ function ArticleView({
         recallAid={<InterrogationAid inboxItemId={inboxItemId} />}
       />
     </>
+  )
+}
+
+// The two stage-scopes that back the Article and Exercise tabs. Article reads the
+// worked example (Read stage); Exercise runs active recall and earns/schedules
+// what's worth keeping (Recall + Keep stages — concept candidates included).
+const SURFACE_STAGES: Record<'article' | 'exercise', StageKey[]> = {
+  article: ['read'],
+  exercise: ['recall', 'keep'],
+}
+const SURFACE_EYEBROW: Record<'article' | 'exercise', string> = {
+  article: 'Generated article · worked example',
+  exercise: 'Active recall · earn what you keep',
+}
+const SURFACE_DEFAULT_MODE: Record<'article' | 'exercise', ReadingMode> = {
+  article: 'deep',
+  exercise: 'predict',
+}
+
+/**
+ * Renders the Deep Reading surface for one tab. It holds the shared learning-event
+ * store so progress + persisted events carry across an Article⇄Exercise switch
+ * (this component stays mounted; only the inner `<DeepReadingMode key={surface}>`
+ * remounts to pick up the new stage scope + opening mode). `initialMode` from a
+ * `?mode=` deep-link is honoured when it belongs to this surface, else the tab's
+ * natural default opens (DeepReadingMode also clamps defensively).
+ */
+function ReadingSurface({
+  surface,
+  article,
+  provenance,
+  initialMode,
+  initialEvents,
+  onEmit,
+  onSaveConcept,
+  onSchedulePrompt,
+  recallAid,
+}: {
+  surface: 'article' | 'exercise'
+  article: ArticleV2
+  provenance: ArticleProvenance
+  initialMode?: ReadingMode
+  initialEvents: ArticleLearningEvent[]
+  onEmit: (event: ArticleLearningEvent) => void
+  onSaveConcept: (concept: SavedConcept) => void
+  onSchedulePrompt: (prompt: ScheduledReviewPrompt) => void
+  recallAid: React.ReactNode
+}) {
+  // Shared store, seeded once from the hydrated events. Lives above the keyed
+  // DeepReadingMode so a tab switch doesn't drop in-session progress.
+  const learning = useArticleLearningState({ onEmit, initialEvents })
+  // A read mode belongs to the Article tab, any other mode to the Exercise tab.
+  const belongsHere = initialMode
+    ? READ_MODES.has(initialMode) === (surface === 'article')
+    : false
+  const openMode = belongsHere ? initialMode : SURFACE_DEFAULT_MODE[surface]
+  return (
+    <DeepReadingMode
+      key={surface}
+      article={article}
+      provenance={provenance}
+      stages={SURFACE_STAGES[surface]}
+      eyebrow={SURFACE_EYEBROW[surface]}
+      initialMode={openMode}
+      learningState={learning}
+      onSaveConcept={onSaveConcept}
+      onSchedulePrompt={onSchedulePrompt}
+      recallAid={recallAid}
+    />
   )
 }
 
