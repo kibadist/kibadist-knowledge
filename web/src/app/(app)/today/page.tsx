@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 
+import { InboxProgressGlyph } from '@/components/inbox/progress-glyph'
 import { OnboardingPanel } from '@/components/onboarding/onboarding-panel'
 import { api } from '@/lib/api'
 import { lengthLabel, sourceMark } from '@/lib/inbox-format'
@@ -148,6 +149,8 @@ function ReadPanel() {
                   </Link>
                   <span className='today-read-meta'>
                     {len && <span className='today-read-len'>{len}</span>}
+                    {/* Same read → recalled → kept glyph as the inbox (DET-316). */}
+                    <InboxProgressGlyph learning={item.learning} />
                     {articleReady && (
                       <span className='chip chip-cleared'>Ready</span>
                     )}

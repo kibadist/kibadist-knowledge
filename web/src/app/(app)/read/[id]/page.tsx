@@ -421,7 +421,9 @@ function InterrogationAid({ inboxItemId }: { inboxItemId: string }) {
         <p className='notice'>Thinking up questions…</p>
       )}
       {questionsQuery.isError && (
-        <p className='notice notice-error'>Could not load questions right now.</p>
+        <p className='notice notice-error'>
+          Could not load questions right now.
+        </p>
       )}
       {questionsQuery.data && questionsQuery.data.length > 0 && (
         <ol className='kb-dr-recall-aid-list'>

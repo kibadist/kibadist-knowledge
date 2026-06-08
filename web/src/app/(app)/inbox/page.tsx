@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
 import { EmptyState } from '@/components/empty-state'
+import { InboxProgressGlyph } from '@/components/inbox/progress-glyph'
 import { CaptureCard } from '@/components/transformer/capture-card'
 import { api, type InboxItem } from '@/lib/api'
 import {
@@ -222,12 +223,12 @@ export default function InboxPage() {
             </div>
           ) : (
             <div className='queue-bar'>
-              <Link href='/inbox/process' className='process-all'>
-                Process today’s batch <span className='ar'>→</span>
-              </Link>
+              {/* One vocabulary (DET-316): reading IS processing, so the row's
+                  single Open → is the only forward action — no "Process" batch
+                  pass competing with the read → earn → review loop. */}
               <span className='queue-hint'>
                 <kbd>J</kbd>
-                <kbd>K</kbd> move · <kbd>P</kbd> process · <kbd>S</kbd> snooze ·{' '}
+                <kbd>K</kbd> move · <kbd>P</kbd> open · <kbd>S</kbd> snooze ·{' '}
                 <kbd>X</kbd> select · <kbd>E</kbd> discard
               </span>
             </div>
@@ -315,6 +316,8 @@ const InboxRow = ({
           </Link>
         )}
         {length && <span className='row-len'>{length}</span>}
+        {/* Per-source progress glyph (DET-316): read → recalled → kept. */}
+        <InboxProgressGlyph learning={item.learning} />
         <time className='row-when'>
           {new Date(item.createdAt).toLocaleDateString(undefined, {
             month: 'short',

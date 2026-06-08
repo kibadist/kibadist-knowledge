@@ -178,6 +178,14 @@ export interface SourceDocument {
   degraded: boolean
 }
 
+/** A captured source's progress through the learning loop (DET-316): read →
+ *  recalled → kept, derived server-side from the latest article's events. */
+export interface InboxLearningStages {
+  read: boolean
+  recalled: boolean
+  kept: boolean
+}
+
 export interface InboxItem {
   id: string
   title: string
@@ -194,6 +202,8 @@ export interface InboxItem {
    *  the row's "Read" action once the pipeline produces an article. */
   latestArticleId: string | null
   latestArticleStatus: TransformedArticleStatus | null
+  /** Per-source learning progress (DET-316); null until a companion article. */
+  learning: InboxLearningStages | null
   excerpt: string
   /** Word count of the raw material — drives the row's read-time signal. */
   wordCount: number

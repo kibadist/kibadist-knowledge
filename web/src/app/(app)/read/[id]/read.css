@@ -61,7 +61,8 @@
   font-size: 0.74rem;
   letter-spacing: var(--tracking-mono, 0.08em);
   text-transform: uppercase;
-  transition: color var(--dur-fast, 120ms) var(--ease, ease),
+  transition:
+    color var(--dur-fast, 120ms) var(--ease, ease),
     background var(--dur-fast, 120ms) var(--ease, ease);
 }
 .kbapp .read-toggle-opt:hover:not(.is-on):not(:disabled) {

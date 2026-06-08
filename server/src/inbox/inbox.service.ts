@@ -1,4 +1,5 @@
 import {
+  type ArticleLearningEventType,
   CaptureSource,
   ConceptStatus,
   type Prisma,
@@ -29,6 +30,16 @@ import { fetchReadable } from './url-fetch.util'
 
 const EXCERPT_CHARS = 240
 
+/** A captured source's progress through the learning loop (DET-316), shown as a
+ *  read / recalled / kept glyph on its inbox row. Derived from the latest
+ *  article's persisted `article_learning_events`, so triage reflects how far the
+ *  source has been understood, not just whether its article is ready. */
+export interface InboxLearningStages {
+  read: boolean
+  recalled: boolean
+  kept: boolean
+}
+
 /** A captured, unprocessed item as shown in the inbox — never a "concept". */
 export interface InboxItem {
   id: string
@@ -47,6 +58,9 @@ export interface InboxItem {
    *  pipeline produces an article (or when there's no companion source). */
   latestArticleId: string | null
   latestArticleStatus: TransformedArticleStatus | null
+  /** Per-source learning progress (DET-316), derived from the latest article's
+   *  events. Null until there's a companion article to have learned from. */
+  learning: InboxLearningStages | null
   excerpt: string
   /** Word count of the raw material — a triage signal ("how long is this?").
    *  Derived from sourceText at read time; not persisted. */
@@ -200,6 +214,12 @@ export class InboxService {
       userId,
       rows.map((r) => r.sourceId).filter((id): id is string => id !== null),
     )
+    // Per-source learning glyph (DET-316): one batched query over the latest
+    // article ids, alongside the article enrichment — not one query per row.
+    const stages = await this.learningStagesByArticle(
+      userId,
+      [...articles.values()].map((a) => a.latestArticleId),
+    )
     return rows.map((r) => {
       const article = r.sourceId ? articles.get(r.sourceId) : undefined
       return {
@@ -211,6 +231,9 @@ export class InboxService {
         sourceId: r.sourceId,
         latestArticleId: article?.latestArticleId ?? null,
         latestArticleStatus: article?.latestArticleStatus ?? null,
+        learning: article
+          ? (stages.get(article.latestArticleId) ?? null)
+          : null,
         excerpt: excerpt(r.sourceText),
         wordCount: countWords(r.sourceText),
         createdAt: r.createdAt,
@@ -240,6 +263,9 @@ export class InboxService {
           row.sourceId,
         )
       : undefined
+    const stages = article
+      ? await this.learningStagesByArticle(userId, [article.latestArticleId])
+      : undefined
     return {
       id: row.id,
       title: row.title,
@@ -249,6 +275,7 @@ export class InboxService {
       sourceId: row.sourceId,
       latestArticleId: article?.latestArticleId ?? null,
       latestArticleStatus: article?.latestArticleStatus ?? null,
+      learning: article ? (stages?.get(article.latestArticleId) ?? null) : null,
       sourceText: row.sourceText,
       sourceDocument: asSourceDocument(row.sourceDocument),
       excerpt: excerpt(row.sourceText),
@@ -395,6 +422,8 @@ export class InboxService {
       sourceId: null,
       latestArticleId: null,
       latestArticleStatus: null,
+      // No companion article yet, so nothing learned to glyph.
+      learning: null,
       excerpt: excerpt(concept.sourceText),
       wordCount: countWords(concept.sourceText),
       createdAt: concept.createdAt,
@@ -489,6 +518,8 @@ export class InboxService {
       // The companion source's pipeline has only just been fired — no article yet.
       latestArticleId: null,
       latestArticleStatus: null,
+      // No companion article yet, so nothing learned to glyph.
+      learning: null,
       excerpt: excerpt(concept.sourceText),
       wordCount: countWords(concept.sourceText),
       createdAt: concept.createdAt,
@@ -536,6 +567,43 @@ export class InboxService {
           latestArticleStatus: latest.status,
         })
       }
+    }
+    return map
+  }
+
+  /**
+   * Resolve each latest article's learning-stage glyph (DET-316) in one batched
+   * query, reusing the DET-314 stage rule: read once a section was revealed,
+   * recalled once a rewrite was submitted AND compared, kept once a concept
+   * candidate was approved. Keyed by articleId → {read, recalled, kept}; articles
+   * with no events are absent (the row shows an empty glyph). One grouped query
+   * over the (articleId, eventType) index, not one per row.
+   */
+  private async learningStagesByArticle(
+    userId: string,
+    articleIds: string[],
+  ): Promise<Map<string, InboxLearningStages>> {
+    const ids = [...new Set(articleIds)]
+    if (ids.length === 0) return new Map()
+    const rows = await this.prisma.articleLearningEvent.groupBy({
+      by: ['articleId', 'eventType'],
+      where: { userId, articleId: { in: ids } },
+    })
+    const typesByArticle = new Map<string, Set<ArticleLearningEventType>>()
+    for (const r of rows) {
+      const set = typesByArticle.get(r.articleId) ?? new Set()
+      set.add(r.eventType)
+      typesByArticle.set(r.articleId, set)
+    }
+    const map = new Map<string, InboxLearningStages>()
+    for (const [articleId, types] of typesByArticle) {
+      map.set(articleId, {
+        read: types.has('section_revealed'),
+        recalled:
+          types.has('block_rewrite_submitted') &&
+          types.has('comparison_generated'),
+        kept: types.has('concept_candidate_approved'),
+      })
     }
     return map
   }

@@ -88,16 +88,16 @@ export default function DeepReadingDemoPage() {
       <h1>Deep Reading Mode — demo</h1>
       <p className='lede'>
         The polished generated-article reading surface (DET-284), now grouped
-        into the three-stage learning arc — <strong>Read → Recall → Keep</strong>{' '}
-        (DET-314) — with a progress rail that lights each stage as its
-        representative events land. Hover a section to reveal its actions; click
-        one and watch its completion marker appear. Switch to{' '}
-        <strong>Overview</strong> for the DET-280 key-term skeleton: headings
-        and key terms stay crisp while the prose is blurred — click a term to
-        preview where it occurs, then start guided reading. Switch to{' '}
-        <strong>Predict</strong> for the DET-282 predict-before-reveal flow:
-        answer from the heading and key terms, then reveal the section and see
-        how your model compares. Switch to <strong>Rewrite</strong> for the
+        into the three-stage learning arc —{' '}
+        <strong>Read → Recall → Keep</strong> (DET-314) — with a progress rail
+        that lights each stage as its representative events land. Hover a
+        section to reveal its actions; click one and watch its completion marker
+        appear. Switch to <strong>Overview</strong> for the DET-280 key-term
+        skeleton: headings and key terms stay crisp while the prose is blurred —
+        click a term to preview where it occurs, then start guided reading.
+        Switch to <strong>Predict</strong> for the DET-282 predict-before-reveal
+        flow: answer from the heading and key terms, then reveal the section and
+        see how your model compares. Switch to <strong>Rewrite</strong> for the
         DET-285 active-recall flow: reconstruct each block from memory while the
         source blurs the moment you start writing — peek if you must, it&apos;s
         tracked. Then switch to <strong>Compare</strong> for the DET-286
