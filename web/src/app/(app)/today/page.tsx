@@ -109,7 +109,7 @@ function ReadPanel() {
   return (
     <section className='panel panel-raised today-panel'>
       <div className='today-panel-head'>
-        <span className='section-label'>§ Read · Waiting</span>
+        <span className='section-label'>§ Sources · Waiting</span>
         {items.length > 0 && (
           <span className='head-count'>{items.length} waiting</span>
         )}
@@ -159,7 +159,7 @@ function ReadPanel() {
       )}
 
       <Link href='/inbox' className='today-more'>
-        Go to Read <span className='ar'>→</span>
+        Go to Sources <span className='ar'>→</span>
       </Link>
     </section>
   )
