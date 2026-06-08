@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useWorkspace } from '@/lib/workspace-context'
+import { TrackSwitcher } from './track-switcher'
 import { WorkspaceSwitcher } from './workspace-switcher'
 
 // Nav as the core loop (DET-302): capture → read → earn → review, ≤5 items in
@@ -67,6 +68,7 @@ export function AppNav() {
             Kibadist
           </Link>
           <WorkspaceSwitcher />
+          <TrackSwitcher />
           <div className='nav-items'>
             {NAV_ITEMS.map((item) => {
               const active =

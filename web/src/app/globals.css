@@ -423,6 +423,19 @@ body {
 .kbapp .ws-menu-new:hover {
   background: var(--accent-tint);
 }
+/* The track switcher's foot is a Link (an <a>); make it fill the row like the
+   workspace switcher's button and drop the default underline. */
+.kbapp a.ws-menu-new {
+  display: block;
+  text-decoration: none;
+}
+/* Empty-state line in a switcher menu (e.g. no tracks yet). */
+.kbapp .ws-menu-empty {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
 .kbapp .ws-create {
   display: flex;
   gap: 6px;
