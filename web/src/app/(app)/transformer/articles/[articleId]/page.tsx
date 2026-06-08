@@ -11,10 +11,14 @@ import { api } from '@/lib/api'
  * reading surface now lives in the unified /read/[id] document workspace
  * (DET-312). This route preserves old links / bookmarks / deep-links: it resolves
  * the article back to its companion source, finds the inbox item that owns that
- * source, and redirects into /read on the Article view, carrying any ?mode=
- * through. If the source is no longer in the reading queue (already earned), it
- * falls back to the Read home rather than 404ing.
+ * source, and redirects into /read carrying any ?mode= through — onto the Article
+ * tab for a read mode (overview/deep) and the Exercise tab for a recall/keep mode
+ * (predict/rewrite/compare/extract/review), matching the /read tab split. If the
+ * source is no longer in the reading queue (already earned), it falls back to the
+ * Read home rather than 404ing.
  */
+// Read-stage modes open the Article tab; everything else opens Exercise.
+const READ_MODES = new Set(['overview', 'deep'])
 export default function LegacyArticleRedirect() {
   const { articleId } = useParams<{ articleId: string }>()
   const router = useRouter()
@@ -44,7 +48,8 @@ export default function LegacyArticleRedirect() {
       router.replace('/inbox')
       return
     }
-    const qs = new URLSearchParams({ view: 'article' })
+    const view = mode && !READ_MODES.has(mode) ? 'exercise' : 'article'
+    const qs = new URLSearchParams({ view })
     if (mode) qs.set('mode', mode)
     router.replace(`/read/${item.id}?${qs.toString()}`)
   }, [articleQuery.isError, sourceId, inboxQuery.data, mode, router])

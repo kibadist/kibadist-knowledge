@@ -16,7 +16,7 @@ export type {
 } from './concept-extraction-mode'
 export { ConceptExtractionMode } from './concept-extraction-mode'
 export { DeepReadingBlock } from './deep-reading-block'
-export type { DeepReadingModeProps } from './deep-reading-mode'
+export type { DeepReadingModeProps, StageKey } from './deep-reading-mode'
 export { DeepReadingMode } from './deep-reading-mode'
 export { DeepReadingSection } from './deep-reading-section'
 export type { KeyTermOverviewProps } from './key-term-overview'
