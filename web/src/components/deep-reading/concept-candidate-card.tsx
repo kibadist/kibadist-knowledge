@@ -229,7 +229,7 @@ export function ConceptCandidateCard({
             className='kb-cx-input'
             value={explanation}
             onChange={(e) => setExplanation(e.target.value)}
-            placeholder='Explain this concept in your own words (optional, but it’s what makes it validated)…'
+            placeholder='Explain this concept in your own words (optional, but it’s what lets you earn it)…'
             rows={3}
           />
         )}
@@ -308,8 +308,8 @@ export function ConceptCandidateCard({
             {rejected
               ? 'Rejected — not saved to your Concept Library.'
               : status === 'user_validated'
-                ? 'Validated and saved to your Concept Library.'
-                : 'Saved as a draft — add an explanation to validate it.'}
+                ? 'Earned — saved to your concepts.'
+                : 'Saved as a draft — add an explanation to earn it.'}
           </span>
           <button
             type='button'
@@ -329,9 +329,7 @@ export function ConceptCandidateCard({
             Reject
           </button>
           <button type='button' className='kb-cx-approve' onClick={approve}>
-            {wouldBe === 'user_validated'
-              ? 'Approve · validate'
-              : 'Approve as draft'}
+            {wouldBe === 'user_validated' ? 'Earn concept' : 'Approve as draft'}
           </button>
         </div>
       )}

@@ -11,15 +11,16 @@ import { TrackSwitcher } from './track-switcher'
 import { WorkspaceSwitcher } from './workspace-switcher'
 
 // Nav as the core loop (DET-302): capture → read → earn → review, ≤5 items in
-// loop order. "Read" is the merged source/article surface (capture + triage on
-// /inbox since DET-300; source/article views open from its rows). "Progress" is
-// the renamed Understanding metrics. Tracks live on Today as the organizing
-// widget; Domains fold into the Map's DOMAIN scope control; Session is reached
-// from Today's "Start session" — all three routes stay reachable, just off the
-// top-level bar.
+// loop order. "Sources" is the capture + triage surface (/inbox since DET-300;
+// the Source · Article · Exercise workspace opens from its rows) — named per the
+// V1 spec §2 so the top-level item names the collection of sources, not the
+// reading activity inside a single one. "Progress" is the renamed Understanding
+// metrics. Tracks live on Today as the organizing widget; Domains fold into the
+// Map's DOMAIN scope control; Session is reached from Today's "Start session" —
+// all three routes stay reachable, just off the top-level bar.
 const NAV_ITEMS = [
   { href: '/today', label: 'Today' },
-  { href: '/inbox', label: 'Read' },
+  { href: '/inbox', label: 'Sources' },
   { href: '/concepts', label: 'Concepts' },
   { href: '/graph', label: 'Map' },
   { href: '/metrics', label: 'Progress' },

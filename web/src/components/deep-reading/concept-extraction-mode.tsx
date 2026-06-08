@@ -245,10 +245,10 @@ export function ConceptExtractionMode({
     <div className='kb-cx'>
       <div className='kb-cx-intro'>
         <p className='kb-cx-lede'>
-          The article is temporary — these are the ideas worth keeping. Approve
-          the concepts that deserve a place in your Concept Library, edit a
-          definition, or reject the rest. A concept is only{' '}
-          <strong>validated</strong> once you explain it in your own words.
+          The article is temporary — these are the ideas worth keeping. Earn the
+          concepts that deserve a place in your Concept Library, edit a
+          definition, or reject the rest. You <strong>earn</strong> a concept
+          only once you explain it in your own words.
         </p>
         <button type='button' className='kb-cx-cta' onClick={onStartReading}>
           Back to reading
@@ -321,8 +321,8 @@ export function ConceptExtractionMode({
 
       <p className='kb-cx-foot'>
         AI suggests; you decide. Nothing is saved as permanent knowledge until
-        you approve it — and prompts are only scheduled after a concept is
-        validated.
+        you earn it — and prompts are only scheduled once you’ve earned the
+        concept.
       </p>
     </div>
   )

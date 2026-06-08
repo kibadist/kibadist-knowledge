@@ -14,7 +14,9 @@ import {
   type StageKey,
 } from '@/components/deep-reading'
 import { ArticleReader } from '@/components/reader/article-reader'
+import { SourceInspector } from '@/components/transformer/source-inspector'
 import {
+  ApiError,
   api,
   type CaptureSource,
   type FrictionLevel,
@@ -37,13 +39,16 @@ import { transformerArticleToV2 } from '@/lib/transformer-to-article-v2'
 import '../../transformer/transformer.css'
 import './read.css'
 
-type ReadView = 'source' | 'article' | 'exercise'
+type ReadView = 'source' | 'article' | 'exercise' | 'inspector'
 
 // The Read-stage modes (the Article tab); everything else is an Exercise mode.
 // Used to route `?mode=` deep-links to the right tab and to scope each tab's
 // surface to a coherent slice of the learning arc.
 const READ_MODES: ReadonlySet<ReadingMode> = new Set(['overview', 'deep'])
 
+// The three learning tabs, always present. The Inspector (the pipeline "behind
+// the article" view, V1 Decision 3) is NOT a peer tab — it's a quiet secondary
+// link beside the row, rendered below, that only turns loud on a fidelity block.
 const READ_TABS: { view: ReadView; label: string }[] = [
   { view: 'source', label: 'Source' },
   { view: 'article', label: 'Article' },
@@ -82,7 +87,8 @@ export default function ReadPage() {
   const explicitView: ReadView | null =
     viewParam === 'source' ||
     viewParam === 'article' ||
-    viewParam === 'exercise'
+    viewParam === 'exercise' ||
+    viewParam === 'inspector'
       ? viewParam
       : null
   const initialMode = readingModeFromParam(params.get('mode'))
@@ -141,7 +147,7 @@ export default function ReadPage() {
   return (
     <div className='screen read-screen'>
       <Link href='/inbox' className='back-link'>
-        ← Back to Read
+        ← Back to Sources
       </Link>
 
       <div className='page-head'>
@@ -151,7 +157,7 @@ export default function ReadPage() {
 
       {itemQuery.isLoading && <p className='notice'>Loading…</p>}
       {itemQuery.isError && (
-        <p className='notice notice-error'>Could not load this source.</p>
+        <SourceUnavailable id={id} error={itemQuery.error} />
       )}
 
       {item && (
@@ -162,30 +168,63 @@ export default function ReadPage() {
             capturedAt={item.createdAt}
           />
 
-          <div
-            className='read-toggle'
-            role='tablist'
-            aria-label='Source, Article, or Exercise'
-          >
-            {READ_TABS.map((tab) => (
+          <div className='read-toggle-row'>
+            <div
+              className='read-toggle'
+              role='tablist'
+              aria-label='Source, Article, or Exercise'
+            >
+              {READ_TABS.map((tab) => (
+                <button
+                  key={tab.view}
+                  type='button'
+                  role='tab'
+                  aria-selected={effectiveView === tab.view}
+                  className={`read-toggle-opt${effectiveView === tab.view ? ' is-on' : ''}`}
+                  onClick={() => pickView(tab.view)}
+                >
+                  {tab.label}
+                  {/* Article + Exercise both ride on the generated article. */}
+                  {(tab.view === 'article' || tab.view === 'exercise') &&
+                    articleGenerating && (
+                      <span className='read-toggle-pending'>· generating</span>
+                    )}
+                </button>
+              ))}
+            </div>
+
+            {/* The Inspector is a quiet secondary entry, not a peer tab (V1
+                Decision 3) — it only gets loud when the fidelity gate held the
+                article back, where inspecting the source is the obvious fix. */}
+            {item.sourceId && (
               <button
-                key={tab.view}
                 type='button'
-                role='tab'
-                aria-selected={effectiveView === tab.view}
-                className={`read-toggle-opt${effectiveView === tab.view ? ' is-on' : ''}`}
-                onClick={() => pickView(tab.view)}
+                aria-pressed={effectiveView === 'inspector'}
+                className={`read-inspect${effectiveView === 'inspector' ? ' is-on' : ''}${
+                  articleStatus === 'BLOCKED' ? ' is-fidelity' : ''
+                }`}
+                onClick={() => pickView('inspector')}
               >
-                {tab.label}
-                {/* Article + Exercise both ride on the generated article. */}
-                {tab.view !== 'source' && articleGenerating && (
-                  <span className='read-toggle-pending'>· generating</span>
-                )}
+                {articleStatus === 'BLOCKED'
+                  ? '⚠ Held back by fidelity — Inspect →'
+                  : 'Inspect pipeline →'}
               </button>
-            ))}
+            )}
           </div>
 
-          {effectiveView === 'source' ? (
+          {effectiveView === 'inspector' ? (
+            // Inspector — the pipeline "behind the article" view (V1 Decision 3),
+            // folded in from the former standalone /transformer/[sourceId] route.
+            // The tab only appears when a source exists; the guard covers a stray
+            // `?view=inspector` deep-link on an item with no companion source.
+            item.sourceId ? (
+              <SourceInspector sourceId={item.sourceId} embedded />
+            ) : (
+              <p className='notice'>
+                No source pipeline to inspect for this item.
+              </p>
+            )
+          ) : effectiveView === 'source' ? (
             // Source view — the cleaned original, reused verbatim. Immediately
             // readable even while the Article is still being generated.
             <ArticleReader
@@ -215,6 +254,71 @@ export default function ReadPage() {
         </>
       )}
     </div>
+  )
+}
+
+/**
+ * What to show when the inbox-item lookup fails. The server only serves items
+ * still in the inbox (`status: INBOX`), so a 404 usually doesn't mean "gone" —
+ * it means the source *graduated*: earning promotes the item in place (INBOX →
+ * PERMANENT), so the same id now resolves as a concept. Rather than dead-end on
+ * a generic error, we check and route the learner forward to where the knowledge
+ * now lives. A non-404 (network/500) keeps the original transient message; a
+ * 404 with no matching concept means it was genuinely discarded or isn't theirs.
+ */
+function SourceUnavailable({ id, error }: { id: string; error: unknown }) {
+  const notFound = error instanceof ApiError && error.status === 404
+
+  const earnedQuery = useQuery({
+    queryKey: ['concept', id],
+    queryFn: () => api.getConcept(id),
+    enabled: notFound,
+    retry: false,
+  })
+
+  // Transient / server error — not a "this is gone" signal. Keep it honest.
+  if (!notFound) {
+    return <p className='notice notice-error'>Could not load this source.</p>
+  }
+
+  if (earnedQuery.isLoading) {
+    return <p className='notice'>Checking where this went…</p>
+  }
+
+  // The source was earned — it lives in the concept library now. Send them on.
+  if (earnedQuery.isSuccess) {
+    return (
+      <section className='panel panel-raised'>
+        <div className='section-label'>§ Earned</div>
+        <h2 className='panel-h'>You’ve already earned this source</h2>
+        <p className='block-sub'>
+          It’s left the reading queue and now lives in your concepts as{' '}
+          <strong>{earnedQuery.data.title}</strong>.
+        </p>
+        <p>
+          <Link href={`/concepts/${id}`} className='btn-primary'>
+            View concept <span className='ar'>→</span>
+          </Link>
+        </p>
+      </section>
+    )
+  }
+
+  // Genuinely no longer reachable: discarded, or it belongs to another workspace.
+  return (
+    <section className='panel'>
+      <p className='notice notice-error'>
+        This source isn’t in your inbox anymore.
+      </p>
+      <p className='block-sub'>
+        It may have been discarded, or it belongs to a different workspace.
+      </p>
+      <p>
+        <Link href='/inbox' className='btn-ghost'>
+          ← Back to Sources
+        </Link>
+      </p>
+    </section>
   )
 }
 

@@ -186,6 +186,19 @@ const MODE_STAGE: Record<ReadingMode, StageKey> = {
   review: 'keep',
 }
 
+// Which stage each section-level affordance belongs to. A scoped surface (the
+// /read Article tab mounts `['read']`) must not surface entry points into stages
+// it doesn't carry — otherwise the "pure reading" Article tab would offer
+// Predict/Rewrite/Extract buttons that jump into a recall/keep mode the stage
+// rail no longer shows (V1 spec §5.2 / Decision: Article ≠ learning tools).
+const AFFORDANCE_STAGE: Record<LearningAffordance, StageKey> = {
+  predict: 'recall',
+  rewrite: 'recall',
+  compare: 'recall',
+  extract_concepts: 'keep',
+  review: 'keep',
+}
+
 const MODE_LABEL: Record<ReadingMode, string> = {
   overview: 'Overview',
   deep: 'Deep reading',
@@ -692,6 +705,7 @@ export function DeepReadingMode({
               highlightKeyTerms={highlightKeyTerms}
               onAffordance={onAffordance}
               registerRef={registerRef}
+              affordanceAllowed={(a) => stageAllowed(AFFORDANCE_STAGE[a])}
             />
           ))}
         </div>

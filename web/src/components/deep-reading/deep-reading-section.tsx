@@ -39,6 +39,12 @@ export interface DeepReadingSectionProps {
   onAffordance: (affordance: LearningAffordance, ctx: SectionContext) => void
   /** Ref-setter so the hub can observe sections for active-section tracking. */
   registerRef: (sectionId: string, el: HTMLElement | null) => void
+  /**
+   * Gate which section affordances may render. A scoped surface (the /read
+   * Article tab) passes a stage filter so recall/keep entry points don't leak
+   * into a pure-reading tab. Defaults to allowing every affordance.
+   */
+  affordanceAllowed?: (affordance: LearningAffordance) => boolean
 }
 
 export function DeepReadingSection({
@@ -51,10 +57,16 @@ export function DeepReadingSection({
   highlightKeyTerms,
   onAffordance,
   registerRef,
+  affordanceAllowed,
 }: DeepReadingSectionProps) {
   const blocks = useMemo(() => orderedBlocks(section), [section])
   const keyTerms = useMemo(() => sectionKeyTerms(section), [section])
-  const affordances = useMemo(() => sectionAffordances(section), [section])
+  // Affordances the section can offer, narrowed to those the surface allows
+  // (a read-only Article tab filters out every recall/keep entry point).
+  const affordances = useMemo(() => {
+    const all = sectionAffordances(section)
+    return affordanceAllowed ? all.filter(affordanceAllowed) : all
+  }, [section, affordanceAllowed])
   const termStrings = useMemo(
     () => (highlightKeyTerms ? keyTerms.map((k) => k.term) : []),
     [highlightKeyTerms, keyTerms],

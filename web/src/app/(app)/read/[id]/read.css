@@ -85,3 +85,49 @@
   font-size: 0.62rem;
   color: var(--ochre);
 }
+
+/* The tab row holds the three learning tabs on the left and the quiet Inspector
+ * entry on the right — the pipeline view is reachable but never competes with
+ * the Source → Article → Exercise flow (V1 Decision 3). */
+.kbapp .read-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 0 0 1.5rem;
+}
+.kbapp .read-toggle-row .read-toggle {
+  margin: 0;
+}
+/* Quiet, secondary entry into the Inspector — a mono link, not a tab. */
+.kbapp .read-inspect {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.35rem 0.4rem;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: var(--tracking-mono, 0.08em);
+  text-transform: uppercase;
+  transition: color var(--dur-fast, 120ms) var(--ease, ease);
+}
+.kbapp .read-inspect:hover,
+.kbapp .read-inspect.is-on {
+  color: var(--ink);
+}
+.kbapp .read-inspect.is-on {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* When the fidelity gate held the article back, the Inspector entry stops being
+ * quiet — it becomes the obvious next move to resolve the source comparison. */
+.kbapp .read-inspect.is-fidelity {
+  color: var(--ochre);
+  font-weight: 600;
+}
+.kbapp .read-inspect.is-fidelity:hover {
+  color: var(--ink);
+}
