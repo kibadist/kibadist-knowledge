@@ -119,6 +119,57 @@ export interface DeepReadingModeProps {
 
 const EMPTY_HANDLERS: LearningModeHandlers = {}
 
+// DET-314 — the seven modes read as three named stages, the natural learning arc
+// (orient → retrieve → keep) rather than seven peer tabs. Each stage owns its
+// sub-modes; the stage rail shows where you are and what's already complete.
+type StageKey = 'read' | 'recall' | 'keep'
+
+const STAGES: {
+  key: StageKey
+  label: string
+  hint: string
+  modes: ReadingMode[]
+}[] = [
+  {
+    key: 'read',
+    label: 'Read',
+    hint: 'Orient, then read',
+    modes: ['overview', 'deep'],
+  },
+  {
+    key: 'recall',
+    label: 'Recall',
+    hint: 'Retrieve & repair',
+    modes: ['predict', 'rewrite', 'compare'],
+  },
+  {
+    key: 'keep',
+    label: 'Keep',
+    hint: 'Earn & schedule',
+    modes: ['extract', 'review'],
+  },
+]
+
+const MODE_STAGE: Record<ReadingMode, StageKey> = {
+  overview: 'read',
+  deep: 'read',
+  predict: 'recall',
+  rewrite: 'recall',
+  compare: 'recall',
+  extract: 'keep',
+  review: 'keep',
+}
+
+const MODE_LABEL: Record<ReadingMode, string> = {
+  overview: 'Overview',
+  deep: 'Deep reading',
+  predict: 'Predict',
+  rewrite: 'Rewrite',
+  compare: 'Compare',
+  extract: 'Extract concepts',
+  review: 'Spaced review',
+}
+
 export function DeepReadingMode({
   article,
   initialMode = 'deep',
@@ -376,6 +427,46 @@ export function DeepReadingMode({
   const sourceLabel = captureSourceLabel(provenance?.captureSource)
   const host = hostLabel(provenance?.sourceUrl)
 
+  // Which sub-modes are live (a caller can disable any built-in mode); a stage
+  // with no live sub-modes is hidden entirely.
+  const modeEnabled: Record<ReadingMode, boolean> = {
+    overview: true,
+    deep: true,
+    predict: enablePredict,
+    rewrite: enableRewrite,
+    compare: enableCompare,
+    extract: enableExtract,
+    review: enableReview,
+  }
+  const stageModes = (key: StageKey): ReadingMode[] =>
+    (STAGES.find((s) => s.key === key)?.modes ?? []).filter(
+      (m) => modeEnabled[m],
+    )
+  const activeStage = MODE_STAGE[mode]
+  const visibleStages = STAGES.filter((s) => stageModes(s.key).length > 0)
+
+  // Stage completion from the persisted event log (DET-314): Read once any
+  // section has been revealed; Recall once a rewrite was submitted AND compared;
+  // Keep once a concept candidate was approved. Survives reload — events are
+  // seeded from `initialEvents`.
+  const stageDone: Record<StageKey, boolean> = {
+    read: learning.events.some((e) => e.event_type === 'section_revealed'),
+    recall:
+      learning.events.some((e) => e.event_type === 'block_rewrite_submitted') &&
+      learning.events.some((e) => e.event_type === 'comparison_generated'),
+    keep: learning.events.some(
+      (e) => e.event_type === 'concept_candidate_approved',
+    ),
+  }
+
+  // Clicking a stage that isn't the current one drops you into its first live
+  // sub-mode (a guided "do this next"), reusing handleToggle's focus wiring.
+  const enterStage = (key: StageKey) => {
+    if (activeStage === key) return
+    const first = stageModes(key)[0]
+    if (first) handleToggle(first)
+  }
+
   return (
     <article className='kb-dr'>
       <div className='kb-dr-bar'>
@@ -383,80 +474,56 @@ export function DeepReadingMode({
           <span className='kb-dr-eyebrow-dot' aria-hidden='true' />
           Generated article · worked example
         </p>
-        <div className='kb-dr-modes' role='tablist' aria-label='Reading mode'>
-          <button
-            type='button'
-            role='tab'
-            aria-selected={mode === 'overview'}
-            className={`seg${mode === 'overview' ? ' on' : ''}`}
-            onClick={() => handleToggle('overview')}
-          >
-            Overview
-          </button>
-          <button
-            type='button'
-            role='tab'
-            aria-selected={mode === 'deep'}
-            className={`seg${mode === 'deep' ? ' on' : ''}`}
-            onClick={() => handleToggle('deep')}
-          >
-            Deep reading
-          </button>
-          {enablePredict && (
+      </div>
+
+      {/* The learning arc as three named stages with a progress rail (DET-314):
+          Read → Recall → Keep, each a group of the original modes. The rail
+          shows where you are and which stages you've completed; the row beneath
+          it exposes the active stage's sub-modes so all seven stay reachable. */}
+      <div className='kb-dr-stagebar'>
+        <div className='kb-dr-stages' role='tablist' aria-label='Learning stage'>
+          {visibleStages.map((stage, i) => {
+            const isActive = activeStage === stage.key
+            const done = stageDone[stage.key]
+            return (
+              <button
+                key={stage.key}
+                type='button'
+                role='tab'
+                aria-selected={isActive}
+                className={`kb-dr-stage${isActive ? ' is-active' : ''}${
+                  done ? ' is-done' : ''
+                }`}
+                onClick={() => enterStage(stage.key)}
+              >
+                <span className='kb-dr-stage-marker' aria-hidden='true'>
+                  {done ? '✓' : i + 1}
+                </span>
+                <span className='kb-dr-stage-text'>
+                  <span className='kb-dr-stage-label'>{stage.label}</span>
+                  <span className='kb-dr-stage-hint'>{stage.hint}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <div
+          className='kb-dr-submodes'
+          role='tablist'
+          aria-label={`${activeStage} steps`}
+        >
+          {stageModes(activeStage).map((m) => (
             <button
+              key={m}
               type='button'
               role='tab'
-              aria-selected={mode === 'predict'}
-              className={`seg${mode === 'predict' ? ' on' : ''}`}
-              onClick={() => handleToggle('predict')}
+              aria-selected={mode === m}
+              className={`seg${mode === m ? ' on' : ''}`}
+              onClick={() => handleToggle(m)}
             >
-              Predict
+              {MODE_LABEL[m]}
             </button>
-          )}
-          {enableRewrite && (
-            <button
-              type='button'
-              role='tab'
-              aria-selected={mode === 'rewrite'}
-              className={`seg${mode === 'rewrite' ? ' on' : ''}`}
-              onClick={() => handleToggle('rewrite')}
-            >
-              Rewrite
-            </button>
-          )}
-          {enableCompare && (
-            <button
-              type='button'
-              role='tab'
-              aria-selected={mode === 'compare'}
-              className={`seg${mode === 'compare' ? ' on' : ''}`}
-              onClick={() => handleToggle('compare')}
-            >
-              Compare
-            </button>
-          )}
-          {enableExtract && (
-            <button
-              type='button'
-              role='tab'
-              aria-selected={mode === 'extract'}
-              className={`seg${mode === 'extract' ? ' on' : ''}`}
-              onClick={() => handleToggle('extract')}
-            >
-              Extract concepts
-            </button>
-          )}
-          {enableReview && (
-            <button
-              type='button'
-              role='tab'
-              aria-selected={mode === 'review'}
-              className={`seg${mode === 'review' ? ' on' : ''}`}
-              onClick={() => handleToggle('review')}
-            >
-              Spaced review
-            </button>
-          )}
+          ))}
         </div>
       </div>
 
