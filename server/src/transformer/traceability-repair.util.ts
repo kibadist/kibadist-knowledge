@@ -175,6 +175,99 @@ function repairPlanSection(
   return out
 }
 
+// --- Article generator -----------------------------------------------------
+
+/**
+ * Drop untraceable references from the generated article (DET-271 / DET-319). The
+ * generator's `assertKnownIds` fails the WHOLE article on any cited id the source
+ * can't back — so, like the structure/plan stages, a single hallucinated cuid
+ * sinks an otherwise faithful article. This prunes every `sourceBlockIds` the
+ * article carries (subtitle, abstract paragraphs, sections + their heading ids +
+ * typed blocks + nested subsections, keyTerms, sourceExamples, caveats), dropping
+ * invented ids and dropping any entry/block/section left with NO valid reference
+ * (its only provenance was invented, so it was never trustworthy). Composed AFTER
+ * `repairArticleLlmV2` (which owns INTERNAL anchor ids); this one prunes SOURCE
+ * provenance, which may only be deleted, never fabricated. Pure + deterministic.
+ *
+ * Note: blocks arrays may legitimately be empty (container sections), so dropping
+ * every block in a section is fine; a section is dropped only when its OWN cited
+ * ids are all invented. If a `.min(1)` array empties (e.g. all keyTerms invented)
+ * zod still fails downstream — correctly, nothing traceable is left there.
+ */
+export function repairArticleTraceability(
+  parsed: unknown,
+  known: ReadonlySet<string>,
+): unknown {
+  if (!isRecord(parsed)) return parsed
+  const out: Record<string, unknown> = { ...parsed }
+
+  // Optional subtitle → drop entirely when no cited block survives.
+  if (isRecord(out.subtitle)) {
+    const ids = knownIds(out.subtitle.sourceBlockIds, known)
+    if (ids.length === 0) delete out.subtitle
+    else out.subtitle = { ...out.subtitle, sourceBlockIds: ids }
+  }
+
+  out.abstract = repairTraceableEntries(out.abstract, known)
+  out.keyTerms = repairTraceableEntries(out.keyTerms, known)
+  out.sourceExamples = repairTraceableEntries(out.sourceExamples, known)
+  out.caveats = repairTraceableEntries(out.caveats, known)
+
+  if (Array.isArray(out.sections)) {
+    out.sections = out.sections
+      .map((s) => repairArticleSection(s, known))
+      .filter((s) => s !== null)
+  }
+
+  return out
+}
+
+/** Prune an article section's cited ids + its blocks/subsections; null when the
+ *  section's own provenance is entirely invented. */
+function repairArticleSection(
+  section: unknown,
+  known: ReadonlySet<string>,
+): unknown {
+  // Non-objects are real breakage — hand them to zod rather than silently drop.
+  if (!isRecord(section)) return section
+  const ids = knownIds(section.sourceBlockIds, known)
+  if (ids.length === 0) return null
+  const out: Record<string, unknown> = { ...section, sourceBlockIds: ids }
+
+  if (Array.isArray(section.headingSourceBlockIds)) {
+    const heading = knownIds(section.headingSourceBlockIds, known)
+    if (heading.length > 0) out.headingSourceBlockIds = heading
+    else delete out.headingSourceBlockIds
+  }
+
+  // Blocks may legitimately be empty; drop only the ones left unsourced.
+  if (Array.isArray(section.blocks)) {
+    out.blocks = section.blocks
+      .map((b) => repairArticleBlock(b, known))
+      .filter((b) => b !== null)
+  }
+
+  if (Array.isArray(section.subsections)) {
+    out.subsections = section.subsections
+      .map((sub) => repairArticleSection(sub, known))
+      .filter((sub) => sub !== null)
+  }
+
+  return out
+}
+
+/** Prune a typed block's cited ids; null when none survive (every block must cite
+ *  at least one real source block). */
+function repairArticleBlock(
+  block: unknown,
+  known: ReadonlySet<string>,
+): unknown {
+  if (!isRecord(block)) return block
+  const ids = knownIds(block.sourceBlockIds, known)
+  if (ids.length === 0) return null
+  return { ...block, sourceBlockIds: ids }
+}
+
 /** Drop a reorder audit anchored on an invented block; prune its cluster ids. */
 function repairReordering(audit: unknown, known: ReadonlySet<string>): unknown {
   if (!isRecord(audit)) return audit

@@ -1,4 +1,5 @@
 import {
+  repairArticleTraceability,
   repairReshapingPlan,
   repairStructureModel,
 } from './traceability-repair.util'
@@ -230,5 +231,147 @@ describe('repairReshapingPlan', () => {
       ),
     )
     expect(out.removedBlocks).toEqual([{ blockId: 'ghost', reason: 'noise' }])
+  })
+})
+
+describe('repairArticleTraceability', () => {
+  const base = {
+    title: { text: 'T', source: 'original' },
+    abstract: [{ text: 'a', sourceBlockIds: ['b1'] }],
+    sections: [],
+    keyTerms: [],
+    sourceExamples: [],
+    caveats: [],
+  }
+
+  it('prunes an invented id from a block, keeping the real ones', () => {
+    const out = asRec(
+      repairArticleTraceability(
+        {
+          ...base,
+          sections: [
+            {
+              id: 's1',
+              heading: 'H',
+              sourceBlockIds: ['b1'],
+              blocks: [
+                {
+                  id: 'p1',
+                  type: 'paragraph',
+                  text: 'x',
+                  sourceBlockIds: ['b1', 'ghost', 'b2'],
+                },
+              ],
+            },
+          ],
+        },
+        known,
+      ),
+    )
+    const block = (asRec((out.sections as Rec[])[0]).blocks as Rec[])[0]
+    expect(block.sourceBlockIds).toEqual(['b1', 'b2'])
+  })
+
+  it('drops a block left with no valid source, keeping the section', () => {
+    const out = asRec(
+      repairArticleTraceability(
+        {
+          ...base,
+          sections: [
+            {
+              id: 's1',
+              heading: 'H',
+              sourceBlockIds: ['b1'],
+              blocks: [
+                {
+                  id: 'p1',
+                  type: 'paragraph',
+                  text: 'x',
+                  sourceBlockIds: ['ghost'],
+                },
+                {
+                  id: 'p2',
+                  type: 'paragraph',
+                  text: 'y',
+                  sourceBlockIds: ['b2'],
+                },
+              ],
+            },
+          ],
+        },
+        known,
+      ),
+    )
+    const section = asRec((out.sections as Rec[])[0])
+    expect((section.blocks as Rec[]).map((b) => b.id)).toEqual(['p2'])
+  })
+
+  it('drops a section whose own provenance was entirely invented', () => {
+    const out = asRec(
+      repairArticleTraceability(
+        {
+          ...base,
+          sections: [
+            { id: 's1', heading: 'H', sourceBlockIds: ['ghost'], blocks: [] },
+            { id: 's2', heading: 'K', sourceBlockIds: ['b1'], blocks: [] },
+          ],
+        },
+        known,
+      ),
+    )
+    expect((out.sections as Rec[]).map((s) => s.id)).toEqual(['s2'])
+  })
+
+  it('prunes nested subsections + heading ids, and drops an unsourced subtitle', () => {
+    const out = asRec(
+      repairArticleTraceability(
+        {
+          ...base,
+          subtitle: { text: 'sub', sourceBlockIds: ['ghost'] },
+          sections: [
+            {
+              id: 's1',
+              heading: 'H',
+              sourceBlockIds: ['b1'],
+              headingSourceBlockIds: ['b1', 'ghost'],
+              blocks: [],
+              subsections: [
+                {
+                  id: 's1a',
+                  heading: 'A',
+                  sourceBlockIds: ['ghost'],
+                  blocks: [],
+                },
+                { id: 's1b', heading: 'B', sourceBlockIds: ['b2'], blocks: [] },
+              ],
+            },
+          ],
+        },
+        known,
+      ),
+    )
+    expect(out.subtitle).toBeUndefined()
+    const section = asRec((out.sections as Rec[])[0])
+    expect(section.headingSourceBlockIds).toEqual(['b1'])
+    expect((section.subsections as Rec[]).map((s) => s.id)).toEqual(['s1b'])
+  })
+
+  it('prunes top-level keyTerms / sourceExamples / caveats and passes through non-objects', () => {
+    const out = asRec(
+      repairArticleTraceability(
+        {
+          ...base,
+          keyTerms: [
+            { term: 't', sourceBlockIds: ['b1', 'ghost'] },
+            { term: 'u', sourceBlockIds: ['ghost'] },
+          ],
+        },
+        known,
+      ),
+    )
+    const terms = out.keyTerms as Rec[]
+    expect(terms).toHaveLength(1)
+    expect(terms[0].sourceBlockIds).toEqual(['b1'])
+    expect(repairArticleTraceability(null, known)).toBeNull()
   })
 })

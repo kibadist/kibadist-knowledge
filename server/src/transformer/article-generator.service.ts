@@ -7,6 +7,7 @@ import { completeJson } from './llm-json.util'
 import type { ArticleLlmV2, ReshapingPlan } from './schemas'
 import { ArticleLlmV2Schema } from './schemas'
 import type { ClassifiedBlockInput } from './structure-model.service'
+import { repairArticleTraceability } from './traceability-repair.util'
 import type {
   ArticleJsonV2,
   ArticleSectionV2,
@@ -21,9 +22,13 @@ const PREVIEW_CHARS = 120
  * Article-generator service (DET-253 → v2 typed blocks, DET-271). The LLM emits
  * the v2 article MINUS the code-owned fields via `completeJson(ArticleLlmV2Schema)`,
  * then CODE post-processing:
- *  - every cited block id (paragraphs, lists, quotes, tables, code, callouts,
- *    pull-quotes, sections + subsections, abstract, keyTerms, examples, caveats,
- *    subtitle) must exist; an unknown id throws → article FAILED.
+ *  - traceability repair (DET-319) prunes hallucinated `sourceBlockIds` BEFORE
+ *    validation — invented ids are dropped, and a block/section/entry left with
+ *    no real source is dropped — so one invented cuid no longer FAILs the whole
+ *    article. `assertKnownIds` then walks every cited id (paragraphs, lists,
+ *    quotes, tables, code, callouts, pull-quotes, sections + subsections,
+ *    abstract, keyTerms, examples, caveats, subtitle) as the final loud guard
+ *    for anything the prune missed → article FAILED.
  *  - `originalStructure` is re-derived deterministically from the blocks
  *    (blockId, blockType, ≤120-char preview) — never trusted from the model.
  *  - `schemaVersion: 'v2'` is stamped in code after validation (not prompt-trusted).
@@ -63,10 +68,14 @@ export class ArticleGeneratorService {
       system,
       prompt,
       schema: ArticleLlmV2Schema,
-      // Absorb benign shape drift (missing anchor ids, a container section with no
-      // blocks, an empty subtitle) before validating, so one model slip doesn't
-      // FAIL the whole article (DET-251 fails loudly only on real breakage).
-      repair: repairArticleLlmV2,
+      // Two pre-validation repairs (pure, run on every attempt): first absorb
+      // benign SHAPE drift (missing internal anchor ids, a container section with
+      // no blocks, an empty subtitle); then prune hallucinated SOURCE provenance
+      // (invented sourceBlockIds / blocks/sections left unsourced) so one model
+      // slip doesn't FAIL the whole article via assertKnownIds. assertKnownIds
+      // below still guards loudly against anything the prune missed.
+      repair: (parsed) =>
+        repairArticleTraceability(repairArticleLlmV2(parsed), known),
       // Tables/code can be large; give the model headroom over the v1 budget.
       maxTokens: 10000,
     })

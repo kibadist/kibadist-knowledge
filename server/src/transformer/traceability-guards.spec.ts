@@ -141,11 +141,12 @@ describe('ArticleGeneratorService traceability guard', () => {
     originalStructure: [],
   })
 
-  it('throws on a schema-valid article citing an unknown block id', async () => {
+  it('drops a block citing only an unknown id instead of failing (DET-319)', async () => {
     const service = new ArticleGeneratorService(stubAi(articleWith(['ghost'])))
-    await expect(service.generate(plan, blocks)).rejects.toThrow(
-      /unknown block ids/i,
-    )
+    // Traceability repair prunes the untraceable block before assertKnownIds; the
+    // section survives (its own citation is real) with no blocks left.
+    const article = await service.generate(plan, blocks)
+    expect(article.sections[0].blocks).toEqual([])
   })
 
   it('re-derives originalStructure from real blocks, ignoring the model copy', async () => {

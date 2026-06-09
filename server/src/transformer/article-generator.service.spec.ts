@@ -212,17 +212,19 @@ describe('ArticleGeneratorService', () => {
     expect(types).toEqual(['paragraph', 'table', 'list'])
   })
 
-  it('fails loudly when a TABLE block references an unknown source block id', async () => {
+  it('prunes a block whose only source id is invented, rather than FAILing (DET-319)', async () => {
     const bad = validLlmArticle()
-    bad.sections[0].blocks[1].sourceBlockIds = ['ghost']
+    bad.sections[0].blocks[1].sourceBlockIds = ['ghost'] // the TABLE block
     const service = makeService(bad)
 
-    await expect(service.generate(plan, blocks)).rejects.toThrow(
-      /unknown block ids: ghost/i,
-    )
+    // Traceability repair drops the untraceable block before assertKnownIds, so
+    // the article still generates with its traceable blocks intact.
+    const article = await service.generate(plan, blocks)
+    const types = article.sections[0].blocks.map((b) => b.type)
+    expect(types).toEqual(['paragraph', 'list'])
   })
 
-  it('walks nested subsections when checking known ids', async () => {
+  it('prunes an invented id from a nested subsection block, keeping the subsection (DET-319)', async () => {
     const bad = validLlmArticle()
     // @ts-expect-error — test injects a subsection with an unknown id.
     bad.sections[0].subsections = [
@@ -245,9 +247,10 @@ describe('ArticleGeneratorService', () => {
     ]
     const service = makeService(bad)
 
-    await expect(service.generate(plan, blocks)).rejects.toThrow(
-      /unknown block ids: nope/i,
-    )
+    // The repair walks subsections: the subsection's own id (b2) is valid so it
+    // survives, but its untraceable block is dropped — no loud FAIL.
+    const article = await service.generate(plan, blocks)
+    expect(article.sections[0].subsections?.[0].blocks).toEqual([])
   })
 
   it('stamps reorderings from the plan and ignores any the LLM injected (DET-275)', async () => {
