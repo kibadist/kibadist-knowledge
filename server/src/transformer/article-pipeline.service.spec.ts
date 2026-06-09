@@ -1,5 +1,7 @@
 import { TransformedArticleStatus } from '@kibadist/prisma'
 
+import { AiService } from '../ai/ai.service'
+import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
@@ -127,9 +129,33 @@ function makeServices(overrides: {
     check: jest.fn(async () => okReport),
     ...overrides.fidelity,
   } as unknown as FidelityCheckerService
-  const illustrations = {} as IllustrationPlannerService
+  const illustrations = {
+    plan: jest.fn(async () => ({ suggestions: [] })),
+  } as unknown as IllustrationPlannerService
+  const enrichment = {
+    build: jest.fn(async () => ({ keyFacts: [] })),
+  } as unknown as ArticleEnrichmentService
   const learning = {} as LearningLayerService
-  return { structure, plan, generate, fidelity, illustrations, learning }
+  const ai = {
+    image: jest.fn(async () => ({
+      base64: '',
+      mediaType: 'image/png',
+      width: 1,
+      height: 1,
+      model: 'stub',
+    })),
+    providerName: 'stub',
+  } as unknown as AiService
+  return {
+    structure,
+    plan,
+    generate,
+    fidelity,
+    illustrations,
+    enrichment,
+    learning,
+    ai,
+  }
 }
 
 describe('ArticlePipelineService.run', () => {
@@ -143,7 +169,9 @@ describe('ArticlePipelineService.run', () => {
       s.generate,
       s.fidelity,
       s.illustrations,
+      s.enrichment,
       s.learning,
+      s.ai,
     )
 
     await pipeline.run('a1', 'src1', 1)
@@ -204,7 +232,9 @@ describe('ArticlePipelineService.run', () => {
       s.generate,
       s.fidelity,
       s.illustrations,
+      s.enrichment,
       s.learning,
+      s.ai,
     )
 
     await pipeline.run('a1', 'src1', 1)
@@ -229,7 +259,9 @@ describe('ArticlePipelineService.run', () => {
       s.generate,
       s.fidelity,
       s.illustrations,
+      s.enrichment,
       s.learning,
+      s.ai,
     )
 
     await pipeline.run('a1', 'src1', 1)

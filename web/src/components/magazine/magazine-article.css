@@ -202,6 +202,40 @@
   color: var(--accent);
 }
 
+/* ------------------------------------------------------------------- LEDE */
+/* Faithful, source-grounded abstract lifted out of the stream and set full-
+   width under the header. NOT inside the two-column .kb-mag-stream. */
+.kb-mag-lede {
+  font-family: var(--font-body), Georgia, serif;
+  font-style: italic;
+  font-size: 22px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  max-width: 64ch;
+  margin: 22px 0 0;
+  text-wrap: pretty;
+}
+.kb-mag-lede p {
+  margin: 0 0 0.6em;
+}
+
+/* AI honesty marker — a small mono chip in the informational indigo, mirroring
+   the plate .aichip. Used wherever AI world-knowledge (not source-grounded)
+   appears: pronunciation, etymology, the infobox "Key facts" header. */
+.kb-mag-aimark {
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--indigo);
+  border: 1px solid color-mix(in srgb, var(--indigo) 40%, transparent);
+  padding: 2px 6px;
+  border-radius: 2px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 8px;
+}
+
 /* ----------------------------------------------------------------- LAYOUT */
 .kb-mag-layout {
   display: grid;

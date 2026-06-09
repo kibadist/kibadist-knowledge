@@ -24,6 +24,7 @@ import type { CreateUrlSourceDto } from './dto/create-url-source.dto'
 import { ARTICLE_IN_FLIGHT, PipelineService } from './pipeline.service'
 import { buildReadingAids } from './reading-aids.util'
 import type {
+  ArticleEnrichment,
   IllustrationPlan,
   IllustrationSuggestion,
   LearningConcept,
@@ -116,6 +117,8 @@ export interface TransformerArticleDetail {
   coverageReport: CoverageReport | null
   illustrationPlan: IllustrationPlan | null
   learningLayer: LearningLayer | null
+  /** AI-added encyclopedia metadata (DET-319) — NOT source-grounded; UI labels it. */
+  enrichment: ArticleEnrichment | null
   error: string | null
   createdAt: Date
   updatedAt: Date
@@ -440,6 +443,7 @@ export class TransformerService {
       coverageReport: article.coverageReport as CoverageReport | null,
       illustrationPlan: article.illustrationPlan as IllustrationPlan | null,
       learningLayer: article.learningLayer as LearningLayer | null,
+      enrichment: article.enrichment as ArticleEnrichment | null,
       error: article.error,
       createdAt: article.createdAt,
       updatedAt: article.updatedAt,

@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common'
 import { AiModule } from '../ai/ai.module'
 import { ConceptStateModule } from '../concept-state/concept-state.module'
 import { WorkspacesModule } from '../workspaces/workspaces.module'
+import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { BlockClassifierService } from './block-classifier.service'
@@ -36,6 +37,7 @@ import { TransformerService } from './transformer.service'
     ArticleGeneratorService,
     FidelityCheckerService,
     IllustrationPlannerService,
+    ArticleEnrichmentService,
     LearningLayerService,
     ArticlePipelineService,
   ],

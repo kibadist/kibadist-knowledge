@@ -3,7 +3,12 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 
 import { InlineRuns } from '@/components/reader/inline-runs'
-import { api, type CaptureSource, type IllustrationSuggestion } from '@/lib/api'
+import {
+  type ArticleEnrichment,
+  api,
+  type CaptureSource,
+  type IllustrationSuggestion,
+} from '@/lib/api'
 import {
   type ArticleBlockV2,
   type ArticleSectionV2,
@@ -35,6 +40,9 @@ export interface MagazineArticleProps {
   articleId: string
   /** Illustration suggestions; only approved + rendered ones become plates. */
   illustrations?: IllustrationSuggestion[]
+  /** AI world-knowledge extras (IPA, etymology, key facts). NOT source-grounded —
+   *  every surfaced field carries a visible "not from your source" marker. */
+  enrichment?: ArticleEnrichment | null
   provenance?: {
     sourceUrl?: string | null
     captureSource?: CaptureSource | null
@@ -55,9 +63,22 @@ export function MagazineArticle({
   article,
   articleId,
   illustrations = [],
+  enrichment,
   provenance,
 }: MagazineArticleProps) {
-  const sections = useMemo(() => orderedSections(article), [article])
+  const allSections = useMemo(() => orderedSections(article), [article])
+
+  // The adapter surfaces the source abstract as the first section (its
+  // section_id ends with `-abstract`). We lift it out as a faithful, source-
+  // grounded lede and exclude it from the two-column stream, the TOC, and the
+  // section count — `sections` is everything that flows in the stream.
+  const { ledeSection, sections } = useMemo(() => {
+    const first = allSections[0]
+    if (first?.section_id?.endsWith('-abstract')) {
+      return { ledeSection: first, sections: allSections.slice(1) }
+    }
+    return { ledeSection: null, sections: allSections }
+  }, [allSections])
 
   // Only rendered illustrations become plates (the "use existing" decision —
   // no on-demand generation here). Group by the section their anchor blocks
@@ -127,8 +148,26 @@ export function MagazineArticle({
       <ReadingProgress />
 
       <header className='kb-mag-head'>
-        <div className='kb-mag-kicker'>Kibadist Compendium · Entry</div>
+        <div className='kb-mag-kicker'>
+          {enrichment?.classification ?? 'Kibadist Compendium · Entry'}
+        </div>
         <h1 className='kb-mag-term'>{article.title}</h1>
+        {(enrichment?.pronunciation || enrichment?.partOfSpeech) && (
+          <div className='kb-mag-pronounce'>
+            {enrichment.pronunciation && (
+              <span className='ipa'>{enrichment.pronunciation}</span>
+            )}
+            {enrichment.partOfSpeech && (
+              <span className='pos'>{enrichment.partOfSpeech}</span>
+            )}
+            <AiMark />
+          </div>
+        )}
+        {enrichment?.etymology && (
+          <p className='kb-mag-etym'>
+            {enrichment.etymology} <AiMark />
+          </p>
+        )}
         <div className='kb-mag-byline'>
           <span className='author'>The Compendium</span>
           {host && (
@@ -158,6 +197,21 @@ export function MagazineArticle({
         <span>{stats.readMin} min read</span>
         <span className='grow'>Source-grounded · earn what you keep</span>
       </div>
+
+      {ledeSection && (
+        <div className='kb-mag-lede'>
+          {orderedBlocks(ledeSection)
+            .filter(
+              (b): b is Extract<ArticleBlockV2, { type: 'paragraph' }> =>
+                b.type === 'paragraph',
+            )
+            .map((b) => (
+              <p key={b.block_id} id={b.block_id}>
+                <InlineRuns runs={b.content.runs} />
+              </p>
+            ))}
+        </div>
+      )}
 
       <div className='kb-mag-layout'>
         <div className='kb-mag-stream'>
@@ -216,6 +270,22 @@ export function MagazineArticle({
               {host && <InfoRow label='Origin' value={host} />}
               <InfoRow label='Compiled' value={date} />
             </dl>
+            {enrichment?.keyFacts && enrichment.keyFacts.length > 0 && (
+              <>
+                <div className='ib-sec'>
+                  Key facts <AiMark short />
+                </div>
+                <dl>
+                  {enrichment.keyFacts.map((f) => (
+                    <InfoRow
+                      key={`${f.label}:${f.value}`}
+                      label={f.label}
+                      value={f.value}
+                    />
+                  ))}
+                </dl>
+              </>
+            )}
           </div>
 
           {sections.length > 1 && (
@@ -261,6 +331,17 @@ export function MagazineArticle({
         </div>
       </div>
     </article>
+  )
+}
+
+/** The honesty marker for AI world-knowledge that is NOT grounded in the user's
+ *  source — a hard product requirement wherever enrichment appears. `short` is
+ *  the compact "✦ AI" used where space is tight (e.g. the infobox header). */
+function AiMark({ short }: { short?: boolean }) {
+  return (
+    <span className='kb-mag-aimark'>
+      {short ? '✦ AI' : '✦ AI · not from your source'}
+    </span>
   )
 }
 

@@ -668,6 +668,35 @@ export const IllustrationPlanLlmSchema = z.object({
   suggestions: z.array(IllustrationSuggestionLlmSchema),
 })
 
+// --- Article enrichment (AI augmentation lane, DET-319) --------------------
+//
+// The ONE deliberately NON-source-grounded artifact. Every other stage may only
+// reshape the source; enrichment is the model's own ENCYCLOPEDIC WORLD KNOWLEDGE
+// about the article's topic (pronunciation, etymology, classification, infobox
+// key-facts). It lives in its own `enrichment` column, never in `articleJson`,
+// and the UI labels it "✦ AI · not from your source". Every field is optional —
+// the model omits anything it isn't confident about and returns empty when the
+// article isn't about a discrete encyclopedic subject, to bound hallucination.
+const enrichmentKeyFact = z.object({
+  label: z.string().min(1),
+  value: z.string().min(1),
+})
+
+export const ArticleEnrichmentSchema = z.object({
+  /** IPA pronunciation of the headword, e.g. "/ˈhʌn.i/". */
+  pronunciation: z.string().min(1).optional(),
+  /** Part of speech for a single-term topic, e.g. "noun". */
+  partOfSpeech: z.string().min(1).optional(),
+  /** 1–2 sentence, well-established etymology. */
+  etymology: z.string().min(1).optional(),
+  /** A short domain category, e.g. "Concept · Computer science". */
+  classification: z.string().min(1).optional(),
+  /** Encyclopedia infobox facts (label/value); the service slices to a few. */
+  keyFacts: z.array(enrichmentKeyFact).default([]),
+})
+
+export type ArticleEnrichment = z.infer<typeof ArticleEnrichmentSchema>
+
 // --- Learning layer (step 11, DET-258) -------------------------------------
 
 const validationStatus = z.enum(['pending', 'validated', 'dismissed'])

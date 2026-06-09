@@ -1344,6 +1344,18 @@ export interface IllustrationPlan {
   suggestions: IllustrationSuggestion[]
 }
 
+// AI-generated WORLD KNOWLEDGE enrichment for the Compendium render — encyclopedia
+// extras (IPA, part of speech, etymology, classification, key facts) the article
+// schema doesn't model. NOT grounded in the user's source: the web layer renders
+// every field with a visible "✦ AI · not from your source" marker. All optional.
+export interface ArticleEnrichment {
+  pronunciation?: string
+  partOfSpeech?: string
+  etymology?: string
+  classification?: string
+  keyFacts?: { label: string; value: string }[]
+}
+
 // AI-assisted learning layer (DET-258). Stored ONLY here, never in articleJson.
 export type LearningValidationStatus = 'pending' | 'validated' | 'dismissed'
 
@@ -1401,6 +1413,9 @@ export interface TransformedArticle {
   coverageReport: CoverageReport | null
   illustrationPlan: IllustrationPlan | null
   learningLayer: LearningLayer | null
+  // AI world-knowledge extras for the Compendium render (rendered with a visible
+  // "not from your source" marker). Null on articles generated before this lane.
+  enrichment: ArticleEnrichment | null
   error: string | null
 }
 

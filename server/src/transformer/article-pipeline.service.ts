@@ -4,7 +4,9 @@ import {
   TransformerBlockClass,
 } from '@kibadist/prisma'
 import { Injectable, Logger } from '@nestjs/common'
+import { AiService } from '../ai/ai.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { placeCallouts } from './callout-placement.util'
 import { buildCoverageReport, type CoverageBlock } from './coverage.util'
@@ -14,7 +16,9 @@ import { LearningLayerService } from './learning-layer.service'
 import { buildReadingAids } from './reading-aids.util'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import type {
+  ArticleEnrichment,
   IllustrationPlan,
+  IllustrationSuggestion,
   LearningConceptCandidate,
   LearningLayer,
   ReshapingPlan,
@@ -22,6 +26,7 @@ import type {
 } from './schemas'
 import type { ClassifiedBlockInput } from './structure-model.service'
 import { StructureModelService } from './structure-model.service'
+import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
   ArticleJsonV2,
   CoverageReport,
@@ -31,6 +36,10 @@ import type {
 
 /** A loaded source block with everything the M2/M3 services need. */
 type LoadedBlock = ClassifiedBlockInput & { uncertain: boolean }
+
+/** Cap auto-rendered illustrations per article to bound gpt-image-1 cost/latency
+ *  (DET-319). High-fidelity-risk suggestions are never auto-rendered. */
+const MAX_AUTO_ILLUSTRATIONS = 3
 
 /**
  * Article pipeline (DET-251…255, steps 6–9). Given a READY source it creates a
@@ -59,7 +68,9 @@ export class ArticlePipelineService {
     private readonly generator: ArticleGeneratorService,
     private readonly fidelity: FidelityCheckerService,
     private readonly illustrations: IllustrationPlannerService,
+    private readonly enrichment: ArticleEnrichmentService,
     private readonly learning: LearningLayerService,
+    private readonly ai: AiService,
   ) {}
 
   /**
@@ -171,10 +182,32 @@ export class ArticlePipelineService {
     await this.setStatus(articleId, TransformedArticleStatus.CHECKING)
     const report = await this.fidelity.check(article, structureModel, blocks)
     const coverage = this.buildCoverage(article, blocks, plan)
+
+    // --- 10. AI extras (DET-319): enrichment + auto-rendered illustrations ---
+    // Non-source-grounded augmentations in their own lanes (never in articleJson).
+    // Each is BEST-EFFORT — a failure must never FAIL the article — and both run
+    // BEFORE the terminal status so the polling frontend (which stops at
+    // FINAL/BLOCKED) receives them in one shot instead of missing late extras.
+    const enrichment = await this.tryEnrich(articleId, article)
+    const illustrationPlan = await this.tryIllustrate(
+      articleId,
+      article,
+      blocks,
+    )
+
     await this.persist(articleId, {
       fidelityReport: report as unknown as Prisma.InputJsonValue,
       fidelityScore: Math.round(report.fidelityScore),
       coverageReport: coverage as unknown as Prisma.InputJsonValue,
+      ...(enrichment
+        ? { enrichment: enrichment as unknown as Prisma.InputJsonValue }
+        : {}),
+      ...(illustrationPlan
+        ? {
+            illustrationPlan:
+              illustrationPlan as unknown as Prisma.InputJsonValue,
+          }
+        : {}),
       status: report.approved
         ? TransformedArticleStatus.FINAL
         : TransformedArticleStatus.BLOCKED,
@@ -196,6 +229,127 @@ export class ArticlePipelineService {
       illustrationPlan: plan as unknown as Prisma.InputJsonValue,
     })
     return plan
+  }
+
+  // --- AI extras, best-effort (DET-319) -------------------------------------
+
+  /** Build enrichment; never throws — a failure logs and yields null so the
+   *  article still finalizes without the AI headword metadata. */
+  private async tryEnrich(
+    articleId: string,
+    article: ArticleJsonV2,
+  ): Promise<ArticleEnrichment | null> {
+    try {
+      return await this.enrichment.build(article)
+    } catch (error) {
+      this.logger.warn(
+        `Enrichment failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
+  }
+
+  /** Plan illustrations and auto-render the eligible ones; never throws — a
+   *  planning failure yields null, a render failure degrades a single plate. */
+  private async tryIllustrate(
+    articleId: string,
+    article: ArticleJsonV2,
+    blocks: LoadedBlock[],
+  ): Promise<IllustrationPlan | null> {
+    try {
+      const plan = await this.illustrations.plan(article, blocks)
+      const suggestions = await this.autoRenderEligible(
+        articleId,
+        plan.suggestions,
+      )
+      return { suggestions }
+    } catch (error) {
+      this.logger.warn(
+        `Illustration planning failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
+  }
+
+  /**
+   * Auto-render the eligible suggestions into images. Eligible = NOT high
+   * fidelityRisk (the planner already forces source_based_diagram to high unless
+   * every cited block is METHOD), capped at MAX_AUTO_ILLUSTRATIONS. A rendered
+   * suggestion is marked `approved` with its `image` metadata; the rest stay
+   * `pending` (the manual approve→render path is unchanged). One render failure
+   * leaves that suggestion pending and continues.
+   */
+  private async autoRenderEligible(
+    articleId: string,
+    suggestions: IllustrationSuggestion[],
+  ): Promise<IllustrationSuggestion[]> {
+    const out: IllustrationSuggestion[] = []
+    let rendered = 0
+    for (const s of suggestions) {
+      if (rendered >= MAX_AUTO_ILLUSTRATIONS || s.fidelityRisk === 'high') {
+        out.push(s)
+        continue
+      }
+      try {
+        const image = await this.renderSuggestionImage(articleId, s)
+        out.push({ ...s, approval: 'approved', image })
+        rendered++
+      } catch (error) {
+        this.logger.warn(
+          `Auto-render failed for suggestion ${s.id} (${articleId}): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+        out.push(s)
+      }
+    }
+    return out
+  }
+
+  /**
+   * Render one suggestion into a stored PNG (mirrors the on-demand render in
+   * TransformerService). The prompt uses ONLY the suggestion's own text
+   * (visualDescription + caption), never the source blocks. Bytes are upserted
+   * into TransformerIllustrationImage; the returned metadata is patched onto the
+   * suggestion by the caller.
+   */
+  private async renderSuggestionImage(
+    articleId: string,
+    suggestion: IllustrationSuggestion,
+  ): Promise<NonNullable<IllustrationSuggestion['image']>> {
+    const prompt = `${suggestion.visualDescription}\n\nCaption: ${suggestion.caption}`
+    const result = await this.ai.image({
+      prompt,
+      size: ILLUSTRATION_IMAGE_SIZE,
+    })
+    const bytes = new Uint8Array(Buffer.from(result.base64, 'base64'))
+    const imageRow = {
+      data: bytes,
+      mediaType: result.mediaType,
+      width: result.width,
+      height: result.height,
+      provider: this.ai.providerName,
+      model: result.model,
+      prompt,
+    }
+    await this.prisma.transformerIllustrationImage.upsert({
+      where: {
+        articleId_suggestionId: { articleId, suggestionId: suggestion.id },
+      },
+      create: { articleId, suggestionId: suggestion.id, ...imageRow },
+      update: imageRow,
+    })
+    return {
+      width: result.width,
+      height: result.height,
+      provider: this.ai.providerName,
+      model: result.model,
+      generatedAt: new Date().toISOString(),
+    }
   }
 
   /** Generate + persist the learning layer for an article (never touches articleJson). */
