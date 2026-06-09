@@ -50,9 +50,14 @@ type ReadView = 'source' | 'article' | 'exercise' | 'inspector'
 const READ_MODES: ReadonlySet<ReadingMode> = new Set(['overview'])
 
 // How long a generating-poll waits after an error before trying again. Far
-// slower than the 1.5s success cadence so a 429 (or any blip) can't snowball
-// into a request storm against the rate-limited API; the poll self-recovers.
+// slower than the success cadence so a 429 (or any blip) can't snowball into a
+// request storm against the rate-limited API; the poll self-recovers.
 const ERROR_BACKOFF_MS = 15000
+
+// Cadence while the article is still generating. Deliberately unhurried (3s, not
+// the old 1.5s): two queries poll in parallel, so a slow generation at 1.5s
+// approached the 120/min per-user rate limit on its own — 3s halves that.
+const GENERATING_POLL_MS = 3000
 
 // The three learning tabs, always present. The Inspector (the pipeline "behind
 // the article" view, V1 Decision 3) is NOT a peer tab — it's a quiet secondary
@@ -120,7 +125,7 @@ export default function ReadPage() {
       // it eases off, the rate window clears, and it resumes on its own.
       if (query.state.status === 'error') return ERROR_BACKOFF_MS
       const status = query.state.data?.latestArticleStatus
-      return status && isArticleTerminal(status) ? false : 1500
+      return status && isArticleTerminal(status) ? false : GENERATING_POLL_MS
     },
   })
   const item = itemQuery.data
@@ -378,7 +383,7 @@ function ArticleView({
       // Same error backoff as the item poll: don't hammer a rate-limited API.
       if (query.state.status === 'error') return ERROR_BACKOFF_MS
       const status = query.state.data?.status
-      return status && isArticleTerminal(status) ? false : 1500
+      return status && isArticleTerminal(status) ? false : GENERATING_POLL_MS
     },
   })
   const article = articleQuery.data

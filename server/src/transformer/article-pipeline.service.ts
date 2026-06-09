@@ -183,17 +183,15 @@ export class ArticlePipelineService {
     const report = await this.fidelity.check(article, structureModel, blocks)
     const coverage = this.buildCoverage(article, blocks, plan)
 
-    // --- 10. AI extras (DET-319): enrichment + auto-rendered illustrations ---
-    // Non-source-grounded augmentations in their own lanes (never in articleJson).
-    // Each is BEST-EFFORT — a failure must never FAIL the article — and both run
-    // BEFORE the terminal status so the polling frontend (which stops at
-    // FINAL/BLOCKED) receives them in one shot instead of missing late extras.
+    // --- 10. AI extras (DET-319) --------------------------------------------
+    // Non-source-grounded augmentations in their own lanes (never in articleJson),
+    // both best-effort. Enrichment is a fast text call, so it stays INLINE and
+    // ships at the terminal status. Illustrations are slow gpt-image-1 renders —
+    // running them before the terminal status kept the article in a long polled
+    // CHECKING state and pressured the per-user rate limit, so they DON'T block:
+    // we finalize now (article readable, the frontend stops polling) and render
+    // plates in the BACKGROUND, where they appear on the learner's next fetch.
     const enrichment = await this.tryEnrich(articleId, article)
-    const illustrationPlan = await this.tryIllustrate(
-      articleId,
-      article,
-      blocks,
-    )
 
     await this.persist(articleId, {
       fidelityReport: report as unknown as Prisma.InputJsonValue,
@@ -202,16 +200,14 @@ export class ArticlePipelineService {
       ...(enrichment
         ? { enrichment: enrichment as unknown as Prisma.InputJsonValue }
         : {}),
-      ...(illustrationPlan
-        ? {
-            illustrationPlan:
-              illustrationPlan as unknown as Prisma.InputJsonValue,
-          }
-        : {}),
       status: report.approved
         ? TransformedArticleStatus.FINAL
         : TransformedArticleStatus.BLOCKED,
     })
+
+    // Fire-and-forget: the article is already terminal and the poll has stopped.
+    // Never awaited; self-contained (never throws).
+    void this.illustrateInBackground(articleId, article, blocks)
   }
 
   // --- On-demand extras -----------------------------------------------------
@@ -251,27 +247,33 @@ export class ArticlePipelineService {
     }
   }
 
-  /** Plan illustrations and auto-render the eligible ones; never throws — a
-   *  planning failure yields null, a render failure degrades a single plate. */
-  private async tryIllustrate(
+  /**
+   * Plan + auto-render illustrations AFTER the article is terminal, then persist
+   * the plan. Fire-and-forget from the pipeline (the article is already
+   * FINAL/BLOCKED), so it's fully self-contained and never throws — a planning
+   * failure yields no plates, a render failure degrades a single plate, and the
+   * persist itself is guarded. Plates surface on the learner's next fetch.
+   */
+  private async illustrateInBackground(
     articleId: string,
     article: ArticleJsonV2,
     blocks: LoadedBlock[],
-  ): Promise<IllustrationPlan | null> {
+  ): Promise<void> {
     try {
       const plan = await this.illustrations.plan(article, blocks)
       const suggestions = await this.autoRenderEligible(
         articleId,
         plan.suggestions,
       )
-      return { suggestions }
+      await this.persist(articleId, {
+        illustrationPlan: { suggestions } as unknown as Prisma.InputJsonValue,
+      })
     } catch (error) {
       this.logger.warn(
-        `Illustration planning failed for ${articleId}: ${
+        `Background illustrations failed for ${articleId}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       )
-      return null
     }
   }
 
