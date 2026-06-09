@@ -12,6 +12,14 @@ export interface CompletionRequest {
   system?: string
   maxTokens?: number
   temperature?: number
+  /**
+   * Constrain the model to emit a single syntactically-valid JSON object
+   * (OpenAI "JSON mode"). The prompt must mention JSON (the provider requires it,
+   * and all our JSON prompts already do). Guarantees PARSEABILITY, not schema
+   * validity — callers still validate. Prevents the malformed-JSON FAILEDs that
+   * unescaped quotes / control chars in long text values would otherwise cause.
+   */
+  json?: boolean
 }
 
 export interface CompletionResult {

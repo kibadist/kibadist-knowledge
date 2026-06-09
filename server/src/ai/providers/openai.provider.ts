@@ -46,6 +46,11 @@ export class OpenAiProvider implements AiProvider {
         messages: this.toMessages(request),
         max_tokens: request.maxTokens,
         temperature: request.temperature,
+        // JSON mode (gpt-4o-mini default supports it): forces a parseable JSON
+        // object so a stray unescaped quote in a long value can't sink the call.
+        ...(request.json
+          ? { response_format: { type: 'json_object' as const } }
+          : {}),
       })
       const choice = response.choices[0]
       return {

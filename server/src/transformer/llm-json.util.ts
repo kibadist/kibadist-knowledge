@@ -49,6 +49,9 @@ export async function completeJson<T>(
       prompt,
       temperature: 0,
       maxTokens,
+      // Every call here wants a JSON object and every prompt says so — ask the
+      // provider to guarantee parseable JSON (prevents malformed-JSON FAILEDs).
+      json: true,
     })
 
     const result = tryParse(text, schema, repair)
