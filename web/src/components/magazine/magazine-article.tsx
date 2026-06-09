@@ -126,11 +126,16 @@ export function MagazineArticle({
   }, [sections])
 
   const host = hostOf(provenance?.sourceUrl ?? null)
-  const date = new Date(article.generated_at).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  // `generated_at` can be absent/empty on older or adapted articles — never show
+  // "Invalid Date"; omit the date (byline + infobox) when it doesn't parse.
+  const generatedAt = new Date(article.generated_at)
+  const date = Number.isNaN(generatedAt.getTime())
+    ? null
+    : generatedAt.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      })
   const captureLabel = provenance?.captureSource
     ? CAPTURE_LABEL[provenance.captureSource]
     : null
@@ -183,8 +188,12 @@ export function MagazineArticle({
               </a>
             </>
           )}
-          <span className='sep'>/</span>
-          <span>{date}</span>
+          {date && (
+            <>
+              <span className='sep'>/</span>
+              <span>{date}</span>
+            </>
+          )}
         </div>
       </header>
 
@@ -268,7 +277,7 @@ export function MagazineArticle({
               <InfoRow label='Reading' value={`${stats.readMin} min`} />
               {captureLabel && <InfoRow label='Source' value={captureLabel} />}
               {host && <InfoRow label='Origin' value={host} />}
-              <InfoRow label='Compiled' value={date} />
+              {date && <InfoRow label='Compiled' value={date} />}
             </dl>
             {enrichment?.keyFacts && enrichment.keyFacts.length > 0 && (
               <>

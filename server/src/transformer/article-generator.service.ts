@@ -76,8 +76,11 @@ export class ArticleGeneratorService {
       // below still guards loudly against anything the prune missed.
       repair: (parsed) =>
         repairArticleTraceability(repairArticleLlmV2(parsed), known),
-      // Tables/code can be large; give the model headroom over the v1 budget.
-      maxTokens: 10000,
+      // A long source can produce an article whose typed-block JSON exceeds a
+      // smaller budget — the model then emits a truncated (unterminated) object
+      // that no repair can save. Budget near gpt-4o-mini's 16k output ceiling so
+      // big articles finish; very large sources remain a chunking problem.
+      maxTokens: 16000,
     })
 
     assertKnownIds(llm, known)
