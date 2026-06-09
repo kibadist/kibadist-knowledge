@@ -13,6 +13,7 @@ import {
   type ScheduledReviewPrompt,
   type StageKey,
 } from '@/components/deep-reading'
+import { MagazineArticle } from '@/components/magazine/magazine-article'
 import { ArticleReader } from '@/components/reader/article-reader'
 import { SourceInspector } from '@/components/transformer/source-inspector'
 import {
@@ -558,17 +559,30 @@ function ArticleView({
             : 'Could not earn this yet — explain it in your own words first.'}
         </p>
       )}
-      <ReadingSurface
-        surface={surface}
-        article={learningArticle}
-        provenance={provenance}
-        initialMode={initialMode}
-        initialEvents={eventsQuery.data ?? []}
-        onEmit={emitEvent}
-        onSaveConcept={handleSaveConcept}
-        onSchedulePrompt={(p) => schedulePrompt.mutate(p)}
-        recallAid={<InterrogationAid inboxItemId={inboxItemId} />}
-      />
+      {surface === 'article' ? (
+        // The Article tab is the finished, readable Compendium render (DET-318) —
+        // a magazine/encyclopedia presentation of the same Article JSON v2, with
+        // any rendered illustrations placed as plates. The active-recall modes
+        // stay on the Exercise tab.
+        <MagazineArticle
+          article={learningArticle}
+          articleId={articleId}
+          illustrations={article.illustrationPlan?.suggestions ?? []}
+          provenance={provenance}
+        />
+      ) : (
+        <ReadingSurface
+          surface={surface}
+          article={learningArticle}
+          provenance={provenance}
+          initialMode={initialMode}
+          initialEvents={eventsQuery.data ?? []}
+          onEmit={emitEvent}
+          onSaveConcept={handleSaveConcept}
+          onSchedulePrompt={(p) => schedulePrompt.mutate(p)}
+          recallAid={<InterrogationAid inboxItemId={inboxItemId} />}
+        />
+      )}
     </>
   )
 }
