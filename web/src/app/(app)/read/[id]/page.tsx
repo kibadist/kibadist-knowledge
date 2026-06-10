@@ -60,6 +60,15 @@ const ERROR_BACKOFF_MS = 15000
 // approached the 120/min per-user rate limit on its own — 3s halves that.
 const GENERATING_POLL_MS = 3000
 
+// Illustrations are planned + rendered in the BACKGROUND after the article is
+// terminal (DET-319), so a freshly generated article has no plates yet. Keep a
+// slow, BOUNDED poll going after FINAL/BLOCKED until the illustrationPlan
+// lands, so the plates pop in without a manual reload. The window covers the
+// worst-case plan + 3 gpt-image renders; a planning failure persists nothing,
+// so the cap (not the plan's arrival) ends the poll in that case.
+const ILLUSTRATION_POLL_MS = 5000
+const ILLUSTRATION_POLL_WINDOW_MS = 180_000
+
 // The three learning tabs, always present. The Inspector (the pipeline "behind
 // the article" view, V1 Decision 3) is NOT a peer tab — it's a quiet secondary
 // link beside the row, rendered below, that only turns loud on a fidelity block.
@@ -416,8 +425,23 @@ function ArticleView({
     refetchInterval: (query) => {
       // Same error backoff as the item poll: don't hammer a rate-limited API.
       if (query.state.status === 'error') return ERROR_BACKOFF_MS
-      const status = query.state.data?.status
-      return status && isArticleTerminal(status) ? false : GENERATING_POLL_MS
+      const data = query.state.data
+      const status = data?.status
+      if (!status || !isArticleTerminal(status)) return GENERATING_POLL_MS
+      // Terminal. FAILED never gets illustrations (the background job only
+      // runs after FINAL/BLOCKED); an article already carrying its plan needs
+      // nothing more. Otherwise keep a slow poll inside a bounded window so
+      // the background-rendered plates appear without a manual reload —
+      // anchored on the server's own updatedAt (the terminal persist), so a
+      // STALE plan-less article (pre-illustration era, or a planning failure
+      // that persists nothing) is never polled at all.
+      if (status === 'FAILED' || data?.illustrationPlan) return false
+      const sinceTerminal = Date.now() - new Date(data.updatedAt).getTime()
+      return Number.isFinite(sinceTerminal) &&
+        sinceTerminal >= 0 &&
+        sinceTerminal < ILLUSTRATION_POLL_WINDOW_MS
+        ? ILLUSTRATION_POLL_MS
+        : false
     },
   })
   const article = articleQuery.data

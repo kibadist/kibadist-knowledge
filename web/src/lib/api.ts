@@ -1499,6 +1499,10 @@ export interface TransformedArticle {
   // articles generated before the rollup existed.
   qualityReport: ArticleQualityReport | null
   error: string | null
+  // Last persist time (already in the server DTO). Anchors the bounded
+  // post-terminal illustration poll: a fresh terminal article is worth
+  // watching for background plates; a stale one is not.
+  updatedAt: string
 }
 
 // Mirrors server quality-report.util.ts (DET-320). Scores are 0–1.
