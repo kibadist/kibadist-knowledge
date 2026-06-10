@@ -417,6 +417,16 @@
   margin-bottom: 5px;
 }
 
+/* In-prose (Fig. N) reference — binds a paragraph to its in-column figure. A
+   quiet mono accent so the eye jumps to the plate without breaking the column. */
+.kb-mag-figref {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.78em;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
 /* ---------------------------------------------------------- FIGURE PLATES */
 figure.kb-mag-plate {
   margin: 14px 0 18px;

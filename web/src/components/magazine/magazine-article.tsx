@@ -7,17 +7,21 @@ import {
   type ArticleEnrichment,
   api,
   type CaptureSource,
+  type EditorialLayout,
   type IllustrationSuggestion,
 } from '@/lib/api'
 import {
   type ArticleBlockV2,
-  type ArticleSectionV2,
   type ArticleV2,
   blockPlainText,
-  orderedBlocks,
   orderedSections,
   sectionKeyTerms,
 } from '@/lib/article-v2'
+import {
+  buildEditorialPlan,
+  type PlannedFigure,
+  type StreamItem,
+} from '@/lib/editorial-layout'
 
 import './magazine-article.css'
 
@@ -43,6 +47,10 @@ export interface MagazineArticleProps {
   /** AI world-knowledge extras (IPA, etymology, key facts). NOT source-grounded —
    *  every surfaced field carries a visible "not from your source" marker. */
   enrichment?: ArticleEnrichment | null
+  /** Generative editorial furniture (kicker, standfirst, sub-heads, pull-quote,
+   *  stat band, marginal notes, figure placements). Null on older articles; the
+   *  layout engine derives a full Compendium layout deterministically without it. */
+  editorialLayout?: EditorialLayout | null
   provenance?: {
     sourceUrl?: string | null
     captureSource?: CaptureSource | null
@@ -64,49 +72,34 @@ export function MagazineArticle({
   articleId,
   illustrations = [],
   enrichment,
+  editorialLayout,
   provenance,
 }: MagazineArticleProps) {
+  // The deterministic layout engine resolves the article + its editorial lanes
+  // into a render-ready plan (DET-318): figures placed after each section's
+  // opening paragraphs (never front-loaded), in-column vs span sized by type,
+  // sequential figure numbers + (Fig. N) refs, two-part captions, and the
+  // rhythm devices (drop-cap lead, one stat band, one pull-quote, marginalia)
+  // spread to hit the cadence. The renderer below maps the plan 1:1 onto the
+  // magazine vocabulary — all placement logic lives in the pure engine.
+  const plan = useMemo(
+    () =>
+      buildEditorialPlan({
+        article,
+        illustrations,
+        enrichment,
+        editorialLayout,
+      }),
+    [article, illustrations, enrichment, editorialLayout],
+  )
+
+  // The stream sections (the abstract lede is lifted above the columns by the
+  // plan; everything in `plan.sections` flows in the two-column body).
   const allSections = useMemo(() => orderedSections(article), [article])
-
-  // The adapter surfaces the source abstract as the first section (its
-  // section_id ends with `-abstract`). We lift it out as a faithful, source-
-  // grounded lede and exclude it from the two-column stream, the TOC, and the
-  // section count — `sections` is everything that flows in the stream.
-  const { ledeSection, sections } = useMemo(() => {
-    const first = allSections[0]
-    if (first?.section_id?.endsWith('-abstract')) {
-      return { ledeSection: first, sections: allSections.slice(1) }
-    }
-    return { ledeSection: null, sections: allSections }
-  }, [allSections])
-
-  // Only rendered illustrations become plates (the "use existing" decision —
-  // no on-demand generation here). Group by the section their anchor blocks
-  // live in; an unanchored cover floats to the top of the stream.
-  const { coverPlates, platesBySection } = useMemo(() => {
-    const ready = illustrations.filter(
-      (s) => s.approval === 'approved' && s.image,
-    )
-    const blockToSection = new Map<string, string>()
-    for (const sec of sections) {
-      for (const b of sec.blocks) blockToSection.set(b.block_id, sec.section_id)
-    }
-    const bySection = new Map<string, IllustrationSuggestion[]>()
-    const cover: IllustrationSuggestion[] = []
-    for (const s of ready) {
-      const anchorSection = s.sourceBlockIds
-        .map((id) => blockToSection.get(id))
-        .find(Boolean)
-      if (anchorSection) {
-        const arr = bySection.get(anchorSection) ?? []
-        arr.push(s)
-        bySection.set(anchorSection, arr)
-      } else {
-        cover.push(s)
-      }
-    }
-    return { coverPlates: cover, platesBySection: bySection }
-  }, [illustrations, sections])
+  const sections = useMemo(() => {
+    const inStream = new Set(plan.sections.map((s) => s.sectionId))
+    return allSections.filter((s) => inStream.has(s.section_id))
+  }, [allSections, plan.sections])
 
   const stats = useMemo(() => {
     let words = 0
@@ -140,21 +133,14 @@ export function MagazineArticle({
     ? CAPTURE_LABEL[provenance.captureSource]
     : null
 
-  // The drop-cap lead is used once, on the first paragraph of the article.
-  let leadUsed = false
-  const takeLead = () => {
-    if (leadUsed) return false
-    leadUsed = true
-    return true
-  }
-
   return (
     <article className='kb-mag'>
       <ReadingProgress />
 
       <header className='kb-mag-head'>
         <div className='kb-mag-kicker'>
-          {enrichment?.classification ?? 'Kibadist Compendium · Entry'}
+          {plan.kicker}
+          {plan.kickerAi && <AiMark short />}
         </div>
         <h1 className='kb-mag-term'>{article.title}</h1>
         {(enrichment?.pronunciation || enrichment?.partOfSpeech) && (
@@ -207,51 +193,44 @@ export function MagazineArticle({
         <span className='grow'>Source-grounded · earn what you keep</span>
       </div>
 
-      {ledeSection && (
+      {/* The faithful, source-grounded abstract lede (when present) sits full-
+          width above the columns. A thin source has no abstract — the engine
+          then supplies a generative standfirst, marked "not from your source". */}
+      {plan.ledeParagraphs.length > 0 ? (
         <div className='kb-mag-lede'>
-          {orderedBlocks(ledeSection)
-            .filter(
-              (b): b is Extract<ArticleBlockV2, { type: 'paragraph' }> =>
-                b.type === 'paragraph',
-            )
-            .map((b) => (
-              <p key={b.block_id} id={b.block_id}>
-                <InlineRuns runs={b.content.runs} />
-              </p>
-            ))}
+          {plan.ledeParagraphs.map((p) => (
+            <p key={p.blockId} id={p.blockId}>
+              <InlineRuns runs={p.runs} />
+            </p>
+          ))}
         </div>
-      )}
+      ) : plan.standfirst ? (
+        <div className='kb-mag-lede'>
+          <p>
+            {plan.standfirst.text}
+            {plan.standfirst.ai && <AiMark />}
+          </p>
+        </div>
+      ) : null}
 
       <div className='kb-mag-layout'>
         <div className='kb-mag-stream'>
-          {coverPlates.map((s) => (
-            <IllustrationPlate
-              key={s.id}
-              articleId={articleId}
-              suggestion={s}
-              span
-            />
-          ))}
-
-          {sections.map((section, i) => (
-            <Fragment key={section.section_id}>
-              <div className='kb-mag-sec' id={section.section_id}>
-                <span className='num'>§ {pad(i + 1)}</span>
+          {/* Rendered from the deterministic editorial plan: each section is a
+              § bar followed by its ORDERED stream items (blocks, figures placed
+              after the opening paragraphs, and the spread rhythm devices). No
+              front-loading — figures live inside their section. */}
+          {plan.sections.map((section) => (
+            <Fragment key={section.sectionId}>
+              <div className='kb-mag-sec' id={section.sectionId}>
+                <span className='num'>§ {pad(section.index)}</span>
                 <h2>{section.heading}</h2>
               </div>
-              {orderedBlocks(section).map((block) => (
-                <MagazineBlock
-                  key={block.block_id}
-                  block={block}
-                  isLead={block.type === 'paragraph' && takeLead()}
-                />
-              ))}
-              {(platesBySection.get(section.section_id) ?? []).map((s) => (
-                <IllustrationPlate
-                  key={s.id}
+              {section.items.map((item, i) => (
+                <StreamItemView
+                  // biome-ignore lint/suspicious/noArrayIndexKey: device items have no id
+                  key={itemKey(item, i)}
+                  item={item}
                   articleId={articleId}
-                  suggestion={s}
-                  span
                 />
               ))}
             </Fragment>
@@ -363,19 +342,98 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+/** Render one planned stream item onto the magazine vocabulary. The plan has
+ *  already decided placement, sizing, and the rhythm devices — this is a pure
+ *  1:1 mapping. */
+function StreamItemView({
+  item,
+  articleId,
+}: {
+  item: StreamItem
+  articleId: string
+}) {
+  switch (item.kind) {
+    case 'block':
+      return (
+        <MagazineBlock
+          block={item.block}
+          isLead={item.isLead ?? false}
+          figureRef={item.figureRef}
+        />
+      )
+    case 'figure':
+      return <IllustrationPlate articleId={articleId} figure={item.figure} />
+    case 'subhead':
+      // An inline sub-head break for long sections (cadence rule).
+      return <h3>{item.text}</h3>
+    case 'statband':
+      return (
+        <div
+          className='kb-mag-statband'
+          style={{ '--cols': item.stats.length } as React.CSSProperties}
+        >
+          {item.stats.map((s) => (
+            <div className='s' key={`${s.figure}:${s.label}`}>
+              <div className='n'>{s.figure}</div>
+              <div className='d'>
+                {s.label}
+                {item.ai && <AiMark short />}
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    case 'pullquote':
+      return (
+        <blockquote className='kb-mag-pull'>
+          <p>{item.text}</p>
+          {(item.attribution || item.ai) && (
+            <div className='attrib'>
+              {item.attribution}
+              {item.ai && <AiMark short />}
+            </div>
+          )}
+        </blockquote>
+      )
+    case 'marginal':
+      return (
+        <div className='kb-mag-marginal'>
+          <span className='mh'>
+            {item.title}
+            {item.ai && <AiMark short />}
+          </span>
+          {item.text}
+        </div>
+      )
+  }
+}
+
+/** A stable-ish key for a stream item: block id when present, else kind+index. */
+function itemKey(item: StreamItem, i: number): string {
+  if (item.kind === 'block') return item.block.block_id
+  if (item.kind === 'figure') return `fig-${item.figure.suggestion.id}`
+  return `${item.kind}-${i}`
+}
+
 /** One Article-JSON-v2 block in the magazine vocabulary. */
 function MagazineBlock({
   block,
   isLead,
+  figureRef,
 }: {
   block: ArticleBlockV2
   isLead: boolean
+  /** Figure number to bind as a trailing `(Fig. N)` reference (figure↔prose). */
+  figureRef?: number
 }) {
   switch (block.type) {
     case 'paragraph':
       return (
         <p className={isLead ? 'kb-mag-lead' : undefined} id={block.block_id}>
           <InlineRuns runs={block.content.runs} />
+          {figureRef !== undefined && (
+            <span className='kb-mag-figref'> (Fig. {figureRef})</span>
+          )}
         </p>
       )
     case 'heading':
@@ -475,16 +533,17 @@ function MagazineBlock({
   }
 }
 
-/** A rendered illustration as a captioned plate (authed blob fetch). */
+/** A planned figure as a captioned plate (authed blob fetch). The plan decides
+ *  size (`span` hero vs in-column `Fig.`), figure number, and the two-part
+ *  teaching caption; this component only fetches the bytes and renders. */
 function IllustrationPlate({
   articleId,
-  suggestion,
-  span,
+  figure,
 }: {
   articleId: string
-  suggestion: IllustrationSuggestion
-  span?: boolean
+  figure: PlannedFigure
 }) {
+  const { suggestion, size, figureNumber, caption } = figure
   const [src, setSrc] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
   const generatedAt = suggestion.image?.generatedAt
@@ -510,12 +569,17 @@ function IllustrationPlate({
     }
   }, [articleId, suggestion.id, generatedAt])
 
+  // The figtag is the in-prose handle: a span hero reads "Plate", an in-column
+  // diagram reads "Fig. N" so the (Fig. N) prose ref resolves to it.
+  const figtag =
+    size === 'column'
+      ? `${ILLUS_LABEL[suggestion.illustrationType]} ${figureNumber}`
+      : ILLUS_LABEL[suggestion.illustrationType]
+
   return (
-    <figure className={`kb-mag-plate${span ? ' is-span' : ''}`}>
+    <figure className={`kb-mag-plate${size === 'span' ? ' is-span' : ''}`}>
       <div className='frame'>
-        <span className='figtag'>
-          {ILLUS_LABEL[suggestion.illustrationType]}
-        </span>
+        <span className='figtag'>{figtag}</span>
         {failed ? (
           <div className='ph'>Illustration unavailable</div>
         ) : src ? (
@@ -525,10 +589,11 @@ function IllustrationPlate({
           <div className='ph'>Rendering…</div>
         )}
       </div>
-      {suggestion.caption && (
+      {(caption.takeaway || caption.detail) && (
         <figcaption>
-          <span className='aichip'>✦ AI</span>
-          {suggestion.caption}
+          {figure.ai && <span className='aichip'>✦ AI</span>}
+          {caption.takeaway && <b>{caption.takeaway}.</b>}
+          {caption.detail && ` ${caption.detail}`}
         </figcaption>
       )}
     </figure>

@@ -10,6 +10,7 @@ import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { placeCallouts } from './callout-placement.util'
 import { buildCoverageReport, type CoverageBlock } from './coverage.util'
+import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
@@ -30,6 +31,7 @@ import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
   ArticleJsonV2,
   CoverageReport,
+  EditorialLayout,
   FidelityReport,
   SourcePreservingArticle,
 } from './transformer.types'
@@ -69,6 +71,7 @@ export class ArticlePipelineService {
     private readonly fidelity: FidelityCheckerService,
     private readonly illustrations: IllustrationPlannerService,
     private readonly enrichment: ArticleEnrichmentService,
+    private readonly editorialLayout: EditorialLayoutService,
     private readonly learning: LearningLayerService,
     private readonly ai: AiService,
   ) {}
@@ -192,6 +195,9 @@ export class ArticlePipelineService {
     // we finalize now (article readable, the frontend stops polling) and render
     // plates in the BACKGROUND, where they appear on the learner's next fetch.
     const enrichment = await this.tryEnrich(articleId, article)
+    // Editorial layout (the generative presentation lane) is another fast text
+    // call, so it stays INLINE beside enrichment and ships at the terminal status.
+    const editorialLayout = await this.tryEditorialLayout(articleId, article)
 
     await this.persist(articleId, {
       fidelityReport: report as unknown as Prisma.InputJsonValue,
@@ -199,6 +205,12 @@ export class ArticlePipelineService {
       coverageReport: coverage as unknown as Prisma.InputJsonValue,
       ...(enrichment
         ? { enrichment: enrichment as unknown as Prisma.InputJsonValue }
+        : {}),
+      ...(editorialLayout
+        ? {
+            editorialLayout:
+              editorialLayout as unknown as Prisma.InputJsonValue,
+          }
         : {}),
       status: report.approved
         ? TransformedArticleStatus.FINAL
@@ -240,6 +252,24 @@ export class ArticlePipelineService {
     } catch (error) {
       this.logger.warn(
         `Enrichment failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
+  }
+
+  /** Build the editorial layout; never throws — a failure logs and yields null so
+   *  the article still finalizes (the web renderer has a deterministic fallback). */
+  private async tryEditorialLayout(
+    articleId: string,
+    article: ArticleJsonV2,
+  ): Promise<EditorialLayout | null> {
+    try {
+      return await this.editorialLayout.build(article)
+    } catch (error) {
+      this.logger.warn(
+        `Editorial layout failed for ${articleId}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       )

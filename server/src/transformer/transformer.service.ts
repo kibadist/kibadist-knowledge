@@ -36,6 +36,7 @@ import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
   ArticleJsonV2,
   CoverageReport,
+  EditorialLayout,
   FidelityReport,
   SourcePreservingArticle,
 } from './transformer.types'
@@ -119,6 +120,8 @@ export interface TransformerArticleDetail {
   learningLayer: LearningLayer | null
   /** AI-added encyclopedia metadata (DET-319) — NOT source-grounded; UI labels it. */
   enrichment: ArticleEnrichment | null
+  /** Generative editorial layout — additive presentation lane; null on old rows. */
+  editorialLayout: EditorialLayout | null
   error: string | null
   createdAt: Date
   updatedAt: Date
@@ -444,6 +447,7 @@ export class TransformerService {
       illustrationPlan: article.illustrationPlan as IllustrationPlan | null,
       learningLayer: article.learningLayer as LearningLayer | null,
       enrichment: article.enrichment as ArticleEnrichment | null,
+      editorialLayout: article.editorialLayout as EditorialLayout | null,
       error: article.error,
       createdAt: article.createdAt,
       updatedAt: article.updatedAt,

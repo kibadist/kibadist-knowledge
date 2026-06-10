@@ -574,6 +574,7 @@ function ArticleView({
           articleId={articleId}
           illustrations={article.illustrationPlan?.suggestions ?? []}
           enrichment={article.enrichment}
+          editorialLayout={article.editorialLayout}
           provenance={provenance}
         />
       ) : (

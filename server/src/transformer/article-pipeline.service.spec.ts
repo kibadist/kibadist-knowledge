@@ -4,6 +4,7 @@ import { AiService } from '../ai/ai.service'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
+import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
@@ -135,6 +136,9 @@ function makeServices(overrides: {
   const enrichment = {
     build: jest.fn(async () => ({ keyFacts: [] })),
   } as unknown as ArticleEnrichmentService
+  const editorialLayout = {
+    build: jest.fn(async () => ({})),
+  } as unknown as EditorialLayoutService
   const learning = {} as LearningLayerService
   const ai = {
     image: jest.fn(async () => ({
@@ -153,6 +157,7 @@ function makeServices(overrides: {
     fidelity,
     illustrations,
     enrichment,
+    editorialLayout,
     learning,
     ai,
   }
@@ -170,6 +175,7 @@ describe('ArticlePipelineService.run', () => {
       s.fidelity,
       s.illustrations,
       s.enrichment,
+      s.editorialLayout,
       s.learning,
       s.ai,
     )
@@ -233,6 +239,7 @@ describe('ArticlePipelineService.run', () => {
       s.fidelity,
       s.illustrations,
       s.enrichment,
+      s.editorialLayout,
       s.learning,
       s.ai,
     )
@@ -260,6 +267,7 @@ describe('ArticlePipelineService.run', () => {
       s.fidelity,
       s.illustrations,
       s.enrichment,
+      s.editorialLayout,
       s.learning,
       s.ai,
     )

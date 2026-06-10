@@ -697,6 +697,92 @@ export const ArticleEnrichmentSchema = z.object({
 
 export type ArticleEnrichment = z.infer<typeof ArticleEnrichmentSchema>
 
+// --- Editorial layout (generative presentation lane) -----------------------
+//
+// What the EDITORIAL-LAYOUT LLM returns — the editorial FURNITURE that makes a
+// thin source render as a full Compendium entry (kicker, standfirst, sub-heads,
+// a chosen pull-quote, a stat band, marginal notes). Like enrichment it is an
+// ADDITIVE lane: it never mutates `articleJson` and only references existing
+// section/block ids. The model MAY write connective/editorial text here (the one
+// place generative furniture is allowed), so every field carries `grounded` —
+// false whenever the text is not lifted from the article.
+//
+// The schema is deliberately PERMISSIVE (optional fields, lenient `grounded`
+// default, no id-existence check). The strict work — dropping furniture that
+// cites an unknown section/block id and clamping every `afterParagraphIndex` —
+// is done in code by `sanitizeEditorialLayout`, mirroring how the illustration
+// and learning lanes loosen their LLM schema and re-check in the service. We do
+// NOT redefine the canonical `EditorialLayout` type — it lives in
+// transformer.types.ts; this is only the wire shape of the model's reply.
+//
+// `figurePlacements` is intentionally absent: this lane runs INLINE (before the
+// illustrations are planned in the background), so suggestion ids don't exist
+// yet — the web renderer owns figure placement deterministically.
+
+/** Lenient grounded flag — defaults to false (ungrounded gets the ✦ AI mark). */
+const groundedFlag = z.boolean().catch(false).default(false)
+
+/** Clampable paragraph anchor — the sanitizer clamps it to the real range. */
+const afterParagraphIndex = z.number().int().catch(0).default(0)
+
+export const EditorialLayoutLlmSchema = z.object({
+  /** Short eyebrow label above the headword, e.g. "Field guide · Insect". */
+  kicker: z
+    .object({ text: z.string().min(1), grounded: groundedFlag })
+    .optional(),
+  /** One-sentence standfirst/lede for a thin source abstract. */
+  standfirst: z
+    .object({ text: z.string().min(1), grounded: groundedFlag })
+    .optional(),
+  /** Inline sub-heads chunking a long section (sanitizer drops bad sectionIds). */
+  subheads: z
+    .array(
+      z.object({
+        sectionId: z.string().min(1),
+        afterParagraphIndex,
+        text: z.string().min(1),
+      }),
+    )
+    .default([]),
+  /** The single sharpest line; blockId optional, grounded only when verbatim. */
+  pullQuote: z
+    .object({
+      sectionId: z.string().min(1),
+      blockId: z.string().min(1).optional(),
+      text: z.string().min(1),
+      grounded: groundedFlag,
+    })
+    .optional(),
+  /** A stat band; the sanitizer omits it below 3 stats. */
+  statBand: z
+    .object({
+      grounded: groundedFlag,
+      stats: z
+        .array(
+          z.object({
+            figure: z.string().min(1),
+            label: z.string().min(1),
+          }),
+        )
+        .default([]),
+    })
+    .optional(),
+  /** Marginal notes (definitions/asides) anchored beside a section's prose. */
+  marginalNotes: z
+    .array(
+      z.object({
+        sectionId: z.string().min(1),
+        afterParagraphIndex,
+        title: z.string().min(1),
+        text: z.string().min(1),
+        grounded: groundedFlag,
+      }),
+    )
+    .default([]),
+})
+
+export type EditorialLayoutLlm = z.infer<typeof EditorialLayoutLlmSchema>
+
 // --- Learning layer (step 11, DET-258) -------------------------------------
 
 const validationStatus = z.enum(['pending', 'validated', 'dismissed'])

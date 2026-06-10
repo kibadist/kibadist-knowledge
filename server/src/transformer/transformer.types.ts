@@ -376,6 +376,89 @@ export type ArticleShape =
   | 'narrative'
   | 'hybrid'
 
+/* ===========================================================================
+ * Editorial layout — generative presentation lane (additive, NOT in articleJson).
+ * ===========================================================================
+ *
+ * A best-effort sibling of `enrichment` / `illustrationPlan`: it does NOT carry
+ * article SUBSTANCE and never mutates `articleJson`. It only references existing
+ * section/block/suggestion ids and supplies the editorial FURNITURE the Compendium
+ * render needs to obey the Kibadist Article Structure rules for ANY input source —
+ * even a thin one. Every field that is not drawn from the source carries
+ * `grounded: false` so the UI can mark it "✦ AI · not from your source".
+ *
+ * The web renderer also has a deterministic fallback (`editorial-layout.ts`) so an
+ * article with no `editorialLayout` (older rows, a failed lane) still renders; this
+ * lane makes a thin source read like a full entry.
+ */
+
+/** A two-part figure caption: a bold takeaway clause + one explanatory sentence. */
+export interface EditorialCaption {
+  takeaway: string
+  detail: string
+}
+
+/** Where one illustration suggestion is placed in the stream and at what size. */
+export interface EditorialFigurePlacement {
+  /** The IllustrationSuggestion id this placement positions. */
+  suggestionId: string
+  /** Section the figure belongs beside. */
+  sectionId: string
+  /** Place AFTER this many opening paragraphs of the section (never front-loaded). */
+  afterParagraphIndex: number
+  /** 'span' = full-width section hero; 'column' = in-column secondary `Fig.`. */
+  size: 'span' | 'column'
+  /** Figure number used for the `(Fig. N)` prose binding + the plate tag. */
+  figureNumber: number
+  /** Optional two-part teaching caption (overrides the suggestion's own caption). */
+  caption?: EditorialCaption
+}
+
+/** A marginal side-note (definition/aside) anchored beside a section's prose. */
+export interface EditorialMarginalNote {
+  sectionId: string
+  afterParagraphIndex: number
+  title: string
+  text: string
+  grounded: boolean
+}
+
+/** An inline sub-head inserted to chunk a long section's paragraph run. */
+export interface EditorialSubhead {
+  sectionId: string
+  afterParagraphIndex: number
+  text: string
+}
+
+/**
+ * The editorial layout artifact. All fields optional — an empty object is a valid
+ * (no-op) layout and old article rows simply have `null`.
+ */
+export interface EditorialLayout {
+  /** Short eyebrow label above the headword (e.g. "Field guide · Insect"). */
+  kicker?: { text: string; grounded: boolean }
+  /** One-sentence standfirst/lede, used when the source abstract is thin. */
+  standfirst?: { text: string; grounded: boolean }
+  /** Inline sub-heads that chunk long sections. */
+  subheads?: EditorialSubhead[]
+  /** The single pull-quote: the article's sharpest line, placed at a thesis peak. */
+  pullQuote?: {
+    sectionId: string
+    blockId?: string
+    text: string
+    grounded: boolean
+  }
+  /** A full-width stat band (3–4 figures) placed once where numbers cluster. */
+  statBand?: {
+    grounded: boolean
+    stats: { figure: string; label: string }[]
+  }
+  /** Marginal notes (definitions/asides) spread through the body. */
+  marginalNotes?: EditorialMarginalNote[]
+  /** Figure placements binding illustrations next to the prose that motivates them. */
+  figurePlacements?: EditorialFigurePlacement[]
+}
+
 /** One audited reading-order move (DET-275). */
 export interface ArticleReorderingAudit {
   sourceBlockId: string

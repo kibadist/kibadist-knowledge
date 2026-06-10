@@ -1424,6 +1424,11 @@ model TransformedArticle {
   // AI-added encyclopedia metadata (DET-319) — non-source-grounded, its own lane,
   // never folded into articleJson; the UI labels it "AI · not from your source".
   enrichment      Json?
+  // Generative editorial layout — kicker, standfirst, sub-heads, pull-quote choice,
+  // stat band, marginal notes, figure placements. Additive lane like `enrichment`;
+  // never folded into articleJson, only references its ids. Ungrounded furniture is
+  // labelled "AI · not from your source" in the UI.
+  editorialLayout Json?
   error           String?
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt

@@ -1356,6 +1356,54 @@ export interface ArticleEnrichment {
   keyFacts?: { label: string; value: string }[]
 }
 
+// Generative EDITORIAL LAYOUT — the presentation furniture (kicker, standfirst,
+// sub-heads, pull-quote choice, stat band, marginal notes, figure placements) that
+// lets a thin source render as a full Compendium entry. Mirrors the server
+// `EditorialLayout` (transformer.types.ts). Additive: it never carries article
+// substance and only references existing section/block/suggestion ids. Any field
+// with `grounded: false` is rendered with the "✦ AI · not from your source" marker.
+// All optional; an article with no editorial lane simply has `editorialLayout: null`.
+export interface EditorialCaption {
+  takeaway: string
+  detail: string
+}
+export interface EditorialFigurePlacement {
+  suggestionId: string
+  sectionId: string
+  /** Place AFTER this many opening paragraphs of the section (never front-loaded). */
+  afterParagraphIndex: number
+  /** 'span' = full-width section hero; 'column' = in-column secondary `Fig.`. */
+  size: 'span' | 'column'
+  figureNumber: number
+  caption?: EditorialCaption
+}
+export interface EditorialMarginalNote {
+  sectionId: string
+  afterParagraphIndex: number
+  title: string
+  text: string
+  grounded: boolean
+}
+export interface EditorialSubhead {
+  sectionId: string
+  afterParagraphIndex: number
+  text: string
+}
+export interface EditorialLayout {
+  kicker?: { text: string; grounded: boolean }
+  standfirst?: { text: string; grounded: boolean }
+  subheads?: EditorialSubhead[]
+  pullQuote?: {
+    sectionId: string
+    blockId?: string
+    text: string
+    grounded: boolean
+  }
+  statBand?: { grounded: boolean; stats: { figure: string; label: string }[] }
+  marginalNotes?: EditorialMarginalNote[]
+  figurePlacements?: EditorialFigurePlacement[]
+}
+
 // AI-assisted learning layer (DET-258). Stored ONLY here, never in articleJson.
 export type LearningValidationStatus = 'pending' | 'validated' | 'dismissed'
 
@@ -1416,6 +1464,10 @@ export interface TransformedArticle {
   // AI world-knowledge extras for the Compendium render (rendered with a visible
   // "not from your source" marker). Null on articles generated before this lane.
   enrichment: ArticleEnrichment | null
+  // Generative editorial layout — presentation furniture for the Compendium render
+  // (kicker, standfirst, sub-heads, pull-quote, stat band, marginal notes, figure
+  // placements). Null on articles generated before this lane.
+  editorialLayout: EditorialLayout | null
   error: string | null
 }
 
