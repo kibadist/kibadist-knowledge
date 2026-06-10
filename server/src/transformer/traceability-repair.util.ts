@@ -64,6 +64,19 @@ export function repairStructureModel(
     out[key] = repairTraceableEntries(out[key], known)
   }
 
+  // An entry the model left with an EMPTY required body ("definition": "") is
+  // benign drift, not preserved material: dropping it loses nothing the source
+  // said, while failing the pipeline on it loses the whole article (seen live —
+  // "definitions.0.definition: Too small"). The repair never writes text; empty
+  // entries are pruned, exactly like invented block ids above.
+  for (const key of ['claims', 'examples', 'caveats'] as const) {
+    out[key] = dropBlankField(out[key], 'text')
+  }
+  for (const key of ['definitions', 'terminology'] as const) {
+    out[key] = dropBlankField(dropBlankField(out[key], 'term'), 'definition')
+  }
+  out.originalOutline = dropBlankField(out.originalOutline, 'heading')
+
   // noiseDecisions cite a single `blockId`; a decision about an invented block is
   // meaningless, so drop it.
   if (Array.isArray(out.noiseDecisions)) {
@@ -79,6 +92,20 @@ export function repairStructureModel(
   }
 
   return out
+}
+
+/**
+ * Drop array entries whose required string `field` is present but BLANK. A
+ * missing/non-string field is real shape breakage, not benign drift — those are
+ * left for zod to reject (mirrors repairTraceableEntries' non-object rule).
+ */
+function dropBlankField(value: unknown, field: string): unknown {
+  if (!Array.isArray(value)) return value
+  return value.filter((entry) => {
+    if (!isRecord(entry)) return true
+    const v = entry[field]
+    return typeof v === 'string' ? v.trim().length > 0 : true
+  })
 }
 
 /** An optional `{ text, sourceBlockIds }` → null when no cited block survives. */

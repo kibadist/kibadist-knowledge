@@ -112,6 +112,78 @@ describe('repairStructureModel', () => {
     expect(repairStructureModel(null, known)).toBeNull()
     expect(repairStructureModel('x', known)).toBe('x')
   })
+
+  it('drops a definition/terminology entry the model left blank (seen live)', () => {
+    const out = asRec(
+      repairStructureModel(
+        {
+          claims: [],
+          definitions: [
+            { term: 'Keep', definition: 'Has a body.', sourceBlockIds: ['b1'] },
+            { term: 'Blank', definition: '', sourceBlockIds: ['b2'] },
+            { term: '   ', definition: 'Blank term.', sourceBlockIds: ['b3'] },
+          ],
+          examples: [],
+          caveats: [],
+          terminology: [{ term: 'T', definition: ' ', sourceBlockIds: ['b1'] }],
+          originalOutline: [],
+          noiseDecisions: [],
+          uncertainBlockIds: [],
+        },
+        known,
+      ),
+    )
+    expect((out.definitions as Rec[]).map((d) => d.term)).toEqual(['Keep'])
+    expect(out.terminology).toEqual([])
+  })
+
+  it('drops blank-text preserved items and blank-heading outline entries', () => {
+    const out = asRec(
+      repairStructureModel(
+        {
+          claims: [
+            { text: 'keep', sourceBlockIds: ['b1'] },
+            { text: '', sourceBlockIds: ['b2'] },
+          ],
+          definitions: [],
+          examples: [{ text: '  ', sourceBlockIds: ['b1'] }],
+          caveats: [],
+          terminology: [],
+          originalOutline: [
+            { heading: 'Real', sourceBlockIds: ['b1'] },
+            { heading: '', sourceBlockIds: ['b2'] },
+          ],
+          noiseDecisions: [],
+          uncertainBlockIds: [],
+        },
+        known,
+      ),
+    )
+    expect((out.claims as Rec[]).map((c) => c.text)).toEqual(['keep'])
+    expect(out.examples).toEqual([])
+    expect((out.originalOutline as Rec[]).map((o) => o.heading)).toEqual([
+      'Real',
+    ])
+  })
+
+  it('leaves a MISSING required field for zod (shape breakage, not drift)', () => {
+    const out = asRec(
+      repairStructureModel(
+        {
+          claims: [],
+          definitions: [{ term: 'NoDef', sourceBlockIds: ['b1'] }],
+          examples: [],
+          caveats: [],
+          terminology: [],
+          originalOutline: [],
+          noiseDecisions: [],
+          uncertainBlockIds: [],
+        },
+        known,
+      ),
+    )
+    expect(out.definitions as Rec[]).toHaveLength(1)
+  })
 })
 
 describe('repairReshapingPlan', () => {
