@@ -171,6 +171,8 @@ describe('TransformerService illustration render (DET-261)', () => {
     const promptArg = image.mock.calls[0][0].prompt
     expect(promptArg).toContain('A lighthouse on a cliff') // visualDescription
     expect(promptArg).toContain('Caption: Guiding light') // caption
+    // the house art direction rides on every render
+    expect(promptArg).toContain('mid-century scientific illustration')
     // never reads source blocks — no block text leaks into the prompt
     expect(promptArg).not.toContain('b1')
     // generated at the landscape 3:2 size (presented 16:9 on the client)

@@ -28,7 +28,10 @@ import type {
 } from './schemas'
 import type { ClassifiedBlockInput } from './structure-model.service'
 import { StructureModelService } from './structure-model.service'
-import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
+import {
+  buildIllustrationImagePrompt,
+  ILLUSTRATION_IMAGE_SIZE,
+} from './transformer.constants'
 import type {
   ArticleJsonV2,
   CoverageReport,
@@ -364,7 +367,10 @@ export class ArticlePipelineService {
     articleId: string,
     suggestion: IllustrationSuggestion,
   ): Promise<NonNullable<IllustrationSuggestion['image']>> {
-    const prompt = `${suggestion.visualDescription}\n\nCaption: ${suggestion.caption}`
+    const prompt = buildIllustrationImagePrompt(
+      suggestion.visualDescription,
+      suggestion.caption,
+    )
     const result = await this.ai.image({
       prompt,
       size: ILLUSTRATION_IMAGE_SIZE,

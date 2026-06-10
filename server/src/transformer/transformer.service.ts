@@ -33,7 +33,10 @@ import type {
   LearningLayer,
   SourceStructureModel,
 } from './schemas'
-import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
+import {
+  buildIllustrationImagePrompt,
+  ILLUSTRATION_IMAGE_SIZE,
+} from './transformer.constants'
 import type {
   ArticleJsonV2,
   CoverageReport,
@@ -578,8 +581,12 @@ export class TransformerService {
       )
     }
 
-    // Prompt uses ONLY the approved suggestion text — never the source blocks.
-    const prompt = `${suggestion.visualDescription}\n\nCaption: ${suggestion.caption}`
+    // Prompt uses ONLY the approved suggestion text — never the source blocks —
+    // plus the house mid-century style directive shared with the auto-render.
+    const prompt = buildIllustrationImagePrompt(
+      suggestion.visualDescription,
+      suggestion.caption,
+    )
     const result = await this.ai.image({
       prompt,
       size: ILLUSTRATION_IMAGE_SIZE,
