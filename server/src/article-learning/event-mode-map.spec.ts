@@ -28,6 +28,7 @@ describe('EVENTS_BY_MODE — matches the DET-278 mapping', () => {
       'review_prompt_approved',
       'review_completed',
     ])
+    expect(eventsForMode('DET-321')).toEqual(['retrieval_prompt_attempted'])
   })
 
   it('only references event types from the canonical union', () => {

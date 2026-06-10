@@ -1132,6 +1132,8 @@ enum ArticleLearningEventType {
   concept_candidate_approved
   review_prompt_approved
   review_completed
+  // DET-321: inline retrieval prompt attempted in the Article tab.
+  retrieval_prompt_attempted
 }
 
 // Lifecycle of a review prompt derived from a learning event (DET-278 rule #4).
@@ -1429,6 +1431,10 @@ model TransformedArticle {
   // never folded into articleJson, only references its ids. Ungrounded furniture is
   // labelled "AI · not from your source" in the UI.
   editorialLayout Json?
+  // Aggregated quality rollup (DET-320) — code-derived at finalize from the
+  // artifacts already persisted (fidelity/coverage/articleJson counts), never an
+  // LLM output. Additive; old rows stay NULL.
+  qualityReport   Json?
   error           String?
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt

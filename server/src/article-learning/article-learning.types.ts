@@ -164,6 +164,9 @@ export type ArticleLearningEventType =
   | 'concept_candidate_approved'
   | 'review_prompt_approved'
   | 'review_completed'
+  // DET-321: the learner attempted an inline retrieval prompt in the Article
+  // tab (revealed the source passage behind it). Active reading, not earning.
+  | 'retrieval_prompt_attempted'
 
 /** All event types as a runtime array (ordered as authored in DET-278). */
 export const ARTICLE_LEARNING_EVENT_TYPES: readonly ArticleLearningEventType[] =
@@ -179,6 +182,7 @@ export const ARTICLE_LEARNING_EVENT_TYPES: readonly ArticleLearningEventType[] =
     'concept_candidate_approved',
     'review_prompt_approved',
     'review_completed',
+    'retrieval_prompt_attempted',
   ]
 
 /**

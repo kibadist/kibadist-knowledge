@@ -14,6 +14,7 @@
  * DET-286 Compare & Repair    -> comparison_generated, rewrite_revised
  * DET-287 Concept Extraction  -> concept_candidate_approved
  * DET-288 Spaced Review       -> review_prompt_approved, review_completed
+ * DET-321 Inline Retrieval Prompts -> retrieval_prompt_attempted
  *
  * (DET-284 Deep Reading is the host reading surface; it owns no events of its own
  *  — it hosts the entry-points into the other modes.)
@@ -28,6 +29,7 @@ export type LearningMode =
   | 'DET-286'
   | 'DET-287'
   | 'DET-288'
+  | 'DET-321'
 
 /** Canonical mode -> events mapping. Frozen so it is read-only at runtime. */
 export const EVENTS_BY_MODE: Readonly<
@@ -47,6 +49,7 @@ export const EVENTS_BY_MODE: Readonly<
   'DET-286': ['comparison_generated', 'rewrite_revised'],
   'DET-287': ['concept_candidate_approved'],
   'DET-288': ['review_prompt_approved', 'review_completed'],
+  'DET-321': ['retrieval_prompt_attempted'],
 })
 
 /** The events a given mode is allowed to emit. */

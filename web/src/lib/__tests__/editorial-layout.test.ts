@@ -631,6 +631,288 @@ describe('buildEditorialPlan — abstract lede + figure refs from server', () =>
   })
 })
 
+describe('buildEditorialPlan — definition cards + key concepts (DET-319)', () => {
+  function withSpans(
+    block: ArticleBlockV2,
+    sourceSpanIds: string[],
+  ): ArticleBlockV2 {
+    return { ...block, source_span_ids: sourceSpanIds }
+  }
+  const candidate = (
+    id: string,
+    sectionId: string,
+    status: 'pending' | 'validated' | 'dismissed' = 'pending',
+  ) => ({
+    id,
+    sectionId,
+    label: `Concept ${id}`,
+    definition: `Definition of ${id}.`,
+    sourceBlockIds: ['src-1'],
+    aiAssisted: true as const,
+    validationStatus: status,
+  })
+
+  it('places a definition card in the section its provenance overlaps most', () => {
+    const a = article([
+      section(
+        'sec-1',
+        'A',
+        [withSpans(para('One.', 'b1'), ['src-1']), para('Two.', 'b2')],
+        0,
+      ),
+      section(
+        'sec-2',
+        'B',
+        [
+          withSpans(para('Three.', 'b3'), ['src-2', 'src-3']),
+          para('Four.', 'b4'),
+        ],
+        1,
+      ),
+    ])
+    const plan = buildEditorialPlan({
+      article: a,
+      terminology: [
+        {
+          term: 'Vector',
+          definition: 'A magnitude with direction.',
+          sourceBlockIds: ['src-2', 'src-3'],
+        },
+      ],
+    })
+    const defs = plan.sections.map((s) =>
+      s.items.filter((i) => i.kind === 'definition'),
+    )
+    expect(defs[0]).toHaveLength(0)
+    expect(defs[1]).toHaveLength(1)
+    const def = defs[1][0] as Extract<StreamItem, { kind: 'definition' }>
+    expect(def.term).toBe('Vector')
+    expect(def.sourceIds).toEqual(['src-2', 'src-3'])
+  })
+
+  it('drops a zero-overlap definition instead of guessing a placement', () => {
+    const a = article([
+      section('sec-1', 'A', [withSpans(para('One.', 'b1'), ['src-1'])]),
+    ])
+    const plan = buildEditorialPlan({
+      article: a,
+      terminology: [
+        {
+          term: 'Stray',
+          definition: 'Unanchored.',
+          sourceBlockIds: ['src-elsewhere'],
+        },
+      ],
+    })
+    const all = plan.sections.flatMap((s) => s.items)
+    expect(all.some((i) => i.kind === 'definition')).toBe(false)
+  })
+
+  it('caps definition cards at one per section', () => {
+    const a = article([
+      section('sec-1', 'A', [
+        withSpans(para('One.', 'b1'), ['src-1', 'src-2']),
+      ]),
+    ])
+    const plan = buildEditorialPlan({
+      article: a,
+      terminology: [
+        { term: 'First', definition: 'd1', sourceBlockIds: ['src-1'] },
+        { term: 'Second', definition: 'd2', sourceBlockIds: ['src-2'] },
+      ],
+    })
+    const defs = plan.sections[0].items.filter((i) => i.kind === 'definition')
+    expect(defs).toHaveLength(1)
+    expect((defs[0] as Extract<StreamItem, { kind: 'definition' }>).term).toBe(
+      'First',
+    )
+  })
+
+  it('closes a section with its key-concept candidate, preferring pending', () => {
+    const a = article([
+      section('sec-1', 'A', [para('One.', 'b1'), para('Two.', 'b2')]),
+    ])
+    const plan = buildEditorialPlan({
+      article: a,
+      conceptCandidates: [
+        candidate('c-validated', 'sec-1', 'validated'),
+        candidate('c-pending', 'sec-1', 'pending'),
+      ],
+    })
+    const items = plan.sections[0].items
+    const last = items[items.length - 1]
+    expect(last.kind).toBe('keyConcept')
+    expect(
+      (last as Extract<StreamItem, { kind: 'keyConcept' }>).candidate.id,
+    ).toBe('c-pending')
+  })
+
+  it('never renders a dismissed candidate and never invents devices', () => {
+    const a = article([section('sec-1', 'A', [para('One.', 'b1')])])
+    const plan = buildEditorialPlan({
+      article: a,
+      conceptCandidates: [candidate('c-x', 'sec-1', 'dismissed')],
+    })
+    const all = plan.sections.flatMap((s) => s.items)
+    expect(all.some((i) => i.kind === 'keyConcept')).toBe(false)
+    expect(all.some((i) => i.kind === 'definition')).toBe(false)
+  })
+})
+
+describe('buildEditorialPlan — inline retrieval prompts (DET-321)', () => {
+  function withSpans(
+    block: ArticleBlockV2,
+    sourceSpanIds: string[],
+  ): ArticleBlockV2 {
+    return { ...block, source_span_ids: sourceSpanIds }
+  }
+  const rp = (id: string, sourceBlockIds: string[]) => ({
+    id,
+    prompt: `Question ${id}?`,
+    sourceBlockIds,
+    promptType: 'recall' as const,
+    difficulty: 'medium' as const,
+  })
+
+  it('places at most one prompt per section, by provenance overlap', () => {
+    const a = article([
+      section('sec-1', 'A', [withSpans(para('One.', 'b1'), ['src-1'])], 0),
+      section('sec-2', 'B', [withSpans(para('Two.', 'b2'), ['src-2'])], 1),
+    ])
+    const plan = buildEditorialPlan({
+      article: a,
+      retrievalPrompts: [
+        rp('p1', ['src-2']),
+        rp('p2', ['src-2']),
+        rp('p3', ['src-1']),
+      ],
+    })
+    const promptsBySection = plan.sections.map((s) =>
+      s.items.filter((i) => i.kind === 'learningPrompt'),
+    )
+    expect(promptsBySection[0]).toHaveLength(1)
+    expect(promptsBySection[1]).toHaveLength(1)
+    // p1 took sec-2 (first come), p3 took sec-1; p2 had no free home.
+    const sec2Prompt = promptsBySection[1][0]
+    if (sec2Prompt.kind !== 'learningPrompt') throw new Error('expected prompt')
+    expect(sec2Prompt.prompt.id).toBe('p1')
+  })
+
+  it('leaves zero-overlap prompts to the Exercise tab', () => {
+    const a = article([
+      section('sec-1', 'A', [withSpans(para('One.', 'b1'), ['src-1'])]),
+    ])
+    const plan = buildEditorialPlan({
+      article: a,
+      retrievalPrompts: [rp('p1', ['src-elsewhere'])],
+    })
+    const all = plan.sections.flatMap((s) => s.items)
+    expect(all.some((i) => i.kind === 'learningPrompt')).toBe(false)
+  })
+})
+
+describe('buildEditorialPlan — strict vs enhanced (DET-323)', () => {
+  const base = () =>
+    article([
+      section('sec-1', 'A', [
+        para('One.', 'b1'),
+        para('Two.', 'b2'),
+        para('Three.', 'b3'),
+      ]),
+    ])
+  const aiLayout: EditorialLayout = {
+    kicker: { text: 'AI Kicker', grounded: false },
+    standfirst: { text: 'AI lede.', grounded: false },
+    pullQuote: { sectionId: 'sec-1', text: 'AI pull.', grounded: false },
+    statBand: {
+      grounded: false,
+      stats: [
+        { figure: '10', label: 'a' },
+        { figure: '20', label: 'b' },
+      ],
+    },
+    marginalNotes: [
+      {
+        sectionId: 'sec-1',
+        afterParagraphIndex: 1,
+        title: 'AI note',
+        text: 'Not from the source.',
+        grounded: false,
+      },
+    ],
+  }
+
+  it('strict drops every device that would carry the ✦ AI mark', () => {
+    const plan = buildEditorialPlan({
+      article: base(),
+      editorialLayout: aiLayout,
+      illustrations: [
+        illus({ id: 'cover', illustrationType: 'editorial_cover' }),
+      ],
+      conceptCandidates: [
+        {
+          id: 'c1',
+          sectionId: 'sec-1',
+          label: 'L',
+          definition: 'D',
+          sourceBlockIds: ['b1'],
+          aiAssisted: true,
+          validationStatus: 'pending',
+        },
+      ],
+      enrichment: { classification: 'AI Category' },
+      aiAssistMode: 'strict',
+    })
+    expect(plan.kicker).toBe('Kibadist Compendium · Entry')
+    expect(plan.kickerAi).toBe(false)
+    expect(plan.standfirst).toBeNull()
+    const items = plan.sections.flatMap((s) => s.items)
+    expect(items.some((i) => i.kind === 'figure')).toBe(false)
+    expect(items.some((i) => i.kind === 'keyConcept')).toBe(false)
+    for (const i of items) {
+      if (i.kind === 'statband' || i.kind === 'pullquote') {
+        expect(i.ai).toBe(false)
+      }
+      if (i.kind === 'marginal') expect(i.ai).toBe(false)
+    }
+  })
+
+  it('strict keeps grounded server furniture', () => {
+    const plan = buildEditorialPlan({
+      article: base(),
+      editorialLayout: {
+        pullQuote: {
+          sectionId: 'sec-1',
+          text: 'Verbatim source line.',
+          grounded: true,
+        },
+      },
+      aiAssistMode: 'strict',
+    })
+    const pull = plan.sections
+      .flatMap((s) => s.items)
+      .find((i) => i.kind === 'pullquote')
+    expect(pull).toBeTruthy()
+    if (pull?.kind === 'pullquote') {
+      expect(pull.text).toBe('Verbatim source line.')
+      expect(pull.ai).toBe(false)
+    }
+  })
+
+  it('enhanced (the default) renders the same inputs with honesty marks', () => {
+    const plan = buildEditorialPlan({
+      article: base(),
+      editorialLayout: aiLayout,
+    })
+    expect(plan.kicker).toBe('AI Kicker')
+    expect(plan.kickerAi).toBe(true)
+    const pull = plan.sections
+      .flatMap((s) => s.items)
+      .find((i) => i.kind === 'pullquote')
+    if (pull?.kind === 'pullquote') expect(pull.ai).toBe(true)
+  })
+})
+
 describe('buildEditorialPlan — edge cases', () => {
   it('(k) does not throw on an empty article', () => {
     const a = article([])

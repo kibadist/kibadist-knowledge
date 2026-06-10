@@ -52,6 +52,9 @@ function blockWordCount(block: ArticleBlock): number {
     case 'pullQuote':
     case 'code':
       return countWords(block.text)
+    // An equation reads slowly but tokenizes oddly; count its LaTeX words.
+    case 'equation':
+      return countWords(block.latex)
     case 'quote':
       return (
         countWords(block.text) +

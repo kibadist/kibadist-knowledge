@@ -75,6 +75,10 @@ export class LearningLayerService {
         id: randomUUID(),
         prompt: p.prompt,
         sourceBlockIds: validIds,
+        // DET-321: typed prompts — carried through when the model supplied a
+        // valid type/difficulty (the lenient wire schema degraded bad enums).
+        ...(p.promptType ? { promptType: p.promptType } : {}),
+        ...(p.difficulty ? { difficulty: p.difficulty } : {}),
       })
     }
 

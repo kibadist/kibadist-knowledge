@@ -139,6 +139,14 @@ export function DeepReadingBlock({ block, keyTerms }: DeepReadingBlockProps) {
           </table>
         </div>
       )
+    case 'equation':
+      // A display equation (DET-322): the reading surface shows the verbatim
+      // notation in a code frame; full typesetting lives in the Compendium.
+      return (
+        <pre id={block.block_id} className='kb-code-block'>
+          <code>{block.content.latex}</code>
+        </pre>
+      )
     case 'divider':
       return <hr id={block.block_id} className='kb-dr-divider' />
   }

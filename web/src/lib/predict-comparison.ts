@@ -236,6 +236,8 @@ function exampleLabel(block: ArticleBlockV2): string | null {
       return block.content.language
         ? `a ${block.content.language} code example`
         : 'a worked code example'
+    case 'equation':
+      return 'an equation'
     case 'table':
       return 'a comparison table'
     case 'image':

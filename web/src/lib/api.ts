@@ -1104,6 +1104,7 @@ export type ArticleBlockType =
   | 'code'
   | 'figureAnchor'
   | 'callout'
+  | 'equation'
 
 export interface ArticleBlockBase {
   id: string
@@ -1161,6 +1162,14 @@ export interface ArticleCalloutBlock extends ArticleBlockBase {
   text: string
 }
 
+// A display equation preserved from the source (DET-322) — verbatim LaTeX, or
+// 'normalized' when only delimiters/whitespace were cleaned. Never derived math.
+export interface ArticleEquationBlock extends ArticleBlockBase {
+  type: 'equation'
+  latex: string
+  equationStatus: 'verbatim' | 'normalized'
+}
+
 export type ArticleBlock =
   | ArticleParagraphBlock
   | ArticleListBlock
@@ -1170,6 +1179,7 @@ export type ArticleBlock =
   | ArticleCodeBlock
   | ArticleFigureAnchorBlock
   | ArticleCalloutBlock
+  | ArticleEquationBlock
 
 export interface ArticleSectionV2 {
   id: string
@@ -1353,6 +1363,8 @@ export interface ArticleEnrichment {
   partOfSpeech?: string
   etymology?: string
   classification?: string
+  /** Model-judged reading difficulty (DET-324) — AI-lane, shown with ✦ mark. */
+  difficulty?: 'introductory' | 'intermediate' | 'advanced' | 'expert'
   keyFacts?: { label: string; value: string }[]
 }
 
@@ -1415,10 +1427,22 @@ export interface LearningConcept {
   validationStatus: LearningValidationStatus
 }
 
+// Typed retrieval prompts (DET-321). Both fields are additive + optional —
+// old learning-layer rows omit them and still render (as untyped prompts).
+export type RetrievalPromptType =
+  | 'recall'
+  | 'prediction'
+  | 'contrast'
+  | 'self_explanation'
+  | 'misconception_check'
+export type RetrievalPromptDifficulty = 'easy' | 'medium' | 'hard'
+
 export interface LearningRetrievalPrompt {
   id: string
   prompt: string
   sourceBlockIds: string[]
+  promptType?: RetrievalPromptType
+  difficulty?: RetrievalPromptDifficulty
 }
 
 // A per-section concept-extraction CANDIDATE (DET-283). A PROPOSAL — never an
@@ -1468,7 +1492,33 @@ export interface TransformedArticle {
   // (kicker, standfirst, sub-heads, pull-quote, stat band, marginal notes, figure
   // placements). Null on articles generated before this lane.
   editorialLayout: EditorialLayout | null
+  // Source-grounded term definitions from the stored structure model (DET-319)
+  // — the Compendium's definition cards. Null on pre-structure-model articles.
+  terminology: TerminologyEntry[] | null
+  // Aggregated quality rollup (DET-320) — code-derived at finalize; null on
+  // articles generated before the rollup existed.
+  qualityReport: ArticleQualityReport | null
   error: string | null
+}
+
+// Mirrors server quality-report.util.ts (DET-320). Scores are 0–1.
+export interface ArticleQualityReport {
+  sourceCoverageScore: number
+  citationCoverageScore: number
+  unsupportedClaimCount: number
+  lowConfidenceBlockCount: number
+  tableCount: number
+  figureSuggestionCount: number
+  conceptCandidateCount: number
+  exerciseReadinessScore: number
+  reviewerWarnings: string[]
+}
+
+/** One source-grounded term definition (mirrors the structure model's shape). */
+export interface TerminologyEntry {
+  term: string
+  definition: string
+  sourceBlockIds: string[]
 }
 
 // Mirrors the server DTO allowlist (WAITLIST_SOURCES) — add new values there first.

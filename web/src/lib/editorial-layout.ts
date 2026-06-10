@@ -3,6 +3,9 @@ import type {
   EditorialLayout,
   IllustrationSuggestion,
   InlineRun,
+  LearningConceptCandidate,
+  LearningRetrievalPrompt,
+  TerminologyEntry,
 } from './api'
 import {
   type ArticleBlockV2,
@@ -88,6 +91,21 @@ export type StreamItem =
   | { kind: 'statband'; stats: PlannedStat[]; ai: boolean }
   | { kind: 'pullquote'; text: string; attribution?: string; ai: boolean }
   | { kind: 'marginal'; title: string; text: string; ai: boolean }
+  /** A source-grounded definition card (DET-319). `id` is the deterministic
+   *  citation anchor (`def-N`); `sourceIds` carry the term's provenance. */
+  | {
+      kind: 'definition'
+      id: string
+      term: string
+      definition: string
+      sourceIds: string[]
+    }
+  /** A key-concept device (DET-319): the section's concept-extraction candidate
+   *  with its validate ("Save as Concept") affordance. */
+  | { kind: 'keyConcept'; candidate: LearningConceptCandidate }
+  /** An inline retrieval prompt (DET-321): a typed self-test question whose
+   *  source-passage answer stays hidden until the learner attempts it. */
+  | { kind: 'learningPrompt'; prompt: LearningRetrievalPrompt }
 
 export interface PlannedSection {
   sectionId: string
@@ -116,7 +134,24 @@ export interface BuildEditorialPlanArgs {
   enrichment?: ArticleEnrichment | null
   /** Server-generated furniture; may be null/absent (Layer 1 still renders). */
   editorialLayout?: EditorialLayout | null
+  /** Source-grounded term definitions (structure model) → definition cards. */
+  terminology?: TerminologyEntry[] | null
+  /** Per-section concept-extraction candidates (DET-283) → key-concept devices. */
+  conceptCandidates?: LearningConceptCandidate[] | null
+  /** Typed retrieval prompts (DET-321) → at most one inline prompt per section. */
+  retrievalPrompts?: LearningRetrievalPrompt[] | null
+  /**
+   * Strict vs Enhanced (DET-323, spec §16). 'strict' renders ONLY
+   * source-grounded material: every device that would carry the
+   * "✦ AI · not from your source" mark is dropped at PLAN time — ungrounded
+   * server furniture (falling back to the grounded deterministic derivations),
+   * AI illustration plates, and AI-assisted key-concept devices. The data is
+   * untouched, so toggling back is instant. Default: 'enhanced'.
+   */
+  aiAssistMode?: AiAssistMode
 }
+
+export type AiAssistMode = 'strict' | 'enhanced'
 
 const DEFAULT_KICKER = 'Kibadist Compendium · Entry'
 // After how many opening paragraphs a section's hero plate may sit (rule: 1–2).
@@ -131,7 +166,12 @@ export function buildEditorialPlan({
   illustrations = [],
   enrichment,
   editorialLayout,
+  terminology,
+  conceptCandidates,
+  retrievalPrompts,
+  aiAssistMode = 'enhanced',
 }: BuildEditorialPlanArgs): EditorialPlan {
+  const strict = aiAssistMode === 'strict'
   const allSections = orderedSections(article)
 
   // The adapter surfaces the source abstract as the first section (its
@@ -148,28 +188,38 @@ export function buildEditorialPlan({
         .map((b) => ({ blockId: b.block_id, runs: b.content.runs }))
     : []
 
+  // --- Strict mode (DET-323) -------------------------------------------------
+  // Drop every INPUT that could only render with the ✦ AI mark before any
+  // resolution: ungrounded server furniture, the enrichment lane, AI
+  // illustration plates, and AI-assisted key-concept candidates. The grounded
+  // deterministic derivations remain because every resolver already falls back
+  // when server furniture is absent. The data itself is untouched — switching
+  // back to enhanced restores everything without regeneration.
+  const fxLayout = strict ? strictLayout(editorialLayout) : editorialLayout
+  const fxEnrichment = strict ? null : enrichment
+  const fxIllustrations = strict ? [] : illustrations
+  const fxCandidates = strict ? null : conceptCandidates
+
   // --- Spine: kicker + standfirst ------------------------------------------
   const kickerText =
-    editorialLayout?.kicker?.text ??
-    enrichment?.classification ??
-    DEFAULT_KICKER
-  const kickerAi = editorialLayout?.kicker
-    ? !editorialLayout.kicker.grounded
-    : Boolean(enrichment?.classification)
+    fxLayout?.kicker?.text ?? fxEnrichment?.classification ?? DEFAULT_KICKER
+  const kickerAi = fxLayout?.kicker
+    ? !fxLayout.kicker.grounded
+    : Boolean(fxEnrichment?.classification)
 
   // Prefer the faithful abstract lede; else the (possibly AI) server standfirst.
   let standfirst: EditorialText | null = null
   if (ledeParagraphs.length > 0) {
     standfirst = null // the lede renders as its own grounded block above columns
-  } else if (editorialLayout?.standfirst) {
+  } else if (fxLayout?.standfirst) {
     standfirst = {
-      text: editorialLayout.standfirst.text,
-      ai: !editorialLayout.standfirst.grounded,
+      text: fxLayout.standfirst.text,
+      ai: !fxLayout.standfirst.grounded,
     }
   }
 
   // Only rendered, approved illustrations become plates.
-  const readyIllus = illustrations.filter(
+  const readyIllus = fxIllustrations.filter(
     (s) => s.approval === 'approved' && s.image,
   )
 
@@ -179,20 +229,33 @@ export function buildEditorialPlan({
   const figurePlan = resolveFigurePlacements({
     illustrations: readyIllus,
     sections,
-    editorialLayout,
+    editorialLayout: fxLayout,
   })
 
   // --- Resolve the one stat band -------------------------------------------
-  const statBand = resolveStatBand({ sections, editorialLayout })
+  const statBand = resolveStatBand({ sections, editorialLayout: fxLayout })
 
   // --- Resolve the one pull-quote ------------------------------------------
-  const pullQuote = resolvePullQuote({ sections, editorialLayout })
+  const pullQuote = resolvePullQuote({ sections, editorialLayout: fxLayout })
 
   // --- Resolve 1–3 marginal notes ------------------------------------------
-  const marginals = resolveMarginals({ sections, editorialLayout })
+  const marginals = resolveMarginals({ sections, editorialLayout: fxLayout })
 
   // --- Resolve sub-heads ----------------------------------------------------
-  const subheads = resolveSubheads({ sections, editorialLayout })
+  const subheads = resolveSubheads({ sections, editorialLayout: fxLayout })
+
+  // --- Resolve definition cards + key-concept devices (DET-319) -------------
+  const definitions = resolveDefinitions({ sections, terminology })
+  const keyConcepts = resolveKeyConcepts({
+    sections,
+    conceptCandidates: fxCandidates,
+  })
+
+  // --- Resolve inline retrieval prompts (DET-321) ----------------------------
+  const learningPrompts = resolveLearningPrompts({
+    sections,
+    retrievalPrompts,
+  })
 
   // --- Assemble each section's ordered stream ------------------------------
   // The drop-cap lead is used once, on the FIRST body paragraph of the stream
@@ -210,6 +273,11 @@ export function buildEditorialPlan({
       pullQuote: pullQuote?.sectionId === section.section_id ? pullQuote : null,
       marginals: marginals.filter((m) => m.sectionId === section.section_id),
       subheads: subheads.filter((s) => s.sectionId === section.section_id),
+      definitions: definitions.filter(
+        (d) => d.sectionId === section.section_id,
+      ),
+      keyConcept: keyConcepts.get(section.section_id) ?? null,
+      learningPrompt: learningPrompts.get(section.section_id) ?? null,
     }),
   )
 
@@ -219,6 +287,24 @@ export function buildEditorialPlan({
     standfirst,
     ledeParagraphs,
     sections: plannedSections,
+  }
+}
+
+/**
+ * Strict-mode view of the server furniture (DET-323): keep ONLY pieces marked
+ * grounded; drop sub-heads (model-written connective text with no grounded
+ * flag) and figure placements (plates are suppressed entirely in strict).
+ */
+function strictLayout(layout?: EditorialLayout | null): EditorialLayout | null {
+  if (!layout) return null
+  return {
+    kicker: layout.kicker?.grounded ? layout.kicker : undefined,
+    standfirst: layout.standfirst?.grounded ? layout.standfirst : undefined,
+    subheads: [],
+    pullQuote: layout.pullQuote?.grounded ? layout.pullQuote : undefined,
+    statBand: layout.statBand?.grounded ? layout.statBand : undefined,
+    marginalNotes: (layout.marginalNotes ?? []).filter((m) => m.grounded),
+    figurePlacements: [],
   }
 }
 
@@ -678,6 +764,150 @@ function resolveMarginals(args: {
   return out
 }
 
+// --- Definition cards + key concepts (DET-319) --------------------------------
+
+// Restraint caps (spec §9.1: highlight what matters, don't overload the page).
+const MAX_DEFINITIONS = 4
+const MAX_KEY_CONCEPTS = 3
+
+interface ResolvedDefinition {
+  sectionId: string
+  id: string
+  term: string
+  definition: string
+  sourceIds: string[]
+}
+
+/**
+ * Place each source-grounded terminology entry in the section its provenance
+ * overlaps most (earliest section wins ties — same rule the server's callout
+ * placement uses). One card per section, MAX_DEFINITIONS total, zero-overlap
+ * entries are dropped rather than guessed at. Ids are deterministic (`def-N`
+ * in resolved order) so the citation index can anchor markers to them.
+ */
+function resolveDefinitions(args: {
+  sections: ArticleSectionV2[]
+  terminology?: TerminologyEntry[] | null
+}): ResolvedDefinition[] {
+  const { sections, terminology } = args
+  if (!terminology || terminology.length === 0 || sections.length === 0) {
+    return []
+  }
+
+  // Each section's full source-id set: its own ids + every block's ids.
+  const idsBySection = new Map<string, Set<string>>()
+  for (const sec of sections) {
+    const ids = new Set<string>(sec.source_span_ids ?? [])
+    for (const b of sec.blocks) {
+      for (const id of b.source_span_ids ?? []) ids.add(id)
+    }
+    idsBySection.set(sec.section_id, ids)
+  }
+
+  const used = new Set<string>()
+  const out: ResolvedDefinition[] = []
+  for (const entry of terminology) {
+    if (out.length >= MAX_DEFINITIONS) break
+    let best: string | null = null
+    let bestOverlap = 0
+    for (const sec of sections) {
+      if (used.has(sec.section_id)) continue
+      const ids = idsBySection.get(sec.section_id)
+      if (!ids) continue
+      let overlap = 0
+      for (const id of entry.sourceBlockIds) if (ids.has(id)) overlap++
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap
+        best = sec.section_id
+      }
+    }
+    if (!best) continue // no confident home — never guess a placement
+    used.add(best)
+    out.push({
+      sectionId: best,
+      id: `def-${out.length}`,
+      term: entry.term,
+      definition: entry.definition,
+      sourceIds: entry.sourceBlockIds,
+    })
+  }
+  return out
+}
+
+/**
+ * Pick at most one concept-extraction candidate per section (pending first so
+ * the "Save as Concept" affordance leads; validated still shows its state;
+ * dismissed never renders), capped at MAX_KEY_CONCEPTS across the article.
+ */
+function resolveKeyConcepts(args: {
+  sections: ArticleSectionV2[]
+  conceptCandidates?: LearningConceptCandidate[] | null
+}): Map<string, LearningConceptCandidate> {
+  const { sections, conceptCandidates } = args
+  const out = new Map<string, LearningConceptCandidate>()
+  if (!conceptCandidates || conceptCandidates.length === 0) return out
+  for (const sec of sections) {
+    if (out.size >= MAX_KEY_CONCEPTS) break
+    const here = conceptCandidates.filter(
+      (c) =>
+        c.sectionId === sec.section_id && c.validationStatus !== 'dismissed',
+    )
+    if (here.length === 0) continue
+    const pick = here.find((c) => c.validationStatus === 'pending') ?? here[0]
+    out.set(sec.section_id, pick)
+  }
+  return out
+}
+
+// --- Inline retrieval prompts (DET-321) ----------------------------------------
+
+// Active reading, not interruption (spec §9.3): at most one prompt per section.
+const MAX_LEARNING_PROMPTS = 4
+
+/**
+ * Place each typed retrieval prompt in the section its provenance overlaps
+ * most (earliest wins ties), one per section, MAX_LEARNING_PROMPTS total.
+ * Zero-overlap prompts are left to the Exercise tab rather than guessed into
+ * a section.
+ */
+function resolveLearningPrompts(args: {
+  sections: ArticleSectionV2[]
+  retrievalPrompts?: LearningRetrievalPrompt[] | null
+}): Map<string, LearningRetrievalPrompt> {
+  const { sections, retrievalPrompts } = args
+  const out = new Map<string, LearningRetrievalPrompt>()
+  if (!retrievalPrompts || retrievalPrompts.length === 0) return out
+
+  const idsBySection = new Map<string, Set<string>>()
+  for (const sec of sections) {
+    const ids = new Set<string>(sec.source_span_ids ?? [])
+    for (const b of sec.blocks) {
+      for (const id of b.source_span_ids ?? []) ids.add(id)
+    }
+    idsBySection.set(sec.section_id, ids)
+  }
+
+  for (const prompt of retrievalPrompts) {
+    if (out.size >= MAX_LEARNING_PROMPTS) break
+    let best: string | null = null
+    let bestOverlap = 0
+    for (const sec of sections) {
+      if (out.has(sec.section_id)) continue
+      const ids = idsBySection.get(sec.section_id)
+      if (!ids) continue
+      let overlap = 0
+      for (const id of prompt.sourceBlockIds) if (ids.has(id)) overlap++
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap
+        best = sec.section_id
+      }
+    }
+    if (!best) continue
+    out.set(best, prompt)
+  }
+  return out
+}
+
 // --- Sub-heads ---------------------------------------------------------------
 
 interface ResolvedSubhead {
@@ -733,6 +963,9 @@ function buildSection(args: {
   pullQuote: ResolvedPullQuote | null
   marginals: ResolvedMarginal[]
   subheads: ResolvedSubhead[]
+  definitions: ResolvedDefinition[]
+  keyConcept: LearningConceptCandidate | null
+  learningPrompt: LearningRetrievalPrompt | null
 }): PlannedSection {
   const {
     section,
@@ -744,6 +977,9 @@ function buildSection(args: {
     pullQuote,
     marginals,
     subheads,
+    definitions,
+    keyConcept,
+    learningPrompt,
   } = args
 
   const blocks = orderedBlocks(section)
@@ -755,9 +991,11 @@ function buildSection(args: {
   const marginalByAfter = groupBy(marginals, (m) => m.afterParagraphIndex)
 
   // A stat band / pull-quote attach to this section once, placed after its
-  // opening paragraphs (a thesis peak); they are full-width landmarks.
+  // opening paragraphs (a thesis peak); they are full-width landmarks. The
+  // definition cards (DET-319) follow the same once-per-section rule.
   let statPlaced = !statBand
   let pullPlaced = !pullQuote
+  let defsPlaced = definitions.length === 0
 
   let paraSeen = 0
   let plainRun = 0
@@ -781,6 +1019,21 @@ function buildSection(args: {
         text: m.text,
         ai: m.ai,
       })
+      plainRun = 0
+    }
+    // A definition card sits right after the opening paragraphs (DET-319) —
+    // the term has just been introduced; the card pins it down.
+    if (!defsPlaced && count >= OPENING_PARAGRAPHS) {
+      for (const d of definitions) {
+        items.push({
+          kind: 'definition',
+          id: d.id,
+          term: d.term,
+          definition: d.definition,
+          sourceIds: d.sourceIds,
+        })
+      }
+      defsPlaced = true
       plainRun = 0
     }
     // The full-width devices land right after the opening paragraphs.
@@ -870,6 +1123,17 @@ function buildSection(args: {
 
   // Any devices anchored past the section's paragraph count still get placed at
   // the end so nothing is silently dropped (e.g. a server after-index too big).
+  if (!defsPlaced) {
+    for (const d of definitions) {
+      items.push({
+        kind: 'definition',
+        id: d.id,
+        term: d.term,
+        definition: d.definition,
+        sourceIds: d.sourceIds,
+      })
+    }
+  }
   if (!statPlaced && statBand) {
     items.push({ kind: 'statband', stats: statBand.stats, ai: statBand.ai })
   }
@@ -892,6 +1156,19 @@ function buildSection(args: {
       for (const m of ms)
         items.push({ kind: 'marginal', title: m.title, text: m.text, ai: m.ai })
     }
+  }
+
+  // Active recall after the section (DET-321, spec §9.3): the inline prompt
+  // closes the prose so the learner self-tests before moving on; the
+  // key-concept device follows as the "what to keep" decision.
+  if (learningPrompt) {
+    items.push({ kind: 'learningPrompt', prompt: learningPrompt })
+  }
+  // The key-concept device closes the section (DET-319): "here is what this
+  // section asks you to keep" reads naturally after the prose, right where the
+  // learner decides whether to save it.
+  if (keyConcept) {
+    items.push({ kind: 'keyConcept', candidate: keyConcept })
   }
 
   return {

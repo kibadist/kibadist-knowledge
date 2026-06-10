@@ -177,4 +177,28 @@ describe('transformerArticleToV2', () => {
     const sec = adapted.sections.find((s) => s.section_id === 'sec-1')
     expect(sec?.key_terms).toEqual([{ term: 'forgetting curve' }])
   })
+
+  it('carries an equation block through verbatim (DET-322)', () => {
+    const base = makeTransformerArticle()
+    base.sections[0].blocks.push({
+      id: 'eq1',
+      type: 'equation',
+      latex: 'R = e^{-t/S}',
+      equationStatus: 'verbatim',
+      sourceBlockIds: ['s5'],
+      transformationType: 'verbatim',
+      fidelityRisk: 'low',
+    })
+    const out = transformerArticleToV2(base, {
+      articleId: 'art-1',
+      sourceId: 'src-1',
+    })
+    const sec = out.sections.find((s) => s.section_id === 'sec-1')
+    const eq = sec?.blocks.find((b) => b.block_id === 'eq1')
+    expect(eq).toMatchObject({
+      type: 'equation',
+      content: { latex: 'R = e^{-t/S}', status: 'verbatim' },
+      source_span_ids: ['s5'],
+    })
+  })
 })

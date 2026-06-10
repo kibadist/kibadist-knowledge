@@ -405,3 +405,72 @@ describe('LearningLayerSchema conceptCandidates (DET-283)', () => {
     expect(LearningLayerSchema.safeParse(broken).success).toBe(false)
   })
 })
+
+describe('equation block (DET-322)', () => {
+  const articleWith = (block: unknown): unknown => ({
+    schemaVersion: 'v2',
+    mode: 'source_preserving_article',
+    title: { text: 'T', source: 'original' },
+    abstract: [],
+    sections: [
+      {
+        id: 's1',
+        heading: 'H',
+        headingSource: 'original',
+        sourceBlockIds: ['b1'],
+        blocks: [block],
+      },
+    ],
+    keyTerms: [],
+    sourceExamples: [],
+    caveats: [],
+    originalStructure: [],
+  })
+
+  it('accepts a verbatim equation with provenance', () => {
+    const parsed = ArticleJsonV2Schema.safeParse(
+      articleWith({
+        id: 'e1',
+        type: 'equation',
+        latex: 'E = mc^2',
+        equationStatus: 'verbatim',
+        sourceBlockIds: ['b1'],
+        transformationType: 'verbatim',
+        fidelityRisk: 'low',
+      }),
+    )
+    expect(parsed.success).toBe(true)
+  })
+
+  it('defaults equationStatus to verbatim (the strictest claim)', () => {
+    const parsed = ArticleJsonV2Schema.parse(
+      articleWith({
+        id: 'e1',
+        type: 'equation',
+        latex: '\\frac{a}{b}',
+        sourceBlockIds: ['b1'],
+        transformationType: 'verbatim',
+        fidelityRisk: 'low',
+      }),
+    ) as ArticleJsonV2
+    const block = parsed.sections[0].blocks[0]
+    expect(block.type).toBe('equation')
+    if (block.type === 'equation') {
+      expect(block.equationStatus).toBe('verbatim')
+    }
+  })
+
+  it('rejects an equation without provenance', () => {
+    const parsed = ArticleJsonV2Schema.safeParse(
+      articleWith({
+        id: 'e1',
+        type: 'equation',
+        latex: 'E = mc^2',
+        sourceBlockIds: [],
+        transformationType: 'verbatim',
+        fidelityRisk: 'low',
+      }),
+    )
+    expect(parsed.success).toBe(false)
+  })
+})

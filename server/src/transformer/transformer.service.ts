@@ -22,6 +22,7 @@ import { placeCallouts } from './callout-placement.util'
 import type { CreateTextSourceDto } from './dto/create-text-source.dto'
 import type { CreateUrlSourceDto } from './dto/create-url-source.dto'
 import { ARTICLE_IN_FLIGHT, PipelineService } from './pipeline.service'
+import type { ArticleQualityReport } from './quality-report.util'
 import { buildReadingAids } from './reading-aids.util'
 import type {
   ArticleEnrichment,
@@ -122,6 +123,16 @@ export interface TransformerArticleDetail {
   enrichment: ArticleEnrichment | null
   /** Generative editorial layout — additive presentation lane; null on old rows. */
   editorialLayout: EditorialLayout | null
+  /**
+   * Source-grounded term definitions lifted from the stored structure model
+   * (DET-319 follow-up) — the Compendium's definition cards. Read-time derived,
+   * never stored separately; null when the article predates structure models.
+   */
+  terminology:
+    | { term: string; definition: string; sourceBlockIds: string[] }[]
+    | null
+  /** Aggregated quality rollup (DET-320); null on pre-rollup articles. */
+  qualityReport: ArticleQualityReport | null
   error: string | null
   createdAt: Date
   updatedAt: Date
@@ -448,6 +459,10 @@ export class TransformerService {
       learningLayer: article.learningLayer as LearningLayer | null,
       enrichment: article.enrichment as ArticleEnrichment | null,
       editorialLayout: article.editorialLayout as EditorialLayout | null,
+      // Definition cards (DET-319): the structure model's terminology is the
+      // source-grounded term/definition inventory — surface it read-time.
+      terminology: structureModel?.terminology ?? null,
+      qualityReport: article.qualityReport as ArticleQualityReport | null,
       error: article.error,
       createdAt: article.createdAt,
       updatedAt: article.updatedAt,

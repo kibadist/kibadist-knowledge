@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
   type ArticleProvenance,
@@ -29,6 +29,7 @@ import {
   useArticleLearningState,
 } from '@/lib/article-learning-events'
 import type { ArticleV2 } from '@/lib/article-v2'
+import type { AiAssistMode } from '@/lib/editorial-layout'
 import {
   ARTICLE_STEPS,
   articleStatusLabel,
@@ -156,10 +157,29 @@ export default function ReadPage() {
       setPinnedView(next)
       const sp = new URLSearchParams(Array.from(params.entries()))
       sp.set('view', next)
+      // A plain tab switch drops any citation deep-link target (DET-318) so a
+      // stale highlight doesn't replay the next time the Inspector opens.
+      sp.delete('block')
       router.replace(`/read/${id}?${sp.toString()}`, { scroll: false })
     },
     [params, router, id],
   )
+
+  // A citation's "Open in Source" (DET-318): jump to the Inspector with the
+  // cited source block carried in `?block=`, where the block list highlights
+  // and scrolls to it. The Inspector is the one surface that renders the same
+  // pinned TransformerSourceBlock id space the citations live in.
+  const openSourceBlock = useCallback(
+    (blockId: string) => {
+      setPinnedView('inspector')
+      const sp = new URLSearchParams(Array.from(params.entries()))
+      sp.set('view', 'inspector')
+      sp.set('block', blockId)
+      router.replace(`/read/${id}?${sp.toString()}`, { scroll: false })
+    },
+    [params, router, id],
+  )
+  const citedBlockId = params.get('block')
 
   return (
     <div className='screen read-screen'>
@@ -235,7 +255,11 @@ export default function ReadPage() {
             // The tab only appears when a source exists; the guard covers a stray
             // `?view=inspector` deep-link on an item with no companion source.
             item.sourceId ? (
-              <SourceInspector sourceId={item.sourceId} embedded />
+              <SourceInspector
+                sourceId={item.sourceId}
+                embedded
+                highlightBlockId={citedBlockId}
+              />
             ) : (
               <p className='notice'>
                 No source pipeline to inspect for this item.
@@ -262,6 +286,10 @@ export default function ReadPage() {
               inboxItemId={id}
               surface={effectiveView}
               initialMode={initialMode}
+              onOpenSource={item.sourceId ? openSourceBlock : undefined}
+              onInspect={
+                item.sourceId ? () => pickView('inspector') : undefined
+              }
             />
           ) : (
             // No article row exists yet — the companion pipeline hasn't started
@@ -368,11 +396,17 @@ function ArticleView({
   inboxItemId,
   surface,
   initialMode,
+  onOpenSource,
+  onInspect,
 }: {
   articleId: string
   inboxItemId: string
   surface: 'article' | 'exercise'
   initialMode?: ReadingMode
+  /** Citation deep-link (DET-318): open the Inspector at a cited source block. */
+  onOpenSource?: (sourceBlockId: string) => void
+  /** Folio fidelity escalation (DET-324): open the pipeline Inspector. */
+  onInspect?: () => void
 }) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -511,6 +545,25 @@ function ArticleView({
       api.scheduleReviewPrompt(toReviewPromptDraft(p)),
   })
 
+  // "Save as Concept" on a key-concept device (DET-319): the existing DET-283
+  // validate flow — idempotent server-side (a `conceptId` on the candidate means
+  // it was already promoted; re-validating never creates a second row).
+  const validateCandidate = useMutation({
+    mutationFn: (candidateId: string) =>
+      api.setLearningItemValidation(articleId, candidateId, 'validated'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['transformer-article', articleId],
+      })
+      queryClient.invalidateQueries({ queryKey: ['inbox'] })
+    },
+  })
+
+  // Strict vs Enhanced (DET-323): a render-time choice persisted per article.
+  // The lanes are always generated and stored, so toggling is instant and
+  // retroactive — strict simply renders zero ✦ AI-marked surfaces.
+  const [aiMode, setAiMode] = useAiAssistMode(articleId)
+
   const showBody =
     article?.articleJson &&
     (article.status === 'FINAL' || article.status === 'BLOCKED')
@@ -569,14 +622,67 @@ function ArticleView({
         // a magazine/encyclopedia presentation of the same Article JSON v2, with
         // any rendered illustrations placed as plates. The active-recall modes
         // stay on the Exercise tab.
-        <MagazineArticle
-          article={learningArticle}
-          articleId={articleId}
-          illustrations={article.illustrationPlan?.suggestions ?? []}
-          enrichment={article.enrichment}
-          editorialLayout={article.editorialLayout}
-          provenance={provenance}
-        />
+        <>
+          <div
+            className='read-ai-mode'
+            role='group'
+            aria-label='AI assistance level'
+          >
+            <button
+              type='button'
+              aria-pressed={aiMode === 'strict'}
+              className={aiMode === 'strict' ? 'is-on' : undefined}
+              onClick={() => setAiMode('strict')}
+            >
+              Strict · source only
+            </button>
+            <button
+              type='button'
+              aria-pressed={aiMode === 'enhanced'}
+              className={aiMode === 'enhanced' ? 'is-on' : undefined}
+              onClick={() => setAiMode('enhanced')}
+            >
+              Enhanced · with AI aids
+            </button>
+          </div>
+          <MagazineArticle
+            article={learningArticle}
+            articleId={articleId}
+            illustrations={article.illustrationPlan?.suggestions ?? []}
+            enrichment={article.enrichment}
+            editorialLayout={article.editorialLayout}
+            sourceBlocks={blocksQuery.data ?? []}
+            onOpenSource={onOpenSource}
+            terminology={article.terminology}
+            conceptCandidates={article.learningLayer?.conceptCandidates ?? []}
+            onValidateCandidate={(c) => validateCandidate.mutate(c.id)}
+            retrievalPrompts={article.learningLayer?.retrievalPrompts ?? []}
+            onPromptAttempt={(p) =>
+              // An attempted inline prompt is a learning EVENT, never knowledge
+              // (DET-321/315): log it through the same persisted event stream the
+              // Exercise modes use; reading alone still earns nothing.
+              persistEvent.mutate({
+                article_id: learningArticle.article_id,
+                article_version_id: learningArticle.article_version_id,
+                source_span_ids: p.sourceBlockIds,
+                event_type: 'retrieval_prompt_attempted',
+                prompt: p.prompt,
+                metadata: {
+                  prompt_id: p.id,
+                  prompt_type: p.promptType ?? null,
+                  difficulty: p.difficulty ?? null,
+                },
+              })
+            }
+            aiAssistMode={aiMode}
+            fidelity={{
+              score: article.fidelityScore,
+              blocked: article.status === 'BLOCKED',
+            }}
+            onInspectFidelity={onInspect}
+            provenance={provenance}
+          />
+        </>
       ) : (
         <ReadingSurface
           surface={surface}
@@ -704,6 +810,38 @@ function InterrogationAid({ inboxItemId }: { inboxItemId: string }) {
       )}
     </details>
   )
+}
+
+/**
+ * Per-article Strict/Enhanced choice (DET-323), persisted in localStorage so it
+ * survives reloads without a server round-trip. Initialized to 'enhanced' and
+ * hydrated in an effect (never in the initializer) so SSR markup matches.
+ */
+function useAiAssistMode(
+  articleId: string,
+): [AiAssistMode, (mode: AiAssistMode) => void] {
+  const key = `kb_ai_assist_mode:${articleId}`
+  const [mode, setMode] = useState<AiAssistMode>('enhanced')
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(key)
+      if (stored === 'strict' || stored === 'enhanced') setMode(stored)
+    } catch {
+      // Private mode / storage denied — the session default stands.
+    }
+  }, [key])
+  const update = useCallback(
+    (next: AiAssistMode) => {
+      setMode(next)
+      try {
+        window.localStorage.setItem(key, next)
+      } catch {
+        // Best-effort persistence only.
+      }
+    },
+    [key],
+  )
+  return [mode, update]
 }
 
 /**

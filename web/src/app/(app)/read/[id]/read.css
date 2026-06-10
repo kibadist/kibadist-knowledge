@@ -131,3 +131,38 @@
 .kbapp .read-inspect.is-fidelity:hover {
   color: var(--ink);
 }
+
+/* Strict vs Enhanced toggle (DET-323) — sits quietly above the Compendium
+   render; strict renders zero ✦ AI-marked surfaces, enhanced restores them. */
+.kbapp .read-ai-mode {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0.6rem 0 0.2rem;
+  padding: 2px;
+  border: 1px solid var(--rule-soft);
+  border-radius: 9px;
+}
+.kbapp .read-ai-mode button {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0.35rem 0.9rem;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: var(--tracking-mono, 0.08em);
+  text-transform: uppercase;
+  transition:
+    color var(--dur-fast, 120ms) var(--ease, ease),
+    background var(--dur-fast, 120ms) var(--ease, ease);
+}
+.kbapp .read-ai-mode button:hover:not(.is-on) {
+  color: var(--ink);
+}
+.kbapp .read-ai-mode button.is-on {
+  background: var(--paper-hi);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}

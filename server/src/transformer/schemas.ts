@@ -385,6 +385,16 @@ const calloutBlock = z.object({
   text: z.string().min(1),
 })
 
+// A display equation preserved from the source (DET-322). The LaTeX is the
+// source's own math — never derived; `equationStatus` defaults to 'verbatim'
+// so a model that omits it still parses as the strictest claim.
+const equationBlock = z.object({
+  ...blockBase,
+  type: z.literal('equation'),
+  latex: z.string().min(1),
+  equationStatus: z.enum(['verbatim', 'normalized']).default('verbatim'),
+})
+
 const articleBlock = z.discriminatedUnion('type', [
   paragraphBlock,
   listBlock,
@@ -394,6 +404,7 @@ const articleBlock = z.discriminatedUnion('type', [
   codeBlock,
   figureAnchorBlock,
   calloutBlock,
+  equationBlock,
 ])
 
 // Sections nest one level; declared via z.lazy so subsections reuse the schema.
@@ -481,6 +492,7 @@ const llmArticleBlock = z.discriminatedUnion('type', [
   tableBlock,
   codeBlock,
   calloutBlock,
+  equationBlock,
 ])
 
 // LLM sections nest one level and never carry figureAnchor blocks.
@@ -691,6 +703,15 @@ export const ArticleEnrichmentSchema = z.object({
   etymology: z.string().min(1).optional(),
   /** A short domain category, e.g. "Concept · Computer science". */
   classification: z.string().min(1).optional(),
+  /**
+   * Model-judged reading difficulty of the MATERIAL (DET-324). AI-lane like
+   * every enrichment field — the UI shows it with the ✦ AI mark. Lenient
+   * `.catch(undefined)`: an unknown enum degrades to absent, never fails.
+   */
+  difficulty: z
+    .enum(['introductory', 'intermediate', 'advanced', 'expert'])
+    .optional()
+    .catch(undefined),
   /** Encyclopedia infobox facts (label/value); the service slices to a few. */
   keyFacts: z.array(enrichmentKeyFact).default([]),
 })
@@ -797,10 +818,32 @@ const learningConcept = z.object({
 
 export type LearningConcept = z.infer<typeof learningConcept>
 
+/**
+ * Typed retrieval prompts (DET-321). Both fields are ADDITIVE + optional: old
+ * stored learning-layer rows predate them and still parse. On the LLM wire
+ * shape below they are also `.catch(undefined)` so a model emitting an unknown
+ * enum degrades that prompt to untyped instead of failing the whole layer.
+ */
+const retrievalPromptType = z.enum([
+  'recall',
+  'prediction',
+  'contrast',
+  'self_explanation',
+  'misconception_check',
+])
+const retrievalPromptDifficulty = z.enum(['easy', 'medium', 'hard'])
+
+export type RetrievalPromptType = z.infer<typeof retrievalPromptType>
+export type RetrievalPromptDifficulty = z.infer<
+  typeof retrievalPromptDifficulty
+>
+
 const retrievalPrompt = z.object({
   id: z.string().min(1),
   prompt: z.string().min(1),
   sourceBlockIds,
+  promptType: retrievalPromptType.optional(),
+  difficulty: retrievalPromptDifficulty.optional(),
 })
 
 export type RetrievalPrompt = z.infer<typeof retrievalPrompt>
@@ -864,6 +907,9 @@ export const LearningLayerLlmSchema = z.object({
     z.object({
       prompt: z.string().min(1),
       sourceBlockIds: z.array(z.string()).default([]),
+      // DET-321: lenient — an unknown enum degrades to untyped, never fails.
+      promptType: retrievalPromptType.optional().catch(undefined),
+      difficulty: retrievalPromptDifficulty.optional().catch(undefined),
     }),
   ),
 })

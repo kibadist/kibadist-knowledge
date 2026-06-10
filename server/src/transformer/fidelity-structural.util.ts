@@ -86,6 +86,10 @@ function blockText(block: ArticleBlock): string | undefined {
       return block.items.join(' ')
     case 'table':
       return block.rows.map((r) => r.join(' ')).join(' ')
+    // The LaTeX IS the equation's body text (DET-322) — comparing it keeps the
+    // verbatim-preservation check meaningful for math sources.
+    case 'equation':
+      return block.latex
     case 'figureAnchor':
       return undefined
   }

@@ -205,6 +205,7 @@ export type ArticleBlockType =
   | 'code'
   | 'figureAnchor'
   | 'callout'
+  | 'equation'
 
 /** Fields every v2 block carries (the traceability + provenance primitive). */
 export interface ArticleBlockBase {
@@ -271,6 +272,18 @@ export interface ArticleCalloutBlock extends ArticleBlockBase {
   text: string
 }
 
+/**
+ * A display equation preserved from the source (DET-322). `latex` is the
+ * source's own notation — 'verbatim' when untouched, 'normalized' when only
+ * the delimiters/whitespace were cleaned with the math itself unchanged.
+ * Never derived or invented math.
+ */
+export interface ArticleEquationBlock extends ArticleBlockBase {
+  type: 'equation'
+  latex: string
+  equationStatus: 'verbatim' | 'normalized'
+}
+
 /** The discriminated union of every v2 block. */
 export type ArticleBlock =
   | ArticleParagraphBlock
@@ -281,6 +294,7 @@ export type ArticleBlock =
   | ArticleCodeBlock
   | ArticleFigureAnchorBlock
   | ArticleCalloutBlock
+  | ArticleEquationBlock
 
 /** A v2 section: typed blocks, heading provenance, optional one-level nesting. */
 export interface ArticleSectionV2 {

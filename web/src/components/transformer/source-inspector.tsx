@@ -1,6 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
 
 import { PipelineStatus } from '@/components/transformer/pipeline-status'
 import {
@@ -38,6 +39,7 @@ import {
 export function SourceInspector({
   sourceId,
   embedded = false,
+  highlightBlockId = null,
 }: {
   sourceId: string
   /**
@@ -47,8 +49,21 @@ export function SourceInspector({
    * fallback) keeps the full header.
    */
   embedded?: boolean
+  /**
+   * A citation deep-link target (DET-318): the source block an article citation
+   * points at. Forces the collapsed fidelity panel open, highlights the block
+   * row, and scrolls it into view once the blocks load.
+   */
+  highlightBlockId?: string | null
 }) {
   const queryClient = useQueryClient()
+
+  // The fidelity panel is collapsed by default (DET-303) — a citation deep-link
+  // is the one caller that needs it open on arrival.
+  const [blocksOpen, setBlocksOpen] = useState(Boolean(highlightBlockId))
+  useEffect(() => {
+    if (highlightBlockId) setBlocksOpen(true)
+  }, [highlightBlockId])
 
   const sourceQuery = useQuery({
     queryKey: ['transformer-source', sourceId],
@@ -70,6 +85,16 @@ export function SourceInspector({
     queryFn: () => api.getTransformerSourceBlocks(sourceId),
     enabled: Boolean(source) && (source?.blocksVersion ?? 0) > 0,
   })
+
+  // Scroll the cited block into view once it exists in the DOM (panel open +
+  // blocks loaded). Centered so the highlighted row reads in context.
+  const blocksLoaded = Boolean(blocksQuery.data)
+  useEffect(() => {
+    if (!highlightBlockId || !blocksLoaded || !blocksOpen) return
+    document
+      .getElementById(`src-block-${highlightBlockId}`)
+      ?.scrollIntoView({ block: 'center' })
+  }, [highlightBlockId, blocksLoaded, blocksOpen])
 
   const transform = useMutation({
     mutationFn: () => api.transformSource(sourceId),
@@ -189,7 +214,11 @@ export function SourceInspector({
           and the blocks version — is appendix material for a non-technical
           reader, so it lives in a collapsed panel that's hidden by default.
           Status and the extraction-error panel above stay prominent. */}
-      <details className='panel tf-blocks tf-fidelity'>
+      <details
+        className='panel tf-blocks tf-fidelity'
+        open={blocksOpen}
+        onToggle={(e) => setBlocksOpen(e.currentTarget.open)}
+      >
         <summary className='tf-fidelity-summary'>
           <span className='tf-fidelity-kicker'>Source fidelity details</span>
           {source.blocksVersion > 0 && (
@@ -211,7 +240,11 @@ export function SourceInspector({
           {blocksQuery.data && blocksQuery.data.length > 0 && (
             <ol className='tf-block-list'>
               {blocksQuery.data.map((b) => (
-                <BlockRow key={b.id} block={b} />
+                <BlockRow
+                  key={b.id}
+                  block={b}
+                  highlighted={b.id === highlightBlockId}
+                />
               ))}
             </ol>
           )}
@@ -221,10 +254,20 @@ export function SourceInspector({
   )
 }
 
-function BlockRow({ block }: { block: TransformerBlockView }) {
+function BlockRow({
+  block,
+  highlighted = false,
+}: {
+  block: TransformerBlockView
+  /** Marks the block an article citation deep-linked to (DET-318). */
+  highlighted?: boolean
+}) {
   const loc = blockLocationLine(block)
   return (
-    <li className='tf-block'>
+    <li
+      className={`tf-block${highlighted ? ' is-cited' : ''}`}
+      id={`src-block-${block.id}`}
+    >
       <div className='tf-block-meta'>
         <span className='tf-block-index'>{block.orderIndex}</span>
         <span className='mono-label'>{block.blockType}</span>

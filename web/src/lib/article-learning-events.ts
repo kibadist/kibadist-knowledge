@@ -34,6 +34,9 @@ export type ArticleLearningEventType =
   | 'concept_candidate_approved'
   | 'review_prompt_approved'
   | 'review_completed'
+  // DET-321: the learner attempted an inline retrieval prompt in the Article
+  // tab (revealed the source passage behind it). Mirrors the server union.
+  | 'retrieval_prompt_attempted'
 
 /** Source-provenance confidence for a feedback claim (DET-278 §5). */
 export type SourceConfidence =

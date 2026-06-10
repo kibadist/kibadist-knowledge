@@ -14,6 +14,7 @@ import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { buildQualityReport } from './quality-report.util'
 import { buildReadingAids } from './reading-aids.util'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import type {
@@ -199,10 +200,20 @@ export class ArticlePipelineService {
     // call, so it stays INLINE beside enrichment and ships at the terminal status.
     const editorialLayout = await this.tryEditorialLayout(articleId, article)
 
+    // The aggregated quality rollup (DET-320) — pure code over the artifacts
+    // just computed. Illustrations are planned in the background after the
+    // terminal status, so figureSuggestionCount legitimately reads 0 here.
+    const quality = buildQualityReport({
+      article,
+      fidelity: report,
+      coverage,
+    })
+
     await this.persist(articleId, {
       fidelityReport: report as unknown as Prisma.InputJsonValue,
       fidelityScore: Math.round(report.fidelityScore),
       coverageReport: coverage as unknown as Prisma.InputJsonValue,
+      qualityReport: quality as unknown as Prisma.InputJsonValue,
       ...(enrichment
         ? { enrichment: enrichment as unknown as Prisma.InputJsonValue }
         : {}),

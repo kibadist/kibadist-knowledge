@@ -210,6 +210,14 @@ function mapBlock(
           text: block.text,
         },
       }
+    // A source equation carries through verbatim (DET-322) — the renderer owns
+    // the typesetting; the LaTeX is the block's plain text for learning modes.
+    case 'equation':
+      return {
+        ...base,
+        type: 'equation',
+        content: { latex: block.latex, status: block.equationStatus },
+      }
     case 'callout': {
       const variant =
         block.calloutType &&

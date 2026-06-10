@@ -996,6 +996,8 @@ function Block({
       return <TableBlock block={block} onInspect={onInspect} />
     case 'code':
       return <CodeBlock block={block} onInspect={onInspect} />
+    case 'equation':
+      return <EquationBlock block={block} onInspect={onInspect} />
     case 'callout':
       return <CalloutBlock block={block} onInspect={onInspect} />
     case 'figureAnchor':
@@ -1221,6 +1223,57 @@ function CodeBlock({
         onInspect({
           kind: 'Code',
           transformedText: block.text,
+          sourceBlockIds: block.sourceBlockIds,
+          transformationType: block.transformationType,
+          fidelityRisk: block.fidelityRisk,
+        })
+      }
+    >
+      {body}
+    </button>
+  )
+}
+
+/**
+ * A display equation (DET-322). The INSPECTOR view deliberately shows the raw
+ * LaTeX — the verbatim source notation is what fidelity inspection compares;
+ * typesetting belongs to the reading surface (the Compendium renders KaTeX).
+ */
+function EquationBlock({
+  block,
+  onInspect,
+}: {
+  block: Extract<ArticleBlock, { type: 'equation' }>
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  const missing = block.sourceBlockIds.length === 0
+  const body = (
+    <figure className='tf-code'>
+      <figcaption className='tf-code-lang'>
+        equation · {block.equationStatus}
+      </figcaption>
+      <pre className='tf-code-pre'>
+        <code>{block.latex}</code>
+      </pre>
+    </figure>
+  )
+
+  if (missing) {
+    return (
+      <div className='tf-block tf-block--missing'>
+        {body}
+        <MissingSourceChip />
+      </div>
+    )
+  }
+  return (
+    <button
+      type='button'
+      className='tf-block tf-block--clickable tf-block--code'
+      onClick={() =>
+        onInspect({
+          kind: 'Equation',
+          transformedText: block.latex,
           sourceBlockIds: block.sourceBlockIds,
           transformationType: block.transformationType,
           fidelityRisk: block.fidelityRisk,

@@ -156,6 +156,18 @@ export interface DividerBlock {
   learning_affordances?: LearningAffordance[]
 }
 
+/** A display equation preserved verbatim from the source (DET-322). */
+export interface EquationBlock {
+  block_id: string
+  section_id: string
+  order_index: number
+  type: 'equation'
+  content: { latex: string; status?: 'verbatim' | 'normalized' }
+  source_span_ids?: string[]
+  generated_from_block_ids?: string[]
+  learning_affordances?: LearningAffordance[]
+}
+
 export type ArticleBlockV2 =
   | ParagraphBlock
   | HeadingBlock
@@ -166,6 +178,7 @@ export type ArticleBlockV2 =
   | CalloutBlock
   | ImageBlock
   | DividerBlock
+  | EquationBlock
 
 export type ArticleBlockType = ArticleBlockV2['type']
 
@@ -216,6 +229,8 @@ export function blockPlainText(block: ArticleBlockV2): string {
         .join(' ')
     case 'code':
       return block.content.text
+    case 'equation':
+      return block.content.latex
     case 'table':
       return block.content.rows.flat().join(' ')
     case 'image':

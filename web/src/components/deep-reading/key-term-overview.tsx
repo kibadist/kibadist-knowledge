@@ -312,6 +312,8 @@ function exampleLabel(type: ArticleBlockV2['type']): string {
   switch (type) {
     case 'code':
       return 'code example'
+    case 'equation':
+      return 'equation'
     case 'table':
       return 'table'
     case 'image':
