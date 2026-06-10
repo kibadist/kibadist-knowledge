@@ -308,12 +308,36 @@ export class InboxService {
     return chunkDocument(doc)
   }
 
-  /** Discards an inbox item. Only INBOX items can be discarded this way. */
+  /**
+   * Deletes an inbox item AND the companion TransformerSource captured alongside
+   * it (DET-300), atomically — its blocks, generated article, and illustration
+   * images go via the source's DB cascade. Only an still-INBOX owned row can be
+   * deleted this way; a concurrent promotion leaves 0 rows (no error), and earned
+   * concepts are separate non-INBOX rows the status filter never matches, so the
+   * "never delete earned knowledge" invariant holds. A capture with no companion
+   * source (forged merges, pre-DET-300 rows) just deletes the inbox row.
+   */
   async discard(userId: string, id: string): Promise<void> {
-    const { count } = await this.prisma.concept.deleteMany({
-      where: { id, userId, status: ConceptStatus.INBOX },
+    await this.prisma.$transaction(async (tx) => {
+      // The companion source id is immutable after capture, so reading it inside
+      // the tx and acting only when the status-safe delete below confirms the
+      // row was still an owned INBOX item is race-free.
+      const row = await tx.concept.findFirst({
+        where: { id, userId, status: ConceptStatus.INBOX },
+        select: { sourceId: true },
+      })
+      const { count } = await tx.concept.deleteMany({
+        where: { id, userId, status: ConceptStatus.INBOX },
+      })
+      if (count === 0) throw new NotFoundException('Inbox item not found')
+      // deleteMany (not delete) so a missing/foreign source is a no-op rather
+      // than aborting the inbox deletion; scoped to the owner.
+      if (row?.sourceId) {
+        await tx.transformerSource.deleteMany({
+          where: { id: row.sourceId, userId },
+        })
+      }
     })
-    if (count === 0) throw new NotFoundException('Inbox item not found')
   }
 
   /**

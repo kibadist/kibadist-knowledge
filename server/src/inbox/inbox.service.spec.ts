@@ -13,7 +13,11 @@ function makeService() {
   const tx = {
     concept: {
       create: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue(null),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+    transformerSource: {
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
   }
   const prisma = {
@@ -167,5 +171,43 @@ describe('InboxService unified capture (DET-300)', () => {
     expect(transformer.createPdfSource).not.toHaveBeenCalled()
     expect(merged.sourceId).toBeNull()
     expect(merged.latestArticleId).toBeNull()
+  })
+})
+
+describe('InboxService.discard — deletes the companion source too', () => {
+  it('deletes the inbox row AND its companion TransformerSource (scoped to owner)', async () => {
+    const { service, tx } = makeService()
+    tx.concept.findFirst.mockResolvedValue({ sourceId: 'src1' })
+    tx.concept.deleteMany.mockResolvedValue({ count: 1 })
+
+    await service.discard('u1', 'c1')
+
+    expect(tx.concept.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'c1', userId: 'u1', status: ConceptStatus.INBOX },
+    })
+    expect(tx.transformerSource.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'src1', userId: 'u1' },
+    })
+  })
+
+  it('deletes only the inbox row when there is no companion source', async () => {
+    const { service, tx } = makeService()
+    tx.concept.findFirst.mockResolvedValue({ sourceId: null })
+    tx.concept.deleteMany.mockResolvedValue({ count: 1 })
+
+    await service.discard('u1', 'c1')
+
+    expect(tx.transformerSource.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it('throws and never touches the source when nothing INBOX matched (e.g. a concurrent promotion)', async () => {
+    const { service, tx } = makeService()
+    tx.concept.findFirst.mockResolvedValue({ sourceId: 'src1' })
+    tx.concept.deleteMany.mockResolvedValue({ count: 0 })
+
+    await expect(service.discard('u1', 'c1')).rejects.toThrow(
+      'Inbox item not found',
+    )
+    expect(tx.transformerSource.deleteMany).not.toHaveBeenCalled()
   })
 })

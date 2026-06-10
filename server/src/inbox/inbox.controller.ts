@@ -144,6 +144,9 @@ export class InboxController {
     await this.inbox.snooze(user.userId, id, new Date(dto.until))
   }
 
+  // Deletes the capture entirely: the inbox item AND its companion
+  // TransformerSource (blocks/article/illustrations cascade). Earned concepts
+  // are never touched (DET-300 decoupling holds in this direction).
   @Delete(':id')
   @HttpCode(204)
   async discard(@CurrentUser() user: AuthUser, @Param('id') id: string) {

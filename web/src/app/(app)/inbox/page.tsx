@@ -279,6 +279,9 @@ const InboxRow = ({
   const domain = domainOf(item.sourceUrl)
   const mark = sourceMark(item)
   const length = lengthLabel(item.wordCount)
+  // Two-step delete: the first click arms the confirm, since deleting removes
+  // the source AND its generated article (not just an inbox stub).
+  const [confirming, setConfirming] = useState(false)
 
   return (
     // Deliberately distinct from earned concepts. We drop the per-row
@@ -324,14 +327,40 @@ const InboxRow = ({
             day: 'numeric',
           })}
         </time>
-        <button
-          type='button'
-          onClick={onDiscard}
-          disabled={discarding}
-          className='row-discard'
-        >
-          {discarding ? 'Discarding…' : 'Discard'}
-        </button>
+        {confirming ? (
+          <span className='row-discard-confirm'>
+            <button
+              type='button'
+              onClick={() => {
+                setConfirming(false)
+                onDiscard()
+              }}
+              disabled={discarding}
+              className='row-discard is-danger'
+              title='Removes this source and its generated article'
+            >
+              {discarding ? 'Deleting…' : 'Delete source'}
+            </button>
+            <button
+              type='button'
+              onClick={() => setConfirming(false)}
+              disabled={discarding}
+              className='row-discard'
+              aria-label='Cancel delete'
+            >
+              ✕
+            </button>
+          </span>
+        ) : (
+          <button
+            type='button'
+            onClick={() => setConfirming(true)}
+            className='row-discard'
+            title='Delete this source and its generated article'
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       <Link href={`/read/${item.id}`} className='row-title'>

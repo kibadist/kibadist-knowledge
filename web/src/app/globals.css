@@ -857,6 +857,21 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+/* Two-step delete confirm (the action removes the source + its generated
+   article, so it asks first). The wrapper owns the right-push; inner buttons
+   don't. */
+.kbapp .row-discard-confirm {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.kbapp .row-discard-confirm .row-discard {
+  margin-left: 0;
+}
+.kbapp .row-discard.is-danger {
+  color: var(--accent);
+}
 .kbapp .row-title {
   display: block;
   margin-top: 12px;
