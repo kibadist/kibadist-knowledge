@@ -22,7 +22,12 @@ import {
 export const ILLUSTRATION_TYPE_LABEL: Record<IllustrationType, string> = {
   editorial_cover: 'Editorial cover',
   decorative_section: 'Decorative section',
+  concept_metaphor: 'Concept metaphor',
+  mechanism_explanation: 'Mechanism',
   source_based_diagram: 'Source-based diagram',
+  process_diagram: 'Process diagram',
+  comparison_visual: 'Comparison',
+  data_figure: 'Data figure',
 }
 
 /**

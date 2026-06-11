@@ -29,6 +29,7 @@ import {
   sectionKeyTerms,
 } from '@/lib/article-v2'
 import { buildCitationIndex } from '@/lib/citations'
+import { layoutDiagram } from '@/lib/diagram-layout'
 import {
   type AiAssistMode,
   buildEditorialPlan,
@@ -50,9 +51,16 @@ const CAPTURE_LABEL: Record<CaptureSource, string> = {
 
 const ILLUS_LABEL: Record<IllustrationSuggestion['illustrationType'], string> =
   {
+    // Generative plates read "Plate"; programmatic diagrams read "Fig." so the
+    // (Fig. N) prose binding resolves to an in-column numbered figure.
     editorial_cover: 'Plate',
     decorative_section: 'Plate',
+    concept_metaphor: 'Plate',
+    mechanism_explanation: 'Plate',
     source_based_diagram: 'Fig.',
+    process_diagram: 'Fig.',
+    comparison_visual: 'Fig.',
+    data_figure: 'Fig.',
   }
 
 export interface MagazineArticleProps {
@@ -896,9 +904,11 @@ function MagazineBlock({
   }
 }
 
-/** A planned figure as a captioned plate (authed blob fetch). The plan decides
- *  size (`span` hero vs in-column `Fig.`), figure number, and the two-part
- *  teaching caption; this component only fetches the bytes and renders. */
+/** A planned figure as a captioned plate. The plan decides size (`span` hero vs
+ *  in-column `Fig.`), figure number, and the two-part teaching caption. A
+ *  diagram-strategy suggestion renders programmatically as SVG (no fetch); a
+ *  generative plate fetches its authed PNG bytes. Both carry the provenance
+ *  footer so a figure can never read as unmarked source matter. */
 function IllustrationPlate({
   articleId,
   figure,
@@ -907,6 +917,126 @@ function IllustrationPlate({
   figure: PlannedFigure
 }) {
   const { suggestion, size, figureNumber, caption } = figure
+  const diagram = suggestion.diagramSpec
+
+  // The figtag is the in-prose handle: a span hero reads "Plate", an in-column
+  // diagram reads "Fig. N" so the (Fig. N) prose ref resolves to it.
+  const figtag =
+    size === 'column'
+      ? `${ILLUS_LABEL[suggestion.illustrationType]} ${figureNumber}`
+      : ILLUS_LABEL[suggestion.illustrationType]
+
+  return (
+    <figure className={`kb-mag-plate${size === 'span' ? ' is-span' : ''}`}>
+      <div className='frame'>
+        <span className='figtag'>{figtag}</span>
+        {diagram ? (
+          <DiagramFrame spec={diagram} title={suggestion.caption} />
+        ) : (
+          <PlateImage articleId={articleId} suggestion={suggestion} />
+        )}
+      </div>
+      {(caption.takeaway || caption.detail) && (
+        <figcaption>
+          {figure.ai && <span className='aichip'>✦ AI</span>}
+          {caption.takeaway && <b>{caption.takeaway}.</b>}
+          {caption.detail && ` ${caption.detail}`}
+        </figcaption>
+      )}
+      <FigureProvenance figure={figure} isDiagram={Boolean(diagram)} />
+    </figure>
+  )
+}
+
+/** The honest figure footer: numbered figure handle, how the figure was made,
+ *  its source grounding, and a fidelity-risk note when the risk is non-trivial.
+ *  Keeps "this is an aid, here is its provenance" visible under every plate. */
+function FigureProvenance({
+  figure,
+  isDiagram,
+}: {
+  figure: PlannedFigure
+  isDiagram: boolean
+}) {
+  const { suggestion, figureNumber } = figure
+  const count = suggestion.sourceBlockIds.length
+  const made = isDiagram ? 'Programmatic diagram' : 'AI-assisted illustration'
+  const risk = suggestion.fidelityRisk
+  return (
+    <div className='kb-mag-figprov'>
+      {figureNumber > 0 && <b>Figure {figureNumber}.</b>} {made} · grounded in{' '}
+      {count} source block{count === 1 ? '' : 's'}
+      {risk !== 'low' && (
+        <span className='kb-mag-figrisk'> · fidelity risk: {risk}</span>
+      )}
+    </div>
+  )
+}
+
+/** Renders a programmatic diagram spec as SVG — no blob fetch, no baked text,
+ *  no invented pixels. The layout is computed by the pure `layoutDiagram`. */
+function DiagramFrame({
+  spec,
+  title,
+}: {
+  spec: IllustrationSuggestion['diagramSpec']
+  title: string
+}) {
+  const layout = useMemo(() => (spec ? layoutDiagram(spec) : null), [spec])
+  if (!layout) return <div className='ph'>Diagram unavailable</div>
+  return (
+    <svg
+      className='kb-mag-diagram'
+      viewBox={`0 0 ${layout.width} ${layout.height}`}
+      role='img'
+      aria-label={title}
+      preserveAspectRatio='xMidYMid meet'
+    >
+      <defs>
+        <marker
+          id='kb-mag-arrow'
+          viewBox='0 0 10 10'
+          refX='8'
+          refY='5'
+          markerWidth='7'
+          markerHeight='7'
+          orient='auto-start-reverse'
+        >
+          <path d='M 0 0 L 10 5 L 0 10 z' />
+        </marker>
+      </defs>
+      {layout.arrows.map((a, i) => (
+        <line
+          // biome-ignore lint/suspicious/noArrayIndexKey: layout arrows are positional and stable
+          key={`a${i}`}
+          x1={a.x1}
+          y1={a.y1}
+          x2={a.x2}
+          y2={a.y2}
+          className={`edge${a.back ? ' is-back' : ''}`}
+          markerEnd='url(#kb-mag-arrow)'
+        />
+      ))}
+      {layout.boxes.map((b) => (
+        <g key={b.label + b.x + b.y} className='node'>
+          <rect x={b.x} y={b.y} width={b.w} height={b.h} rx='6' />
+          <text x={b.x + b.w / 2} y={b.y + b.h / 2}>
+            {b.label}
+          </text>
+        </g>
+      ))}
+    </svg>
+  )
+}
+
+/** Fetches and renders the stored PNG for a generative plate (authed blob). */
+function PlateImage({
+  articleId,
+  suggestion,
+}: {
+  articleId: string
+  suggestion: IllustrationSuggestion
+}) {
   const [src, setSrc] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
   const generatedAt = suggestion.image?.generatedAt
@@ -932,35 +1062,10 @@ function IllustrationPlate({
     }
   }, [articleId, suggestion.id, generatedAt])
 
-  // The figtag is the in-prose handle: a span hero reads "Plate", an in-column
-  // diagram reads "Fig. N" so the (Fig. N) prose ref resolves to it.
-  const figtag =
-    size === 'column'
-      ? `${ILLUS_LABEL[suggestion.illustrationType]} ${figureNumber}`
-      : ILLUS_LABEL[suggestion.illustrationType]
-
-  return (
-    <figure className={`kb-mag-plate${size === 'span' ? ' is-span' : ''}`}>
-      <div className='frame'>
-        <span className='figtag'>{figtag}</span>
-        {failed ? (
-          <div className='ph'>Illustration unavailable</div>
-        ) : src ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt={suggestion.caption} />
-        ) : (
-          <div className='ph'>Rendering…</div>
-        )}
-      </div>
-      {(caption.takeaway || caption.detail) && (
-        <figcaption>
-          {figure.ai && <span className='aichip'>✦ AI</span>}
-          {caption.takeaway && <b>{caption.takeaway}.</b>}
-          {caption.detail && ` ${caption.detail}`}
-        </figcaption>
-      )}
-    </figure>
-  )
+  if (failed) return <div className='ph'>Illustration unavailable</div>
+  if (!src) return <div className='ph'>Rendering…</div>
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt={suggestion.caption} />
 }
 
 /**

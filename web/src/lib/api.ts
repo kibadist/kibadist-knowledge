@@ -1322,9 +1322,16 @@ export interface TransformerBlockView {
 // AI-assisted illustration suggestion (DET-259). Suggestions only — never images.
 export type IllustrationApproval = 'pending' | 'approved' | 'rejected'
 export type IllustrationType =
+  // Generative gpt-image-1 plates.
   | 'editorial_cover'
   | 'decorative_section'
+  | 'concept_metaphor'
+  | 'mechanism_explanation'
+  // Programmatic SVG diagrams (carry a diagramSpec, no image bytes).
   | 'source_based_diagram'
+  | 'process_diagram'
+  | 'comparison_visual'
+  | 'data_figure'
 
 export interface IllustrationImageMeta {
   width: number
@@ -1332,6 +1339,24 @@ export interface IllustrationImageMeta {
   provider: string
   model: string
   generatedAt: string
+}
+
+// A programmatic diagram the client renders as SVG (the non-generative visual
+// path). Mirrors the server `diagramSpec`; carries no art style or free pixels.
+export type DiagramKind = 'flow' | 'cycle' | 'tree' | 'compare' | 'concept_map'
+export interface DiagramNode {
+  id: string
+  label: string
+}
+export interface DiagramEdge {
+  from: string
+  to: string
+  label?: string
+}
+export interface DiagramSpec {
+  kind: DiagramKind
+  nodes: DiagramNode[]
+  edges: DiagramEdge[]
 }
 
 export interface IllustrationSuggestion {
@@ -1348,6 +1373,9 @@ export interface IllustrationSuggestion {
   // image. Absent/null = not yet rendered. The PNG bytes are fetched separately
   // (authenticated blob), never embedded in this JSON.
   image?: IllustrationImageMeta | null
+  // Present for diagram-strategy suggestions: rendered as SVG client-side with
+  // no blob fetch. Mutually exclusive with `image` in practice.
+  diagramSpec?: DiagramSpec | null
 }
 
 export interface IllustrationPlan {

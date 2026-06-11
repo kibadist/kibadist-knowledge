@@ -4,8 +4,10 @@ import { Injectable } from '@nestjs/common'
 
 import { AiService } from '../ai/ai.service'
 import { buildIllustrationPrompt } from './illustration-planner.prompt'
+import { isDiagramType } from './illustration-taxonomy'
 import { completeJson } from './llm-json.util'
 import {
+  type DiagramSpec,
   type IllustrationPlan,
   IllustrationPlanLlmSchema,
   type IllustrationSuggestion,
@@ -70,6 +72,14 @@ export class IllustrationPlannerService {
         if (!allMethod) fidelityRisk = 'high'
       }
 
+      // The diagram payload is only meaningful for diagram-strategy types; for
+      // an image type the model may emit one by mistake — discard it. Edges that
+      // reference a node the model didn't declare are dropped (never render a
+      // dangling arrow) rather than failing the whole suggestion.
+      const diagramSpec = isDiagramType(s.illustrationType)
+        ? sanitizeDiagramSpec(s.diagramSpec)
+        : null
+
       suggestions.push({
         id: randomUUID(),
         illustrationType: s.illustrationType,
@@ -80,9 +90,25 @@ export class IllustrationPlannerService {
         reason: s.reason,
         sourceBlockIds: validIds,
         approval: 'pending',
+        diagramSpec,
       })
     }
 
     return { suggestions }
   }
+}
+
+/**
+ * Keep a diagram spec only if it is internally consistent: drop any edge that
+ * points at an undeclared node, and drop the spec entirely if no nodes survive.
+ * The schema already bounded node count; this guards the relations the renderer
+ * would otherwise try to draw to nowhere.
+ */
+export function sanitizeDiagramSpec(
+  spec: DiagramSpec | null | undefined,
+): DiagramSpec | null {
+  if (!spec || spec.nodes.length === 0) return null
+  const ids = new Set(spec.nodes.map((n) => n.id))
+  const edges = spec.edges.filter((e) => ids.has(e.from) && ids.has(e.to))
+  return { kind: spec.kind, nodes: spec.nodes, edges }
 }

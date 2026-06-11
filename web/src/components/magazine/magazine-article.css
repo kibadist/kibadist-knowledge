@@ -537,6 +537,51 @@ figure.kb-mag-plate.is-span {
   white-space: nowrap;
 }
 
+/* Programmatic diagram (the non-generative figure path): mid-century plate
+   register — ink linework on paper, no fills that fight the manuscript theme. */
+.kb-mag-diagram .node rect {
+  fill: var(--paper-hi);
+  stroke: var(--ink-soft);
+  stroke-width: 1.5;
+}
+.kb-mag-diagram .node text {
+  fill: var(--ink);
+  font-family: var(--font-sans), sans-serif;
+  font-size: 14px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+.kb-mag-diagram .edge {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  fill: none;
+}
+.kb-mag-diagram .edge.is-back {
+  stroke-dasharray: 4 3;
+}
+.kb-mag-diagram #kb-mag-arrow path,
+.kb-mag-diagram marker path {
+  fill: var(--accent);
+}
+
+/* Per-figure provenance footer (how it was made, its grounding, its risk). */
+.kb-mag-figprov {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  color: var(--ink-faint);
+  margin-top: 6px;
+  text-align: left;
+}
+.kb-mag-figprov b {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+.kb-mag-figrisk {
+  color: var(--vermilion, #b4452f);
+}
+
 /* ---------------------------------------------------------- PULL QUOTE */
 blockquote.kb-mag-pull {
   column-span: all;

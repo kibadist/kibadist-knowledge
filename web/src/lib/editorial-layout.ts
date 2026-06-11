@@ -218,9 +218,11 @@ export function buildEditorialPlan({
     }
   }
 
-  // Only rendered, approved illustrations become plates.
+  // Only "ready" approved illustrations become plates: a generative plate is
+  // ready once its image bytes exist; a programmatic diagram is ready as soon as
+  // it carries a diagramSpec (it renders as SVG, with no blob to fetch).
   const readyIllus = fxIllustrations.filter(
-    (s) => s.approval === 'approved' && s.image,
+    (s) => s.approval === 'approved' && (s.image || s.diagramSpec),
   )
 
   // --- Resolve figure placements -------------------------------------------
@@ -471,11 +473,19 @@ function resolveFigurePlacements(args: {
   return { bySection, refByBlockId }
 }
 
+// Programmatic diagrams render in-column as a secondary "Fig. N"; generative
+// plates (cover/decorative/metaphor/mechanism) are full-width heroes.
+const COLUMN_TYPES = new Set<IllustrationSuggestion['illustrationType']>([
+  'source_based_diagram',
+  'process_diagram',
+  'comparison_visual',
+  'data_figure',
+])
+
 function figureSize(
   type: IllustrationSuggestion['illustrationType'],
 ): FigureSize {
-  // source_based_diagram → in-column secondary Fig.; cover/decorative → hero.
-  return type === 'source_based_diagram' ? 'column' : 'span'
+  return COLUMN_TYPES.has(type) ? 'column' : 'span'
 }
 
 /** Split a caption into a bold takeaway (first sentence) + the remaining detail. */

@@ -61,13 +61,16 @@ const ERROR_BACKOFF_MS = 15000
 const GENERATING_POLL_MS = 3000
 
 // Illustrations are planned + rendered in the BACKGROUND after the article is
-// terminal (DET-319), so a freshly generated article has no plates yet. Keep a
-// slow, BOUNDED poll going after FINAL/BLOCKED until the illustrationPlan
-// lands, so the plates pop in without a manual reload. The window covers the
-// worst-case plan + 3 gpt-image renders; a planning failure persists nothing,
-// so the cap (not the plan's arrival) ends the poll in that case.
+// terminal (DET-319), so a freshly generated article has no plates yet. The
+// article body is GATED on the plan's arrival (we don't show a half-rendered
+// article), so a slow poll runs after FINAL/BLOCKED until `illustrationPlan`
+// lands and the gate releases on its own — no manual reload. The server always
+// persists a plan when the background pass ends (even on failure), so the plan's
+// arrival reliably ends both the poll and the gate. The window is a generous
+// safety cap (well above the worst-case plan + gpt-image renders) so a dead
+// background job can't poll — or hold the gate — forever.
 const ILLUSTRATION_POLL_MS = 5000
-const ILLUSTRATION_POLL_WINDOW_MS = 180_000
+const ILLUSTRATION_POLL_WINDOW_MS = 300_000
 
 // The three learning tabs, always present. The Inspector (the pipeline "behind
 // the article" view, V1 Decision 3) is NOT a peer tab — it's a quiet secondary
@@ -429,12 +432,12 @@ function ArticleView({
       const status = data?.status
       if (!status || !isArticleTerminal(status)) return GENERATING_POLL_MS
       // Terminal. FAILED never gets illustrations (the background job only
-      // runs after FINAL/BLOCKED); an article already carrying its plan needs
-      // nothing more. Otherwise keep a slow poll inside a bounded window so
-      // the background-rendered plates appear without a manual reload —
+      // runs after FINAL/BLOCKED); an article already carrying its plan is done.
+      // Otherwise keep a slow poll inside the safety window so the background
+      // pass's plan arrives and the body gate releases without a manual reload —
       // anchored on the server's own updatedAt (the terminal persist), so a
-      // STALE plan-less article (pre-illustration era, or a planning failure
-      // that persists nothing) is never polled at all.
+      // STALE plan-less article (pre-illustration era) ages out of the window
+      // and the gate's timeout fallback shows it anyway.
       if (status === 'FAILED' || data?.illustrationPlan) return false
       const sinceTerminal = Date.now() - new Date(data.updatedAt).getTime()
       return Number.isFinite(sinceTerminal) &&
@@ -588,9 +591,26 @@ function ArticleView({
   // retroactive — strict simply renders zero ✦ AI-marked surfaces.
   const [aiMode, setAiMode] = useAiAssistMode(articleId)
 
-  const showBody =
+  const hasBody =
     article?.articleJson &&
     (article.status === 'FINAL' || article.status === 'BLOCKED')
+  // Gate the body on illustrations being DONE: the server persists the plan only
+  // when the background render pass has finished, so its presence means the
+  // plates are ready. We never show a half-rendered article (the reason you'd
+  // otherwise have to reload). A timeout fallback (anchored on the terminal
+  // persist) shows the article anyway if the render never lands — a slow/dead
+  // background job must never trap the reader, and old plan-less articles show
+  // immediately because their updatedAt is already past the window.
+  const illustrationDone = article?.illustrationPlan != null
+  const sinceTerminal = article
+    ? Date.now() - new Date(article.updatedAt).getTime()
+    : 0
+  const illustrationTimedOut = sinceTerminal >= ILLUSTRATION_POLL_WINDOW_MS
+  const illustrating = Boolean(
+    hasBody && !illustrationDone && !illustrationTimedOut,
+  )
+  const showBody =
+    Boolean(hasBody) && (illustrationDone || illustrationTimedOut)
 
   if (articleQuery.isLoading) return <p className='notice'>Loading article…</p>
   // A miss here is almost always transient: the companion article is still being
@@ -608,6 +628,12 @@ function ArticleView({
       </section>
     )
   if (!article) return null
+
+  // Terminal, but the background illustration pass hasn't landed its plan yet —
+  // hold the article behind a self-updating "finishing illustrations" state so
+  // the plates are present the first time the reader sees the body (the poll
+  // flips this off on its own — no manual reload).
+  if (illustrating) return <ArticleIllustrating />
 
   // Still generating / failed — never a dead wait; the Source view is one toggle
   // away and remains readable.
@@ -872,6 +898,27 @@ function useAiAssistMode(
  * The pipeline-progress state, reused from the article page's in-progress ribbon
  * (DET-256). FAILED gets an honest message; everything else shows the step track.
  */
+/**
+ * The article is built but its illustrations are still rendering in the
+ * background. We hold the body behind this so the plates are present the first
+ * time it's shown; the read query keeps polling and swaps this for the article
+ * the moment the plan lands — no manual reload.
+ */
+function ArticleIllustrating() {
+  return (
+    <section className='panel panel-raised tf-progress'>
+      <div className='tf-progress-label'>
+        <span className='tf-spinner' aria-hidden='true' /> Finishing
+        illustrations…
+      </div>
+      <p className='block-sub'>
+        Rendering the plates for this article. This takes a moment and updates
+        on its own — no need to refresh.
+      </p>
+    </section>
+  )
+}
+
 function ArticleProgress({
   status,
 }: {

@@ -12,6 +12,7 @@ import { placeCallouts } from './callout-placement.util'
 import { buildCoverageReport, type CoverageBlock } from './coverage.util'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
+import { planAutoRender } from './illustration-budget.util'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
 import { buildQualityReport } from './quality-report.util'
@@ -43,8 +44,11 @@ import type {
 /** A loaded source block with everything the M2/M3 services need. */
 type LoadedBlock = ClassifiedBlockInput & { uncertain: boolean }
 
-/** Cap auto-rendered illustrations per article to bound gpt-image-1 cost/latency
- *  (DET-319). High-fidelity-risk suggestions are never auto-rendered. */
+/** Image budget per article: how many generative gpt-image-1 plates the
+ *  automatic pass may spend on, bounding cost/latency (DET-319). The budget is
+ *  spent on the highest-SCORING eligible plates (illustration-budget.util), not
+ *  the first N. High-fidelity-risk suggestions are never auto-rendered.
+ *  Programmatic diagrams are free (drawn client-side) and not capped here. */
 const MAX_AUTO_ILLUSTRATIONS = 3
 
 /**
@@ -303,15 +307,18 @@ export class ArticlePipelineService {
     article: ArticleJsonV2,
     blocks: LoadedBlock[],
   ): Promise<void> {
+    // The reader gates the article body on `illustrationPlan` being present (it
+    // means "the background pass finished, the plates are ready"). So we ALWAYS
+    // persist a plan when this returns — even on failure — or a render error
+    // would trap the article behind a perpetual "finishing illustrations" state.
+    // On a mid-render failure we keep whatever suggestions were planned (still
+    // pending, manually renderable); on a planning failure we persist an empty
+    // plan so the article still shows, just without plates.
+    let suggestions: IllustrationSuggestion[] = []
     try {
       const plan = await this.illustrations.plan(article, blocks)
-      const suggestions = await this.autoRenderEligible(
-        articleId,
-        plan.suggestions,
-      )
-      await this.persist(articleId, {
-        illustrationPlan: { suggestions } as unknown as Prisma.InputJsonValue,
-      })
+      suggestions = plan.suggestions
+      suggestions = await this.autoRenderEligible(articleId, plan.suggestions)
     } catch (error) {
       this.logger.warn(
         `Background illustrations failed for ${articleId}: ${
@@ -319,37 +326,56 @@ export class ArticlePipelineService {
         }`,
       )
     }
+    try {
+      await this.persist(articleId, {
+        illustrationPlan: { suggestions } as unknown as Prisma.InputJsonValue,
+      })
+    } catch (error) {
+      this.logger.warn(
+        `Persisting illustration plan failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
   }
 
   /**
-   * Auto-render the eligible suggestions into images. Eligible = NOT high
-   * fidelityRisk (the planner already forces source_based_diagram to high unless
-   * every cited block is METHOD), capped at MAX_AUTO_ILLUSTRATIONS. A rendered
-   * suggestion is marked `approved` with its `image` metadata; the rest stay
-   * `pending` (the manual approve→render path is unchanged). One render failure
-   * leaves that suggestion pending and continues.
+   * Auto-render the eligible suggestions. The budget (illustration-budget.util)
+   * decides WHAT: the top-scoring generative plates within MAX_AUTO_ILLUSTRATIONS,
+   * plus every eligible programmatic diagram that already carries a spec (free —
+   * no gpt-image-1 call). A selected plate is marked `approved` once its image
+   * renders; a selected diagram is marked `approved` as-is (the spec renders
+   * client-side). Everything else stays `pending` (the manual approve→render path
+   * is unchanged). One render failure leaves that suggestion pending and continues.
    */
   private async autoRenderEligible(
     articleId: string,
     suggestions: IllustrationSuggestion[],
   ): Promise<IllustrationSuggestion[]> {
+    const plan = planAutoRender(suggestions, {
+      maxImages: MAX_AUTO_ILLUSTRATIONS,
+    })
+    const toRenderImage = new Set(plan.imageRenderIds)
+    const toAutoDiagram = new Set(plan.diagramAutoIds)
+
     const out: IllustrationSuggestion[] = []
-    let rendered = 0
     for (const s of suggestions) {
-      if (rendered >= MAX_AUTO_ILLUSTRATIONS || s.fidelityRisk === 'high') {
-        out.push(s)
-        continue
-      }
-      try {
-        const image = await this.renderSuggestionImage(articleId, s)
-        out.push({ ...s, approval: 'approved', image })
-        rendered++
-      } catch (error) {
-        this.logger.warn(
-          `Auto-render failed for suggestion ${s.id} (${articleId}): ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        )
+      if (toRenderImage.has(s.id)) {
+        try {
+          const image = await this.renderSuggestionImage(articleId, s)
+          out.push({ ...s, approval: 'approved', image })
+        } catch (error) {
+          this.logger.warn(
+            `Auto-render failed for suggestion ${s.id} (${articleId}): ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          )
+          out.push(s)
+        }
+      } else if (toAutoDiagram.has(s.id)) {
+        // No image to generate — the diagramSpec is the figure.
+        out.push({ ...s, approval: 'approved' })
+      } else {
         out.push(s)
       }
     }

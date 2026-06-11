@@ -620,11 +620,45 @@ export const FidelityReportSchema: z.ZodType<FidelityReport> = z.object({
 // --- Illustration plan (step 10, DET-259) ----------------------------------
 
 const illustrationType = z.enum([
+  // gpt-image-1 generative plates (editorial / metaphorical).
   'editorial_cover',
   'decorative_section',
+  'concept_metaphor',
+  'mechanism_explanation',
+  // Programmatic SVG diagrams rendered from a `diagramSpec` (precise, no baked
+  // text, no invented facts). See illustration-taxonomy.ts for the routing.
   'source_based_diagram',
+  'process_diagram',
+  'comparison_visual',
+  'data_figure',
 ])
+export type IllustrationType = z.infer<typeof illustrationType>
 const approval = z.enum(['pending', 'approved', 'rejected'])
+
+/**
+ * A programmatic diagram (the non-generative visual path). For diagram-strategy
+ * illustration types the model emits this node/edge graph instead of a prose
+ * scene; the client lays it out and renders it as SVG. It carries NO art style
+ * and NO free pixels the model could hallucinate facts into — only labelled
+ * nodes and the relations between them.
+ */
+const diagramNode = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+})
+const diagramEdge = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+  label: z.string().optional(),
+})
+const diagramSpec = z.object({
+  // 'flow'/'cycle' = ordered steps; 'compare' = two columns; 'tree'/
+  // 'concept_map' = hierarchy/relations (rendered as a degraded flow for now).
+  kind: z.enum(['flow', 'cycle', 'tree', 'compare', 'concept_map']),
+  nodes: z.array(diagramNode).min(1).max(12),
+  edges: z.array(diagramEdge).default([]),
+})
+export type DiagramSpec = z.infer<typeof diagramSpec>
 
 /** Stored suggestion (includes the code-managed approval state). */
 const illustrationSuggestion = z.object({
@@ -650,6 +684,10 @@ const illustrationSuggestion = z.object({
       generatedAt: z.string(), // ISO timestamp
     })
     .nullish(),
+  // Programmatic-diagram payload (the non-generative path). Present for
+  // diagram-strategy suggestions; the client renders it as SVG with no blob
+  // fetch and no gpt-image-1 cost. Mutually exclusive with `image` in practice.
+  diagramSpec: diagramSpec.nullish(),
 })
 
 export type IllustrationSuggestion = z.infer<typeof illustrationSuggestion>
@@ -674,6 +712,10 @@ export const IllustrationSuggestionLlmSchema = z.object({
   fidelityRisk,
   reason: z.string().min(1),
   sourceBlockIds: z.array(z.string()).default([]),
+  // Optional: for diagram-strategy types the model SHOULD supply this so the
+  // figure renders programmatically instead of as a generative plate. Kept only
+  // for diagram types and validated in the planner; ignored for image types.
+  diagramSpec: diagramSpec.nullish(),
 })
 
 export const IllustrationPlanLlmSchema = z.object({
