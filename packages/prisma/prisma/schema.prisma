@@ -1413,6 +1413,12 @@ model TransformedArticle {
   // Pins which block version this article's references resolve against.
   blocksVersion   Int
   status          TransformedArticleStatus @default(QUEUED)
+  // Pre-generation source diagnosis (DET-345): detected SourceKind + selected
+  // v3 ArticleShape + the signals/scores that drove the decision. Computed
+  // deterministically (no LLM) before generation and stored for EVERY article so
+  // it is available to both the v2 and v3 pipelines and to analytics; the v3
+  // router reads `sourceKind` to gate routing (v2 stays the default fallback).
+  sourceDiagnosis Json?
   structureModel  Json?
   reshapingPlan   Json?
   articleJson     Json?
