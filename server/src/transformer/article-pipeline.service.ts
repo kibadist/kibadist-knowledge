@@ -1,5 +1,6 @@
 import {
   type Prisma,
+  SourceBlockPlacement,
   TransformedArticleStatus,
   TransformerBlockClass,
 } from '@kibadist/prisma'
@@ -443,6 +444,7 @@ export class ArticlePipelineService {
         headingLevel: true,
         classification: true,
         removable: true,
+        placement: true,
       },
     })
     return rows.map((r) => ({
@@ -451,7 +453,13 @@ export class ArticlePipelineService {
       classification: r.classification ?? TransformerBlockClass.UNCERTAIN,
       text: r.text,
       headingLevel: r.headingLevel,
-      removable: r.removable,
+      // Main-body generation ignores filler/navigation/reference clutter by
+      // default (DET-346): a block is excluded from the body when the noise
+      // classifier marked it removable OR the role classifier recommends it be
+      // discarded / moved to source notes. SOURCE_NOTES blocks (references,
+      // bibliography, external links) are kept in the DB with their placement
+      // for the fidelity/source-notes lane — they just don't enter the prose.
+      removable: r.removable || excludedFromMainBody(r.placement),
       uncertain:
         r.classification === TransformerBlockClass.UNCERTAIN ||
         !r.classification,
@@ -492,4 +500,17 @@ export class ArticlePipelineService {
       )
     }
   }
+}
+
+/**
+ * Whether a role classifier placement (DET-346) keeps a block OUT of the main
+ * body: DISCARD (filler/navigation) and SOURCE_NOTES (references, bibliography,
+ * external links) are both excluded from the generated prose. MAIN_BODY /
+ * CALLOUT and a null placement (un-role-classified) keep the block in play.
+ */
+function excludedFromMainBody(placement: SourceBlockPlacement | null): boolean {
+  return (
+    placement === SourceBlockPlacement.DISCARD ||
+    placement === SourceBlockPlacement.SOURCE_NOTES
+  )
 }
