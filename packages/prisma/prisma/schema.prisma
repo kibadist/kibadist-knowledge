@@ -1429,6 +1429,22 @@ model TransformedArticle {
   // never folded into articleJson, only references its ids. Ungrounded furniture is
   // labelled "AI · not from your source" in the UI.
   editorialLayout Json?
+  // --- Source-Grounded Learning Article Engine v3 (DET-343) -------------------
+  // The v3 pipeline runs BESIDE v2 (strangler pattern): v2 keeps writing
+  // `articleJson`/`fidelityReport`/`coverageReport` untouched. v3 writes its own
+  // additive columns so the v2 read boundary never has to branch on a v3 blob.
+  //   - `pipelineVersion`: 'v2' | 'v3' — which engine produced this row (null ⇒ v2,
+  //      the historical default). Lets the read API and the web pick the renderer.
+  //   - `articleJsonV3`: the Article JSON v3 document (learning-first, source
+  //      grounded, with provenance + learning layer baked in).
+  //   - `qualityReport`: the v3 quality-gate verdict (important coverage, unsupported
+  //      claim count, concept-candidate count, blockers, derived v3 status). This is
+  //      what gates READY_FOR_REVIEW vs BLOCKED vs NEEDS_REGENERATION (kept in JSON so
+  //      no risky enum migration is needed — the row `status` still maps onto the
+  //      existing TransformedArticleStatus).
+  pipelineVersion String?
+  articleJsonV3   Json?
+  qualityReport   Json?
   error           String?
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt

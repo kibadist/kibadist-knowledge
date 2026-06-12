@@ -20,6 +20,7 @@ import {
   segmentDocument,
   segmentPdfPages,
 } from './segmenter.util'
+import { ArticlePipelineV3Service } from './v3/article-pipeline-v3.service'
 
 /** Extractor version stamped on a source so re-extractions are traceable. */
 const EXTRACTOR_VERSION = 'transformer-extract@1'
@@ -72,6 +73,9 @@ export class PipelineService implements OnApplicationBootstrap {
     // can construct the pipeline without the M2/M3 article services. In the app
     // it is always provided by DI; `onSourceReady` no-ops when it is absent.
     private readonly articlePipeline?: ArticlePipelineService,
+    // The v3 engine (DET-343). Also optional for the same reason; when present and
+    // the source routes to v3, it runs INSTEAD of the v2 article pipeline.
+    private readonly articlePipelineV3?: ArticlePipelineV3Service,
   ) {}
 
   /**
@@ -325,14 +329,24 @@ export class PipelineService implements OnApplicationBootstrap {
 
   /**
    * Called once a source reaches READY: auto-create a TransformedArticle and run
-   * the article-generation steps (structure model → plan → generation →
-   * fidelity). `createAndRun` returns immediately after firing the article
+   * the article-generation steps. The engine is chosen by routing (DET-343): if
+   * the v3 pipeline is wired AND this source routes to v3 (feature flag +
+   * source-kind gate + per-source preview opt-in), v3 runs; otherwise the frozen
+   * v2 pipeline runs. `createAndRun` returns immediately after firing the chosen
    * pipeline as a detached promise, so READY is never blocked on generation.
    */
   protected async onSourceReady(sourceId: string): Promise<void> {
-    if (!this.articlePipeline) return
     try {
-      await this.articlePipeline.createAndRun(sourceId)
+      if (
+        this.articlePipelineV3 &&
+        (await this.articlePipelineV3.routesSource(sourceId))
+      ) {
+        await this.articlePipelineV3.createAndRun(sourceId)
+        return
+      }
+      if (this.articlePipeline) {
+        await this.articlePipeline.createAndRun(sourceId)
+      }
     } catch (error) {
       // Article creation failing must not roll back the source's READY status.
       this.logger.error(

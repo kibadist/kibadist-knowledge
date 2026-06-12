@@ -132,6 +132,7 @@ function makeHarness(opts: {
     articlePipeline,
     {} as AiService,
     conceptState as never,
+    {} as never,
   )
   return { service, prisma, article, extractSectionConcepts, conceptState }
 }

@@ -5,6 +5,12 @@ import type {
   ArticleLearningEvent,
   ArticleLearningEventDraft,
 } from './article-learning-events'
+// Source-Grounded Learning Article v3 (DET-343). Type-only, erased at compile —
+// article-v3 does not import from api, so this adds no runtime cycle.
+import type {
+  ArticleJsonV3,
+  QualityReport as QualityReportV3,
+} from './article-v3'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
@@ -1468,6 +1474,13 @@ export interface TransformedArticle {
   // (kicker, standfirst, sub-heads, pull-quote, stat band, marginal notes, figure
   // placements). Null on articles generated before this lane.
   editorialLayout: EditorialLayout | null
+  // Source-Grounded Learning Article Engine v3 (DET-343). `pipelineVersion` says
+  // which engine produced the row ('v2'/null or 'v3'); the v3 document and its
+  // quality-gate verdict live in their own fields (null on v2 rows). The web picks
+  // the v3 renderer + learning panel when `pipelineVersion === 'v3'`.
+  pipelineVersion: 'v2' | 'v3' | null
+  articleJsonV3: ArticleJsonV3 | null
+  qualityReport: QualityReportV3 | null
   error: string | null
 }
 
