@@ -8,6 +8,7 @@ import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningOutlineService } from './learning-outline.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import { StructureModelService } from './structure-model.service'
 import type { ArticleJsonV2, FidelityReport } from './transformer.types'
@@ -97,6 +98,7 @@ const okReport: FidelityReport = {
 function makeServices(overrides: {
   structure?: Partial<StructureModelService>
   plan?: Partial<ReshapingPlanService>
+  learningOutline?: Partial<LearningOutlineService>
   generate?: Partial<ArticleGeneratorService>
   fidelity?: Partial<FidelityCheckerService>
 }) {
@@ -122,6 +124,23 @@ function makeServices(overrides: {
     build: jest.fn(async () => ({ removedBlocks: [] })),
     ...overrides.plan,
   } as unknown as ReshapingPlanService
+  const learningOutline = {
+    // A minimal valid LearningOutline (DET-348); the pipeline persists it and
+    // hands it to the generator stub (which ignores it).
+    build: jest.fn(async () => ({
+      sourceKind: 'article',
+      articleShape: 'general',
+      title: { text: 'T', source: 'inferred' },
+      learningPath: [],
+      sections: [],
+      sourceNotesPlan: { notes: [] },
+      calloutPlan: [],
+      tablePlan: [],
+      reorderings: [],
+      warnings: [],
+    })),
+    ...overrides.learningOutline,
+  } as unknown as LearningOutlineService
   const generate = {
     generate: jest.fn(async () => sampleArticle),
     ...overrides.generate,
@@ -153,6 +172,7 @@ function makeServices(overrides: {
   return {
     structure,
     plan,
+    learningOutline,
     generate,
     fidelity,
     illustrations,
@@ -171,6 +191,7 @@ describe('ArticlePipelineService.run', () => {
       prisma as never,
       s.structure,
       s.plan,
+      s.learningOutline,
       s.generate,
       s.fidelity,
       s.illustrations,
@@ -235,6 +256,7 @@ describe('ArticlePipelineService.run', () => {
       prisma as never,
       s.structure,
       s.plan,
+      s.learningOutline,
       s.generate,
       s.fidelity,
       s.illustrations,
@@ -263,6 +285,7 @@ describe('ArticlePipelineService.run', () => {
       prisma as never,
       s.structure,
       s.plan,
+      s.learningOutline,
       s.generate,
       s.fidelity,
       s.illustrations,

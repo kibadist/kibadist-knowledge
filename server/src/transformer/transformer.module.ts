@@ -11,6 +11,7 @@ import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningOutlineService } from './learning-outline.service'
 import { PipelineService } from './pipeline.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import { StructureModelService } from './structure-model.service'
@@ -35,6 +36,7 @@ import { TransformerService } from './transformer.service'
     BlockClassifierService,
     StructureModelService,
     ReshapingPlanService,
+    LearningOutlineService,
     ArticleGeneratorService,
     FidelityCheckerService,
     IllustrationPlannerService,
