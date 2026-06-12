@@ -1414,6 +1414,13 @@ model TransformedArticle {
   blocksVersion   Int
   status          TransformedArticleStatus @default(QUEUED)
   structureModel  Json?
+  // Conceptual segmentation (DET-347): the ordered SourceSegment[] (plus the
+  // unsegmentedBlocks coverage audit) produced between the structure model and
+  // the reshaping plan. It groups the classified blocks into learning segments so
+  // the outline builds sections from whole concepts; persisted here so the
+  // segment→block mapping is available to the coverage/fidelity reports. Old rows
+  // stay NULL (the pipeline degrades to no-segmentation around a failure).
+  segments        Json?
   reshapingPlan   Json?
   articleJson     Json?
   fidelityReport  Json?

@@ -7,6 +7,7 @@ import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { BlockClassifierService } from './block-classifier.service'
+import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
@@ -34,6 +35,7 @@ import { TransformerService } from './transformer.service'
     PipelineService,
     BlockClassifierService,
     StructureModelService,
+    ConceptualSegmentationService,
     ReshapingPlanService,
     ArticleGeneratorService,
     FidelityCheckerService,
