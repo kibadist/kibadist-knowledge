@@ -17,6 +17,7 @@ import { LearningLayerService } from './learning-layer.service'
 import { buildReadingAids } from './reading-aids.util'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import type {
+  ArticleConceptCandidate,
   ArticleEnrichment,
   IllustrationPlan,
   IllustrationSuggestion,
@@ -198,6 +199,15 @@ export class ArticlePipelineService {
     // Editorial layout (the generative presentation lane) is another fast text
     // call, so it stays INLINE beside enrichment and ships at the terminal status.
     const editorialLayout = await this.tryEditorialLayout(articleId, article)
+    // Whole-article concept extraction (DET-351). A source-grounded learning lane
+    // that mints the Concept Library candidates for this article so a concept-rich
+    // source never finalizes with zero (the bug this fixes). Best-effort: a failure
+    // logs and yields null, and the article still finalizes without candidates.
+    const articleConceptCandidates = await this.tryExtractArticleConcepts(
+      articleId,
+      article,
+      blocks,
+    )
 
     await this.persist(articleId, {
       fidelityReport: report as unknown as Prisma.InputJsonValue,
@@ -210,6 +220,18 @@ export class ArticlePipelineService {
         ? {
             editorialLayout:
               editorialLayout as unknown as Prisma.InputJsonValue,
+          }
+        : {}),
+      // Seed the learningLayer column with the extracted candidates. The DET-258
+      // study concepts / DET-283 per-section candidates are still produced on
+      // demand and merged in (see generateLearningLayer) without clobbering these.
+      ...(articleConceptCandidates
+        ? {
+            learningLayer: {
+              concepts: [],
+              retrievalPrompts: [],
+              articleConceptCandidates,
+            } as unknown as Prisma.InputJsonValue,
           }
         : {}),
       status: report.approved
@@ -270,6 +292,29 @@ export class ArticlePipelineService {
     } catch (error) {
       this.logger.warn(
         `Editorial layout failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
+  }
+
+  /**
+   * Extract the whole-article concept candidates (DET-351); never throws — a
+   * failure logs and yields null so the article still finalizes without them.
+   * Returns the candidate list (possibly empty) on success, null on failure, so
+   * the caller can tell "ran, found none" from "did not run".
+   */
+  private async tryExtractArticleConcepts(
+    articleId: string,
+    article: ArticleJsonV2,
+    blocks: LoadedBlock[],
+  ): Promise<ArticleConceptCandidate[] | null> {
+    try {
+      return await this.learning.extractArticleConcepts(article, blocks)
+    } catch (error) {
+      this.logger.warn(
+        `Concept extraction failed for ${articleId}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       )
@@ -384,14 +429,34 @@ export class ArticlePipelineService {
     }
   }
 
-  /** Generate + persist the learning layer for an article (never touches articleJson). */
+  /**
+   * Generate + persist the DET-258 study layer (concepts + retrieval prompts) for
+   * an article on demand (never touches articleJson). The article's DET-283
+   * per-section candidates and DET-351 whole-article candidates live in the SAME
+   * learningLayer JSON column, so we read the existing row and carry them forward —
+   * regenerating the study concepts must never wipe the extracted candidates.
+   */
   async generateLearningLayer(
     articleId: string,
     sourceId: string,
     blocksVersion: number,
   ): Promise<LearningLayer> {
     const blocks = await this.loadBlocks(sourceId, blocksVersion)
-    const layer = await this.learning.build(blocks)
+    const built = await this.learning.build(blocks)
+    const existing = await this.prisma.transformedArticle.findUnique({
+      where: { id: articleId },
+      select: { learningLayer: true },
+    })
+    const prior = (existing?.learningLayer as LearningLayer | null) ?? null
+    const layer: LearningLayer = {
+      ...built,
+      ...(prior?.conceptCandidates
+        ? { conceptCandidates: prior.conceptCandidates }
+        : {}),
+      ...(prior?.articleConceptCandidates
+        ? { articleConceptCandidates: prior.articleConceptCandidates }
+        : {}),
+    }
     await this.persist(articleId, {
       learningLayer: layer as unknown as Prisma.InputJsonValue,
     })
