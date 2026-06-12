@@ -13,6 +13,7 @@ import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
 import { PipelineService } from './pipeline.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
+import { RewriteService } from './rewrite.service'
 import { StructureModelService } from './structure-model.service'
 import { TransformerController } from './transformer.controller'
 import { TransformerService } from './transformer.service'
@@ -35,6 +36,7 @@ import { TransformerService } from './transformer.service'
     BlockClassifierService,
     StructureModelService,
     ReshapingPlanService,
+    RewriteService,
     ArticleGeneratorService,
     FidelityCheckerService,
     IllustrationPlannerService,
