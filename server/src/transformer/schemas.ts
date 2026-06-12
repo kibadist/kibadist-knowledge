@@ -1413,3 +1413,112 @@ export type ComparisonTablesLlm = z.infer<typeof ComparisonTablesLlmSchema>
 export type ArticleConceptExtractionLlm = z.infer<
   typeof ArticleConceptExtractionLlmSchema
 >
+
+// --- Learning-first article outline (DET-348) ------------------------------
+//
+// What the OUTLINE LLM returns. The stage organises a LEARNING structure (a
+// teaching arc, concept-led sections, source furniture demoted to notes) over the
+// classified blocks + derived segments, then the rewrite stage writes prose against
+// it. Like the other lanes the wire schema is deliberately LENIENT on traceability
+// arrays (`sourceBlockIds`/`sourceSegmentIds` default to []), because the SERVICE
+// does the strict work in code: it prunes ids the source can't back, drops a
+// section/note/callout/table left with no real provenance, then re-checks every
+// surviving id (loud failure on an unknown id, exactly like the structure-model and
+// plan stages). `sourceKind` / `articleShape` are set in code (derived
+// deterministically + passed in), never trusted from the model, so they are absent
+// here. The canonical `LearningOutline` type lives in learning-outline.types.ts;
+// this is only the model's reply shape.
+
+const learningSectionRole = z.enum([
+  'introduction',
+  'concept',
+  'background',
+  'practice',
+  'summary',
+  'sourceNotes',
+  'definition',
+  'boundaries',
+  'types',
+  'mechanism',
+  'example',
+  'application',
+  'misconception',
+  'question',
+  'method',
+  'evidence',
+  'results',
+  'limitations',
+  'implications',
+])
+
+const segmentKindSchema = z.enum([
+  'content',
+  'references',
+  'bibliography',
+  'externalLinks',
+  'furtherReading',
+  'citations',
+  'seeAlso',
+  'footer',
+  'noise',
+])
+
+const outlineSection = z
+  .object({
+    heading: z.string().min(1),
+    headingSource: planHeadingSource,
+    headingInferenceReason: z.string().min(1).optional(),
+    sectionRole: learningSectionRole,
+    sourceSegmentIds: z.array(z.string()).default([]),
+    sourceBlockIds: z.array(z.string()).default([]),
+    conceptFocus: z.string().min(1),
+    requiredClaims: z.array(z.string().min(1)).default([]),
+    targetReaderOutcome: z.string().min(1),
+  })
+  .refine((s) => s.headingSource !== 'inferred' || !!s.headingInferenceReason, {
+    message: 'an inferred heading must carry a headingInferenceReason',
+    path: ['headingInferenceReason'],
+  })
+
+const learningPathItem = z.object({
+  step: z.number().int().min(1),
+  outcome: z.string().min(1),
+  sectionHeadings: z.array(z.string().min(1)).default([]),
+})
+
+const sourceNoteWire = z.object({
+  kind: segmentKindSchema,
+  sourceBlockIds: z.array(z.string()).default([]),
+  sourceSegmentIds: z.array(z.string()).default([]),
+  reason: z.string().min(1),
+})
+
+const calloutPlanWire = z.object({
+  kind: z.enum(['definition', 'example', 'caveat', 'keyIdea', 'misconception']),
+  text: z.string().min(1),
+  sourceBlockIds: z.array(z.string()).default([]),
+  sectionHeading: z.string().min(1).optional(),
+})
+
+const tablePlanWire = z.object({
+  caption: z.string().min(1).optional(),
+  sourceBlockIds: z.array(z.string()).default([]),
+  sectionHeading: z.string().min(1).optional(),
+  reason: z.string().min(1),
+})
+
+export const LearningOutlineLlmSchema = z.object({
+  title: z.object({ text: z.string().min(1), source: planHeadingSource }),
+  dek: z.string().min(1).optional(),
+  learningPath: z.array(learningPathItem).default([]),
+  sections: z.array(outlineSection).min(1),
+  sourceNotesPlan: z
+    .object({ notes: z.array(sourceNoteWire).default([]) })
+    .default({ notes: [] }),
+  calloutPlan: z.array(calloutPlanWire).default([]),
+  tablePlan: z.array(tablePlanWire).default([]),
+  reorderings: z.array(reorderingAudit).default([]),
+  warnings: z.array(z.string().min(1)).default([]),
+})
+
+export type LearningOutlineLlm = z.infer<typeof LearningOutlineLlmSchema>
