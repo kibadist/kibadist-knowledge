@@ -80,6 +80,20 @@ export function SourceInspector({
     },
   })
 
+  // Force the v3 Source-Grounded Learning engine (DET-343), independent of the
+  // global flag. Invalidate the inbox-item query too so the host /read page picks
+  // up the new article id and resumes polling (it stops once an article is
+  // terminal), surfacing the v3 learning layer in the Article tab.
+  const transformV3 = useMutation({
+    mutationFn: () => api.transformSourceV3(sourceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['transformer-source', sourceId],
+      })
+      queryClient.invalidateQueries({ queryKey: ['inbox-item'] })
+    },
+  })
+
   const metadata = (source?.metadata ??
     null) as TransformerSourceMetadata | null
   const truncated = metadata?.truncated === true
@@ -168,11 +182,19 @@ export function SourceInspector({
           <p className='notice notice-error'>{transformError}</p>
         )}
 
+        {transformV3.isError && (
+          <p className='notice notice-error'>
+            {transformV3.error instanceof ApiError
+              ? transformV3.error.message
+              : 'Could not start the v3 learning article.'}
+          </p>
+        )}
+
         <div className='tf-article-card-actions'>
           <button
             type='button'
             className='btn-ghost'
-            disabled={!isReady || transform.isPending}
+            disabled={!isReady || transform.isPending || transformV3.isPending}
             onClick={() => transform.mutate()}
           >
             {transform.isPending
@@ -180,6 +202,18 @@ export function SourceInspector({
               : source.latestArticleId
                 ? 'Re-run transform'
                 : 'Transform'}
+          </button>
+          {/* v3 Source-Grounded Learning engine (DET-343) — observable without
+              flipping a feature flag. */}
+          <button
+            type='button'
+            className='btn-primary'
+            disabled={!isReady || transform.isPending || transformV3.isPending}
+            onClick={() => transformV3.mutate()}
+          >
+            {transformV3.isPending
+              ? 'Generating…'
+              : 'Generate v3 learning article'}
           </button>
         </div>
       </section>

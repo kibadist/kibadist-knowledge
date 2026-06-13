@@ -16,6 +16,8 @@ import { ReshapingPlanService } from './reshaping-plan.service'
 import { StructureModelService } from './structure-model.service'
 import { TransformerController } from './transformer.controller'
 import { TransformerService } from './transformer.service'
+import { ArticlePipelineV3Service } from './v3/article-pipeline-v3.service'
+import { V3GeneratorService } from './v3/v3-generator.service'
 
 /**
  * The Source-Preserving Article Transformer (DET-247…259), M1 backend.
@@ -42,6 +44,9 @@ import { TransformerService } from './transformer.service'
     EditorialLayoutService,
     LearningLayerService,
     ArticlePipelineService,
+    // Source-Grounded Learning Article Engine v3 (DET-343) — runs beside v2.
+    V3GeneratorService,
+    ArticlePipelineV3Service,
   ],
   exports: [TransformerService, PipelineService],
 })

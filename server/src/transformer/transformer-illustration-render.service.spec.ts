@@ -129,6 +129,7 @@ function makeHarness(suggestions: IllustrationSuggestion[]) {
     {} as ArticlePipelineService,
     ai,
     { recordCapture: jest.fn() } as never,
+    {} as never,
   )
   return { service, prisma, ai, image, article, images, key }
 }

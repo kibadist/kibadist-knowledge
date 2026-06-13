@@ -2190,3 +2190,207 @@
     font-size: 23px;
   }
 }
+
+/* ============================================================================
+   v3 Source-Grounded Learning Article (DET-343)
+   The v3 reader surface: the article body (provenance-distinct blocks) and the
+   learning layer + quality-gate panel. AI scaffolding is VISIBLY distinct from
+   source-grounded content — dashed indigo frame + a "✦ AI" marker — the same
+   provenance contract the Compendium enrichment lane uses. Light-only `.kbapp`.
+   ============================================================================ */
+
+.kbapp .tf-v3 {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* --- Article body --------------------------------------------------------- */
+.kbapp .tf-v3-body {
+  max-width: 68ch;
+}
+.kbapp .tf-v3-body-head {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.kbapp .tf-v3-title {
+  font-size: 30px;
+  line-height: 1.18;
+  margin: 0 0 8px;
+}
+.kbapp .tf-v3-summary {
+  color: var(--ink-muted);
+  font-size: 17px;
+  line-height: 1.5;
+  margin: 0;
+}
+.kbapp .tf-v3-body-section {
+  margin-bottom: 28px;
+}
+.kbapp .tf-v3-body-h {
+  font-size: 21px;
+  line-height: 1.25;
+  margin: 0 0 12px;
+}
+
+/* A block: source-grounded reads as plain prose; scaffold gets the dashed
+   indigo frame so AI connective tissue is never mistaken for the source. */
+.kbapp .tf-v3-block {
+  position: relative;
+  margin: 0 0 14px;
+}
+.kbapp .tf-v3-block-text {
+  margin: 0;
+  line-height: 1.6;
+}
+.kbapp .tf-v3-block-list {
+  margin: 0;
+  padding-left: 22px;
+  line-height: 1.6;
+}
+.kbapp .tf-v3-block.is-scaffold {
+  border: 1px dashed rgba(31, 58, 77, 0.4);
+  border-radius: 6px;
+  background: rgba(31, 58, 77, 0.04);
+  padding: 12px 14px 10px;
+}
+.kbapp .tf-v3-block-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 4px;
+}
+
+/* The provenance markers — the visible "what came from the source" contract. */
+.kbapp .tf-v3-aimark {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--indigo);
+}
+.kbapp .tf-v3-aimark-inline {
+  margin: 0 0 0 8px;
+  vertical-align: middle;
+}
+.kbapp .tf-v3-srcmark {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--olive);
+}
+
+/* The Exercise tab folds the body away behind the learning layer. */
+.kbapp .tf-v3-bodyfold > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink-muted);
+  padding: 8px 0;
+}
+
+/* --- Learning + quality panel --------------------------------------------- */
+.kbapp .tf-v3-learning {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.kbapp .tf-v3-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-v3-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-v3-group {
+  border-top: 1px solid var(--rule-soft);
+  padding-top: 14px;
+}
+.kbapp .tf-v3-group-h {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin: 0 0 10px;
+}
+.kbapp .tf-v3-path {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.6;
+}
+.kbapp .tf-v3-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kbapp .tf-v3-concept,
+.kbapp .tf-v3-claim {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.kbapp .tf-v3-concept-label {
+  font-weight: 700;
+}
+.kbapp .tf-v3-concept-def,
+.kbapp .tf-v3-claim-text {
+  flex: 1 1 240px;
+  color: var(--ink-muted);
+}
+.kbapp .tf-v3-prompt,
+.kbapp .tf-v3-note {
+  line-height: 1.5;
+}
+
+/* The quality verdict banner. */
+.kbapp .tf-v3-quality {
+  background: var(--paper-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.kbapp .tf-v3-quality-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-v3-quality-cov {
+  font-weight: 600;
+}
+.kbapp .tf-v3-quality-thresh {
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+.kbapp .tf-v3-blockers {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kbapp .tf-v3-blocker {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.kbapp .tf-v3-blocker-msg {
+  flex: 1;
+}

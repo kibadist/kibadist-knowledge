@@ -129,6 +129,17 @@ export class TransformerController {
     return this.transformer.transform(user.userId, id)
   }
 
+  /**
+   * Force this source through the v3 Source-Grounded Learning engine (DET-343),
+   * independent of the global feature flag — the per-source preview opt-in as a
+   * browser action, so the v3 learning layer is observable in the reader.
+   */
+  @Throttle(AI_THROTTLE)
+  @Post('sources/:id/transform-v3')
+  transformV3(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.transformer.transformV3(user.userId, id)
+  }
+
   @Get('articles/:id')
   getArticle(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.transformer.getArticle(user.userId, id)

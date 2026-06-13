@@ -40,6 +40,8 @@ import type {
   FidelityReport,
   SourcePreservingArticle,
 } from './transformer.types'
+import { ArticlePipelineV3Service } from './v3/article-pipeline-v3.service'
+import type { ArticleJsonV3, QualityReport } from './v3/v3.types'
 
 /**
  * Ensure a v2 article carries inline callout placements (DET-272). Pipeline-
@@ -122,6 +124,15 @@ export interface TransformerArticleDetail {
   enrichment: ArticleEnrichment | null
   /** Generative editorial layout — additive presentation lane; null on old rows. */
   editorialLayout: EditorialLayout | null
+  /**
+   * Which engine produced this article (DET-343): 'v2' (or null, the historical
+   * default) or 'v3'. The web picks the renderer from this.
+   */
+  pipelineVersion: 'v2' | 'v3' | null
+  /** Article JSON v3 — present only for v3 rows; null for v2. */
+  articleJsonV3: ArticleJsonV3 | null
+  /** v3 quality-gate verdict — present only for v3 rows; null for v2. */
+  qualityReport: QualityReport | null
   error: string | null
   createdAt: Date
   updatedAt: Date
@@ -163,6 +174,7 @@ export class TransformerService {
     private readonly articlePipeline: ArticlePipelineService,
     private readonly ai: AiService,
     private readonly conceptState: ConceptStateService,
+    private readonly articlePipelineV3: ArticlePipelineV3Service,
   ) {}
 
   async createTextSource(
@@ -400,7 +412,54 @@ export class TransformerService {
         'An article for this source is already running',
       )
     }
-    const id = await this.articlePipeline.createAndRun(sourceId)
+    // Engine routing (DET-343): a manual re-transform honours the same v3 routing
+    // as the auto path — v3 when the flag + source-kind gate + preview opt-in say
+    // so, the frozen v2 pipeline otherwise.
+    const id = (await this.articlePipelineV3.routesSource(sourceId))
+      ? await this.articlePipelineV3.createAndRun(sourceId)
+      : await this.articlePipeline.createAndRun(sourceId)
+    return { id }
+  }
+
+  /**
+   * Force a source through the v3 Source-Grounded Learning engine (DET-343),
+   * regardless of the global feature flag. This is the per-source PREVIEW opt-in
+   * made a first-class, browser-triggerable action: it tags the source as v3
+   * preview material (so future auto-runs route to v3 too) and runs v3 now. It
+   * exists so the v3 learning layer — provenance, key concepts/claims, retrieval
+   * prompts, the quality verdict — is observable in the reader without flipping
+   * an env flag. Shares `transform`'s READY + in-flight guards.
+   */
+  async transformV3(userId: string, sourceId: string): Promise<{ id: string }> {
+    const source = await this.prisma.transformerSource.findFirst({
+      where: { id: sourceId, userId },
+      select: { id: true, status: true, metadata: true },
+    })
+    if (!source) throw new NotFoundException('Source not found')
+    if (source.status !== TransformerSourceStatus.READY) {
+      throw new ConflictException('Source is not ready to transform')
+    }
+    const inFlight = await this.prisma.transformedArticle.findFirst({
+      where: { sourceId, status: { in: [...ARTICLE_IN_FLIGHT] } },
+      select: { id: true },
+    })
+    if (inFlight) {
+      throw new ConflictException(
+        'An article for this source is already running',
+      )
+    }
+    // Persist the preview opt-in so the source keeps routing to v3 on re-runs.
+    const metadata =
+      source.metadata &&
+      typeof source.metadata === 'object' &&
+      !Array.isArray(source.metadata)
+        ? (source.metadata as Record<string, unknown>)
+        : {}
+    await this.prisma.transformerSource.update({
+      where: { id: sourceId },
+      data: { metadata: { ...metadata, v3Preview: true } },
+    })
+    const id = await this.articlePipelineV3.createAndRun(sourceId)
     return { id }
   }
 
@@ -448,6 +507,9 @@ export class TransformerService {
       learningLayer: article.learningLayer as LearningLayer | null,
       enrichment: article.enrichment as ArticleEnrichment | null,
       editorialLayout: article.editorialLayout as EditorialLayout | null,
+      pipelineVersion: (article.pipelineVersion as 'v2' | 'v3' | null) ?? null,
+      articleJsonV3: article.articleJsonV3 as ArticleJsonV3 | null,
+      qualityReport: article.qualityReport as QualityReport | null,
       error: article.error,
       createdAt: article.createdAt,
       updatedAt: article.updatedAt,
