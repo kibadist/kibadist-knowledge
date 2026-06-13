@@ -9,6 +9,7 @@ import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
+import { SourceDiagnosisService } from './source-diagnosis.service'
 import { StructureModelService } from './structure-model.service'
 import type { ArticleJsonV2, FidelityReport } from './transformer.types'
 
@@ -36,7 +37,20 @@ function makeStubPrisma() {
   const transformerSourceBlock = {
     findMany: jest.fn(async () => blockRows),
   }
-  const prisma = { transformedArticle, transformerSourceBlock }
+  // loadSourceMeta (DET-345) reads the source row for detection metadata.
+  const transformerSource = {
+    findUnique: jest.fn(async () => ({
+      type: 'TEXT',
+      url: null,
+      fileName: null,
+      metadata: null,
+    })),
+  }
+  const prisma = {
+    transformedArticle,
+    transformerSourceBlock,
+    transformerSource,
+  }
   return { prisma, article, statusLog }
 }
 
@@ -140,6 +154,10 @@ function makeServices(overrides: {
     build: jest.fn(async () => ({})),
   } as unknown as EditorialLayoutService
   const learning = {} as LearningLayerService
+  // Real diagnosis service over a stub ConfigService (v3 flag off ⇒ always v2).
+  const diagnosis = new SourceDiagnosisService({
+    get: () => undefined,
+  } as never)
   const ai = {
     image: jest.fn(async () => ({
       base64: '',
@@ -159,6 +177,7 @@ function makeServices(overrides: {
     enrichment,
     editorialLayout,
     learning,
+    diagnosis,
     ai,
   }
 }
@@ -169,6 +188,7 @@ describe('ArticlePipelineService.run', () => {
     const s = makeServices({})
     const pipeline = new ArticlePipelineService(
       prisma as never,
+      s.diagnosis,
       s.structure,
       s.plan,
       s.generate,
@@ -233,6 +253,7 @@ describe('ArticlePipelineService.run', () => {
     })
     const pipeline = new ArticlePipelineService(
       prisma as never,
+      s.diagnosis,
       s.structure,
       s.plan,
       s.generate,
@@ -261,6 +282,7 @@ describe('ArticlePipelineService.run', () => {
     })
     const pipeline = new ArticlePipelineService(
       prisma as never,
+      s.diagnosis,
       s.structure,
       s.plan,
       s.generate,
