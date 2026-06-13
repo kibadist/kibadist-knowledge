@@ -16,6 +16,7 @@ import {
 import { MagazineArticle } from '@/components/magazine/magazine-article'
 import { ArticleReader } from '@/components/reader/article-reader'
 import { SourceInspector } from '@/components/transformer/source-inspector'
+import { V3ArticleView } from '@/components/transformer/v3/v3-article-view'
 import {
   ApiError,
   api,
@@ -388,6 +389,12 @@ function ArticleView({
   })
   const article = articleQuery.data
 
+  // v3 (DET-343) is its own document shape: a v3 row carries `articleJsonV3` +
+  // `qualityReport` and never the v2 `articleJson` column the rest of this view
+  // adapts. Detect it here so the v3 branch below can render the Source-Grounded
+  // Learning Article (body + learning layer) instead of the v2 Compendium path.
+  const isV3 = article?.pipelineVersion === 'v3'
+
   // Provenance for the modes (DET-278 §5): the source link, how it was captured,
   // and whether the original spans are still available behind it.
   const sourceQuery = useQuery({
@@ -531,6 +538,33 @@ function ArticleView({
       </section>
     )
   if (!article) return null
+
+  // v3 (DET-343): the Source-Grounded Learning Article renders from its own
+  // columns. A v3 row's body lives in `articleJsonV3` (the v2 `articleJson` is
+  // always null here), so it has its own readiness gate — present + terminal —
+  // and bypasses the v2 `transformerArticleToV2` adaptation entirely.
+  if (isV3) {
+    if (!article.articleJsonV3 || !isArticleTerminal(article.status)) {
+      return <ArticleProgress status={article.status} />
+    }
+    return (
+      <>
+        {/* BLOCKED maps from the v3 quality gate (coverage / unsupported-claim
+            floor). The verdict + its blockers render inside the learning panel;
+            this banner mirrors the v2 "read it against the Source" cue. */}
+        {article.status === 'BLOCKED' && (
+          <p className='notice notice-error'>
+            Held back by the quality gate — read it against the Source.
+          </p>
+        )}
+        <V3ArticleView
+          article={article.articleJsonV3}
+          quality={article.qualityReport}
+          surface={surface}
+        />
+      </>
+    )
+  }
 
   // Still generating / failed — never a dead wait; the Source view is one toggle
   // away and remains readable.
