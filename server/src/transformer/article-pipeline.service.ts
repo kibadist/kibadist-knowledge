@@ -12,6 +12,8 @@ import { placeCallouts } from './callout-placement.util'
 import { buildCoverageReport, type CoverageBlock } from './coverage.util'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
+import { FidelityReviewService } from './fidelity-review.service'
+import { isBlockedByReview } from './fidelity-review.util'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
 import { buildReadingAids } from './reading-aids.util'
@@ -30,6 +32,7 @@ import { StructureModelService } from './structure-model.service'
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
   ArticleJsonV2,
+  ArticleQualityReportV3,
   CoverageReport,
   EditorialLayout,
   FidelityReport,
@@ -73,6 +76,7 @@ export class ArticlePipelineService {
     private readonly enrichment: ArticleEnrichmentService,
     private readonly editorialLayout: EditorialLayoutService,
     private readonly learning: LearningLayerService,
+    private readonly fidelityReview: FidelityReviewService,
     private readonly ai: AiService,
   ) {}
 
@@ -186,6 +190,34 @@ export class ArticlePipelineService {
     const report = await this.fidelity.check(article, structureModel, blocks)
     const coverage = this.buildCoverage(article, blocks, plan)
 
+    // --- 9b. Learning extraction (DET-258) ----------------------------------
+    // The fidelity REVIEW grades concept/retrieval readiness, so the learning
+    // layer must exist before it runs. Build + persist it inline here (best-effort:
+    // a failure yields an empty layer so the review and finalize still proceed —
+    // the on-demand `generateLearningLayer` can rebuild it later).
+    const learningLayer = await this.tryLearningLayer(articleId, blocks)
+
+    // --- 9c. Fidelity review → quality report v3 (DET-354) ------------------
+    // A deterministic SYNTHESIS of the fidelity report, coverage, structure model
+    // and learning layer into the v3 quality report. Its high-severity
+    // `blockerReasons` are the SECOND gate on FINAL/BLOCKED: an article that
+    // passes the fidelity check but, say, dropped its important source blocks or
+    // carries untraceable fragments is held BLOCKED with a specific, stage-targeted
+    // reason + regeneration hint.
+    const qualityReport = this.fidelityReview.review({
+      article,
+      structureModel,
+      blocks: blocks.map((b) => ({
+        id: b.id,
+        classification: b.classification,
+        removable: b.removable,
+      })),
+      fidelityReport: report,
+      coverageReport: coverage,
+      learningLayer,
+    })
+    const approved = report.approved && !isBlockedByReview(qualityReport)
+
     // --- 10. AI extras (DET-319) --------------------------------------------
     // Non-source-grounded augmentations in their own lanes (never in articleJson),
     // both best-effort. Enrichment is a fast text call, so it stays INLINE and
@@ -203,6 +235,8 @@ export class ArticlePipelineService {
       fidelityReport: report as unknown as Prisma.InputJsonValue,
       fidelityScore: Math.round(report.fidelityScore),
       coverageReport: coverage as unknown as Prisma.InputJsonValue,
+      learningLayer: learningLayer as unknown as Prisma.InputJsonValue,
+      qualityReport: qualityReport as unknown as Prisma.InputJsonValue,
       ...(enrichment
         ? { enrichment: enrichment as unknown as Prisma.InputJsonValue }
         : {}),
@@ -212,7 +246,7 @@ export class ArticlePipelineService {
               editorialLayout as unknown as Prisma.InputJsonValue,
           }
         : {}),
-      status: report.approved
+      status: approved
         ? TransformedArticleStatus.FINAL
         : TransformedArticleStatus.BLOCKED,
     })
@@ -256,6 +290,25 @@ export class ArticlePipelineService {
         }`,
       )
       return null
+    }
+  }
+
+  /** Build the learning layer inline; never throws — a failure logs and yields an
+   *  EMPTY layer so the fidelity review (which grades concept/retrieval readiness)
+   *  and the finalize still proceed. The on-demand path can rebuild it later. */
+  private async tryLearningLayer(
+    articleId: string,
+    blocks: LoadedBlock[],
+  ): Promise<LearningLayer> {
+    try {
+      return await this.learning.build(blocks)
+    } catch (error) {
+      this.logger.warn(
+        `Learning extraction failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return { concepts: [], retrievalPrompts: [] }
     }
   }
 
