@@ -131,6 +131,9 @@ export function collectArticleSourceBlockIds(
 
   for (const h of article.readingAids?.highlights ?? []) add(h.sourceBlockIds)
 
+  // Key claims (DET-352) carry their own grounding ids — audit them too.
+  for (const c of article.keyClaims ?? []) add(c.sourceBlockIds)
+
   return ids
 }
 

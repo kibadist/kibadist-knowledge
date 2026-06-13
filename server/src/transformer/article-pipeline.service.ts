@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { placeCallouts } from './callout-placement.util'
+import { ClaimExtractorService } from './claim-extractor.service'
 import { buildCoverageReport, type CoverageBlock } from './coverage.util'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
@@ -33,6 +34,7 @@ import type {
   CoverageReport,
   EditorialLayout,
   FidelityReport,
+  KeyClaim,
   SourcePreservingArticle,
 } from './transformer.types'
 
@@ -73,6 +75,7 @@ export class ArticlePipelineService {
     private readonly enrichment: ArticleEnrichmentService,
     private readonly editorialLayout: EditorialLayoutService,
     private readonly learning: LearningLayerService,
+    private readonly claims: ClaimExtractorService,
     private readonly ai: AiService,
   ) {}
 
@@ -173,9 +176,19 @@ export class ArticlePipelineService {
     // claims). They are attached HERE, before the fidelity check runs, so the
     // checker validates the highlights as traceable fragments on the enriched
     // artifact.
-    const article: ArticleJsonV2 = {
+    const withAids: ArticleJsonV2 = {
       ...withCallouts,
       readingAids: buildReadingAids(withCallouts, structureModel),
+    }
+    // Key claims (DET-352) — the v3 claims layer. Extracted HERE, after the
+    // article is rewritten and BEFORE the fidelity check, so the extracted claims
+    // ride on the article the checker audits (they are available to the fidelity
+    // reviewer) and downstream retrieval-prompt generation. Best-effort: a failure
+    // logs and yields no claims so the article still finalizes.
+    const keyClaims = await this.tryExtractClaims(articleId, withAids, blocks)
+    const article: ArticleJsonV2 = {
+      ...withAids,
+      ...(keyClaims.length > 0 ? { keyClaims } : {}),
     }
     await this.persist(articleId, {
       articleJson: article as unknown as Prisma.InputJsonValue,
@@ -237,6 +250,27 @@ export class ArticlePipelineService {
       illustrationPlan: plan as unknown as Prisma.InputJsonValue,
     })
     return plan
+  }
+
+  // --- Claim extraction, best-effort (DET-352) ------------------------------
+
+  /** Extract the source-grounded key claims; never throws — a failure logs and
+   *  yields [] so the article still finalizes without the v3 claims layer. */
+  private async tryExtractClaims(
+    articleId: string,
+    article: ArticleJsonV2,
+    blocks: LoadedBlock[],
+  ): Promise<KeyClaim[]> {
+    try {
+      return await this.claims.extract(article, blocks)
+    } catch (error) {
+      this.logger.warn(
+        `Claim extraction failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return []
+    }
   }
 
   // --- AI extras, best-effort (DET-319) -------------------------------------
@@ -384,14 +418,17 @@ export class ArticlePipelineService {
     }
   }
 
-  /** Generate + persist the learning layer for an article (never touches articleJson). */
+  /** Generate + persist the learning layer for an article (never touches articleJson).
+   *  The article's key claims (DET-352), when present, are passed as retrieval-prompt
+   *  seeds so the generated self-test prompts target the article's important claims. */
   async generateLearningLayer(
     articleId: string,
     sourceId: string,
     blocksVersion: number,
+    keyClaims: KeyClaim[] = [],
   ): Promise<LearningLayer> {
     const blocks = await this.loadBlocks(sourceId, blocksVersion)
-    const layer = await this.learning.build(blocks)
+    const layer = await this.learning.build(blocks, keyClaims)
     await this.persist(articleId, {
       learningLayer: layer as unknown as Prisma.InputJsonValue,
     })
