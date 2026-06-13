@@ -1075,12 +1075,13 @@ export interface CoverageReport {
 }
 
 // --- Article JSON v2 contract (DET-277) ---
-// MIRROR of the v2 contract in server/src/transformer/transformer.types.ts — the
-// SERVER is the single adaptation boundary (`getArticle` adapts legacy v1 → v2),
-// so the web ONLY ever receives v2. These types are byte-for-byte the same shape
-// as that file — do NOT diverge.
+// MIRROR of the v2/v3 contract in server/src/transformer/transformer.types.ts —
+// the SERVER is the single adaptation boundary (`getArticle` adapts legacy v1 →
+// v2), so the web ONLY ever receives a structured article. v3 (DET-350) is an
+// additive superset of v2 (generated callouts, comparison tables, source notes),
+// so a v3 article is shape-compatible with these types. Do NOT diverge.
 
-export type ArticleSchemaVersion = 'v2'
+export type ArticleSchemaVersion = 'v2' | 'v3'
 
 export type HeadingSourceV2 = 'original' | 'cleanedOriginal' | 'inferred'
 
@@ -1211,6 +1212,63 @@ export interface ArticleCallout {
 export interface ArticleCalloutPlacement {
   bySection: Record<string, ArticleCallout[]>
   unplaced: ArticleCallout[]
+  // v3 (DET-350): source-grounded generated callouts.
+  generated?: ArticleGeneratedCallout[]
+}
+
+// --- v3 source-grounded extras (DET-350) ---
+export type ArticleCalloutType =
+  | 'definition'
+  | 'key_idea'
+  | 'source_analogy'
+  | 'caveat'
+  | 'example'
+  | 'warning'
+  | 'remember'
+  | 'compare'
+
+export interface ArticleGeneratedCallout {
+  id: string
+  type: ArticleCalloutType
+  title: string
+  body: string
+  sourceBlockIds: string[]
+  relatedSectionIds: string[]
+  fidelityRisk: FidelityRisk
+}
+
+export interface ArticleTableCell {
+  text: string
+  sourceBlockIds?: string[]
+}
+
+export interface ArticleComparisonTableRow {
+  cells: ArticleTableCell[]
+  sourceBlockIds: string[]
+}
+
+export interface ArticleComparisonTable {
+  id: string
+  title: string
+  columns: string[]
+  rows: ArticleComparisonTableRow[]
+  sourceBlockIds: string[]
+  relatedSectionIds: string[]
+  fidelityRisk: FidelityRisk
+}
+
+export interface ArticleSourceNoteItem {
+  text: string
+  sourceBlockIds: string[]
+  url?: string
+}
+
+export interface ArticleSourceNotes {
+  references: ArticleSourceNoteItem[]
+  bibliography: ArticleSourceNoteItem[]
+  externalLinks: ArticleSourceNoteItem[]
+  removedNavigation: ArticleSourceNoteItem[]
+  lowImportance: ArticleSourceNoteItem[]
 }
 
 export type ArticleShape =
@@ -1246,6 +1304,9 @@ export interface ArticleJsonV2 {
   calloutPlacements?: ArticleCalloutPlacement
   shape?: ArticleShape
   reorderings?: ArticleReorderingAudit[]
+  // v3 additive fields (DET-350).
+  tables?: ArticleComparisonTable[]
+  sourceNotes?: ArticleSourceNotes
 }
 
 // --- Source DTOs (mirror transformer.service.ts) ---

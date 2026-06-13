@@ -3,6 +3,7 @@ import {
   checkFullTraceability,
   checkProcedureListPreservation,
   checkQuoteAttribution,
+  checkSourceGroundedExtras,
   checkUnsupportedHighlights,
   normalizeText,
   type SourceBlockText,
@@ -317,5 +318,97 @@ describe('checkProcedureListPreservation (DET-273)', () => {
     expect(
       checkProcedureListPreservation(a, 'procedure', [orderedList]),
     ).toEqual([])
+  })
+})
+
+describe('checkSourceGroundedExtras (DET-350)', () => {
+  const known = new Set(['b1', 'b2'])
+
+  it('passes when generated callouts and tables are grounded in known blocks', () => {
+    const a = article([para('p1', 'x', ['b1'])], {
+      calloutPlacements: {
+        bySection: {},
+        unplaced: [],
+        generated: [
+          {
+            id: 'gco-key_idea-0',
+            type: 'key_idea',
+            title: 'K',
+            body: 'B',
+            sourceBlockIds: ['b1'],
+            relatedSectionIds: ['s1'],
+            fidelityRisk: 'low',
+          },
+        ],
+      },
+      tables: [
+        {
+          id: 'gtbl-0',
+          title: 'T',
+          columns: ['A', 'B'],
+          rows: [
+            { cells: [{ text: 'a' }, { text: 'b' }], sourceBlockIds: ['b1'] },
+            { cells: [{ text: 'c' }, { text: 'd' }], sourceBlockIds: ['b2'] },
+          ],
+          sourceBlockIds: ['b1', 'b2'],
+          relatedSectionIds: ['s1'],
+          fidelityRisk: 'low',
+        },
+      ],
+    })
+    const result = checkSourceGroundedExtras(a, known)
+    expect(result.traceabilityViolation).toBe(false)
+    expect(result.structuralFindings).toEqual([])
+  })
+
+  it('rejects an unsupported callout (unknown source block id)', () => {
+    const a = article([para('p1', 'x', ['b1'])], {
+      calloutPlacements: {
+        bySection: {},
+        unplaced: [],
+        generated: [
+          {
+            id: 'gco-source_analogy-0',
+            type: 'source_analogy',
+            title: 'Invented analogy',
+            body: 'Not in the source.',
+            sourceBlockIds: ['ghost'],
+            relatedSectionIds: [],
+            fidelityRisk: 'high',
+          },
+        ],
+      },
+    })
+    const result = checkSourceGroundedExtras(a, known)
+    expect(result.traceabilityViolation).toBe(true)
+    expect(result.structuralFindings[0].severity).toBe('high')
+    expect(result.structuralFindings[0].articleRef).toBe('gco-source_analogy-0')
+  })
+
+  it('rejects a table whose row cites an unknown block', () => {
+    const a = article([para('p1', 'x', ['b1'])], {
+      tables: [
+        {
+          id: 'gtbl-0',
+          title: 'External facts',
+          columns: ['A', 'B'],
+          rows: [
+            { cells: [{ text: 'a' }, { text: 'b' }], sourceBlockIds: ['b1'] },
+            {
+              cells: [{ text: 'c' }, { text: 'd' }],
+              sourceBlockIds: ['ghost'],
+            },
+          ],
+          sourceBlockIds: ['b1', 'ghost'],
+          relatedSectionIds: [],
+          fidelityRisk: 'low',
+        },
+      ],
+    })
+    const result = checkSourceGroundedExtras(a, known)
+    expect(result.traceabilityViolation).toBe(true)
+    expect(
+      result.structuralFindings.some((f) => f.articleRef === 'gtbl-0-row-1'),
+    ).toBe(true)
   })
 })
