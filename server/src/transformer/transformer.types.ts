@@ -160,7 +160,19 @@ export interface CoverageReport {
 
 /** v2 article schema version discriminator. */
 export const ARTICLE_SCHEMA_VERSION = 'v2' as const
-export type ArticleSchemaVersion = typeof ARTICLE_SCHEMA_VERSION
+/**
+ * v3 article schema version (DET-350). v3 is an ADDITIVE superset of v2: it adds
+ * source-grounded generated callouts (carried inside `calloutPlacements.generated`),
+ * comparison `tables`, and `sourceNotes` (references / bibliography / external links
+ * / removed nav-footer / low-importance material moved out of the article body). A
+ * v3 article is assignable to `ArticleJsonV2` (every new field is optional there),
+ * so the existing services / web contract keep operating on the v2 shape unchanged;
+ * `schemaVersion` simply bumps to `'v3'` once the new fields are attached.
+ */
+export const ARTICLE_SCHEMA_VERSION_V3 = 'v3' as const
+export type ArticleSchemaVersion =
+  | typeof ARTICLE_SCHEMA_VERSION
+  | typeof ARTICLE_SCHEMA_VERSION_V3
 
 /**
  * v2 heading provenance. Distinct from v1 `HeadingSource`: 'cleanedOriginal'
@@ -364,6 +376,124 @@ export interface ArticleCallout {
 export interface ArticleCalloutPlacement {
   bySection: Record<string, ArticleCallout[]>
   unplaced: ArticleCallout[]
+  /**
+   * Source-grounded GENERATED callouts (DET-350). Unlike `bySection`/`unplaced`
+   * (which only RE-PLACE existing end-matter), these are new pedagogical asides
+   * the callout generator distilled from the source — definitions, key ideas,
+   * analogies the source draws, caveats, examples, warnings, "remember" prompts,
+   * and compare cards — each grounded in real source blocks and tied to the
+   * sections it relates to. Present only on v3 articles; the fidelity checker
+   * rejects any whose `sourceBlockIds` are empty or unknown.
+   */
+  generated?: ArticleGeneratedCallout[]
+}
+
+/**
+ * The pedagogical TYPE of a generated callout (DET-350). Every type is distilled
+ * from the source — never from outside knowledge — so a callout can always cite
+ * the blocks it came from:
+ *  - 'definition'      — a term the source defines.
+ *  - 'key_idea'        — a central point the source makes.
+ *  - 'source_analogy'  — an analogy the SOURCE itself draws (e.g. the transformer
+ *                        transcript's audio-mixer / Beatles comparison).
+ *  - 'caveat'          — a qualification/limitation the source states.
+ *  - 'example'         — a concrete example the source gives.
+ *  - 'warning'         — a hazard/pitfall the source calls out.
+ *  - 'remember'        — a fact the source stresses as worth retaining.
+ *  - 'compare'         — a short A-vs-B contrast the source makes (the long-form
+ *                        version becomes an `ArticleComparisonTable`).
+ */
+export type ArticleCalloutType =
+  | 'definition'
+  | 'key_idea'
+  | 'source_analogy'
+  | 'caveat'
+  | 'example'
+  | 'warning'
+  | 'remember'
+  | 'compare'
+
+/**
+ * A source-grounded generated callout (DET-350). It carries new prose (a `title`
+ * + `body`) but NO new information: both must be supportable from `sourceBlockIds`
+ * (non-empty, all known), which the generator enforces in code and the fidelity
+ * checker re-verifies. `relatedSectionIds` ties the callout to the article
+ * section(s) it belongs beside (filtered to real section ids); `fidelityRisk`
+ * flags how much interpretation the wording required.
+ */
+export interface ArticleGeneratedCallout {
+  /** Deterministic id, e.g. `gco-source_analogy-0`. */
+  id: string
+  type: ArticleCalloutType
+  title: string
+  body: string
+  sourceBlockIds: string[]
+  relatedSectionIds: string[]
+  fidelityRisk: FidelityRisk
+}
+
+/**
+ * One comparison-table cell (DET-350). `sourceBlockIds` is OPTIONAL per cell —
+ * "per row/cell where possible": a cell that maps cleanly to specific block(s)
+ * carries them, otherwise it relies on the row-level grounding.
+ */
+export interface ArticleTableCell {
+  text: string
+  sourceBlockIds?: string[]
+}
+
+/** One comparison-table row (DET-350). The row MUST be grounded (non-empty,
+ *  known `sourceBlockIds`); the fidelity checker rejects an ungrounded row. */
+export interface ArticleComparisonTableRow {
+  cells: ArticleTableCell[]
+  sourceBlockIds: string[]
+}
+
+/**
+ * A source-grounded comparison table (DET-350) — e.g. open vs closed vs isolated
+ * systems, or natural vs human-made systems. The table REORGANIZES source content
+ * into rows/columns but adds no external facts: every row cites the source blocks
+ * it came from, and the table-level `sourceBlockIds` is the union of its rows'.
+ * `relatedSectionIds` ties it to the section(s) it belongs beside.
+ */
+export interface ArticleComparisonTable {
+  /** Deterministic id, e.g. `gtbl-0`. */
+  id: string
+  title: string
+  /** Column headers (≥2 — a comparison needs at least two columns). */
+  columns: string[]
+  rows: ArticleComparisonTableRow[]
+  sourceBlockIds: string[]
+  relatedSectionIds: string[]
+  fidelityRisk: FidelityRisk
+}
+
+/**
+ * One source-note item (DET-350): a fragment moved OUT of the article body, kept
+ * traceable to its source block(s). `url` is set for external links / references
+ * that carry one.
+ */
+export interface ArticleSourceNoteItem {
+  text: string
+  sourceBlockIds: string[]
+  url?: string
+}
+
+/**
+ * Source notes (DET-350) — the end-of-article apparatus that should not interrupt
+ * the reading flow. Built deterministically from the source blocks' classification
+ * (no LLM, no hallucination): citations become `references`/`bibliography`,
+ * URL-bearing asides become `externalLinks`, removed NAVIGATION_NOISE/FOOTER blocks
+ * become `removedNavigation`, and other low-value (ad / sidebar / duplicate /
+ * removed) material becomes `lowImportance`. References and bibliography move here
+ * BY DEFAULT rather than living inline in the body.
+ */
+export interface ArticleSourceNotes {
+  references: ArticleSourceNoteItem[]
+  bibliography: ArticleSourceNoteItem[]
+  externalLinks: ArticleSourceNoteItem[]
+  removedNavigation: ArticleSourceNoteItem[]
+  lowImportance: ArticleSourceNoteItem[]
 }
 
 /** Genre/shape of the article (DET-273). */
@@ -491,4 +621,24 @@ export interface ArticleJsonV2 {
   calloutPlacements?: ArticleCalloutPlacement
   shape?: ArticleShape
   reorderings?: ArticleReorderingAudit[]
+  /* v3 additive fields (DET-350) — present once the callout/table/source-note
+   * lanes have run; optional here so a v3 article stays assignable to v2. */
+  tables?: ArticleComparisonTable[]
+  sourceNotes?: ArticleSourceNotes
+}
+
+/**
+ * Article JSON v3 (DET-350) — the source-grounded-extras superset of v2.
+ * Discriminated on `schemaVersion: 'v3'`. It REQUIRES the three fields the v3
+ * wave introduces (`calloutPlacements` now also carrying `.generated`, `tables`,
+ * `sourceNotes`); everything else is inherited verbatim from v2. Because each of
+ * those fields is optional on `ArticleJsonV2`, a v3 article is assignable to v2 —
+ * the pipeline and web keep operating on the v2 shape and simply see the richer
+ * fields when present.
+ */
+export interface ArticleJsonV3 extends ArticleJsonV2 {
+  schemaVersion: typeof ARTICLE_SCHEMA_VERSION_V3
+  calloutPlacements: ArticleCalloutPlacement
+  tables: ArticleComparisonTable[]
+  sourceNotes: ArticleSourceNotes
 }

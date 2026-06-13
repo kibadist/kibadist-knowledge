@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type {
   ArticleJsonV2,
+  ArticleJsonV3,
   ArticleParagraph,
   ArticleSection,
   ArticleSectionV2,
@@ -445,9 +446,81 @@ const callout = z.object({
   placementReason: z.string().min(1),
 })
 
+// --- Source-grounded generated callouts + tables (DET-350) -----------------
+
+/** The pedagogical callout vocabulary; mirrors `ArticleCalloutType`. */
+const calloutType = z.enum([
+  'definition',
+  'key_idea',
+  'source_analogy',
+  'caveat',
+  'example',
+  'warning',
+  'remember',
+  'compare',
+])
+
+/**
+ * A stored source-grounded generated callout (DET-350). Carries new prose
+ * (title/body) but is GROUNDED: non-empty `sourceBlockIds` is the first gate (the
+ * generator re-checks ids exist; the fidelity checker re-verifies). The id is
+ * code-minted (`gco-<type>-<index>`), so the schema requires it.
+ */
+const generatedCallout = z.object({
+  id: z.string().min(1),
+  type: calloutType,
+  title: z.string().min(1),
+  body: z.string().min(1),
+  sourceBlockIds,
+  relatedSectionIds: z.array(z.string().min(1)),
+  fidelityRisk,
+})
+
 const calloutPlacements = z.object({
   bySection: z.record(z.string(), z.array(callout)),
   unplaced: z.array(callout),
+  // v3 (DET-350): the generated, source-grounded callouts. Optional so a v2
+  // placement (end-matter only) still validates.
+  generated: z.array(generatedCallout).optional(),
+})
+
+/** One comparison-table cell — per-cell grounding is optional ("where possible"). */
+const tableCell = z.object({
+  text: z.string().min(1),
+  sourceBlockIds: z.array(z.string().min(1)).optional(),
+})
+
+/** One comparison-table row — row-level grounding is REQUIRED (non-empty). */
+const comparisonTableRow = z.object({
+  cells: z.array(tableCell).min(1),
+  sourceBlockIds,
+})
+
+/** A stored source-grounded comparison table (DET-350). */
+const comparisonTable = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  columns: z.array(z.string().min(1)).min(2),
+  rows: z.array(comparisonTableRow).min(1),
+  sourceBlockIds,
+  relatedSectionIds: z.array(z.string().min(1)),
+  fidelityRisk,
+})
+
+/** One source-note item (DET-350): a fragment moved out of the body, traceable. */
+const sourceNoteItem = z.object({
+  text: z.string().min(1),
+  sourceBlockIds,
+  url: z.string().min(1).optional(),
+})
+
+/** Source notes — references/bibliography/links/removed-nav/low-importance. */
+const sourceNotes = z.object({
+  references: z.array(sourceNoteItem),
+  bibliography: z.array(sourceNoteItem),
+  externalLinks: z.array(sourceNoteItem),
+  removedNavigation: z.array(sourceNoteItem),
+  lowImportance: z.array(sourceNoteItem),
 })
 
 const articleShape = z.enum([
@@ -545,7 +618,9 @@ export const ArticleLlmV2Schema = z.object({
 
 export type ArticleLlmV2 = z.infer<typeof ArticleLlmV2Schema>
 
-export const ArticleJsonV2Schema: z.ZodType<ArticleJsonV2> = z.object({
+// The shared structured-article object. Kept as a raw ZodObject (not the
+// `z.ZodType<>`-annotated export) so the v3 schema can `.extend` it.
+const articleJsonObject = z.object({
   schemaVersion: z.literal('v2'),
   mode: z.literal('source_preserving_article'),
   title: z.object({ text: z.string().min(1), source: headingSourceV2 }),
@@ -574,7 +649,26 @@ export const ArticleJsonV2Schema: z.ZodType<ArticleJsonV2> = z.object({
   calloutPlacements: calloutPlacements.optional(),
   shape: articleShape.optional(),
   reorderings: z.array(reorderingAudit).optional(),
+  // v3 additive fields (DET-350); optional so a v2 article still validates.
+  tables: z.array(comparisonTable).optional(),
+  sourceNotes: sourceNotes.optional(),
 })
+
+export const ArticleJsonV2Schema: z.ZodType<ArticleJsonV2> = articleJsonObject
+
+/**
+ * Article JSON v3 (DET-350) — the v2 object with `schemaVersion: 'v3'` and the
+ * three v3 fields promoted to REQUIRED (generated callouts live inside
+ * `calloutPlacements`, plus `tables` and `sourceNotes`). Validates a native v3
+ * article end-to-end.
+ */
+export const ArticleJsonV3Schema: z.ZodType<ArticleJsonV3> =
+  articleJsonObject.extend({
+    schemaVersion: z.literal('v3'),
+    calloutPlacements,
+    tables: z.array(comparisonTable),
+    sourceNotes,
+  }) as unknown as z.ZodType<ArticleJsonV3>
 
 // --- Fidelity report (step 9) ----------------------------------------------
 
@@ -885,3 +979,53 @@ export const ConceptCandidatesLlmSchema = z.object({
     }),
   ),
 })
+
+// --- Source-grounded callout / table LLM wire shapes (DET-350) --------------
+//
+// What the callout / table generators ask the model for. As with the
+// illustration and learning lanes, `sourceBlockIds` / `relatedSectionIds` are
+// LOOSENED (plain string arrays, default []) so the SERVICE drops ungrounded
+// items in code rather than the model silently omitting them to satisfy the
+// schema; the id is code-minted (absent here); `fidelityRisk` defaults to the
+// cautious 'medium' when the model omits it.
+
+export const GeneratedCalloutsLlmSchema = z.object({
+  callouts: z.array(
+    z.object({
+      type: calloutType,
+      title: z.string().min(1),
+      body: z.string().min(1),
+      sourceBlockIds: z.array(z.string()).default([]),
+      relatedSectionIds: z.array(z.string()).default([]),
+      fidelityRisk: fidelityRisk.default('medium'),
+    }),
+  ),
+})
+
+export type GeneratedCalloutsLlm = z.infer<typeof GeneratedCalloutsLlmSchema>
+
+export const ComparisonTablesLlmSchema = z.object({
+  tables: z.array(
+    z.object({
+      title: z.string().min(1),
+      columns: z.array(z.string().min(1)).min(2),
+      rows: z.array(
+        z.object({
+          cells: z
+            .array(
+              z.object({
+                text: z.string().min(1),
+                sourceBlockIds: z.array(z.string()).default([]),
+              }),
+            )
+            .min(1),
+          sourceBlockIds: z.array(z.string()).default([]),
+        }),
+      ),
+      relatedSectionIds: z.array(z.string()).default([]),
+      fidelityRisk: fidelityRisk.default('medium'),
+    }),
+  ),
+})
+
+export type ComparisonTablesLlm = z.infer<typeof ComparisonTablesLlmSchema>
