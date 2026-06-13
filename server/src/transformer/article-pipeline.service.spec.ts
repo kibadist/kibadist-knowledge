@@ -4,6 +4,7 @@ import { AiService } from '../ai/ai.service'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
+import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
@@ -110,6 +111,7 @@ const okReport: FidelityReport = {
 
 function makeServices(overrides: {
   structure?: Partial<StructureModelService>
+  segmentation?: Partial<ConceptualSegmentationService>
   plan?: Partial<ReshapingPlanService>
   generate?: Partial<ArticleGeneratorService>
   fidelity?: Partial<FidelityCheckerService>
@@ -132,6 +134,26 @@ function makeServices(overrides: {
     })),
     ...overrides.structure,
   } as unknown as StructureModelService
+  const segmentation = {
+    // A minimal segmentation: one high-importance segment over b1, no orphans.
+    segment: jest.fn(async () => ({
+      segments: [
+        {
+          id: 'seg-0',
+          title: 'A claim',
+          role: 'orientation',
+          sourceBlockIds: ['b1'],
+          importance: 'high',
+          summary: 'A claim',
+          mustPreserveClaims: [],
+          suggestedArticlePlacement: 'main_body',
+        },
+      ],
+      unsegmentedBlocks: [],
+      warnings: [],
+    })),
+    ...overrides.segmentation,
+  } as unknown as ConceptualSegmentationService
   const plan = {
     build: jest.fn(async () => ({ removedBlocks: [] })),
     ...overrides.plan,
@@ -170,6 +192,7 @@ function makeServices(overrides: {
   } as unknown as AiService
   return {
     structure,
+    segmentation,
     plan,
     generate,
     fidelity,
@@ -190,6 +213,7 @@ describe('ArticlePipelineService.run', () => {
       prisma as never,
       s.diagnosis,
       s.structure,
+      s.segmentation,
       s.plan,
       s.generate,
       s.fidelity,
@@ -245,6 +269,73 @@ describe('ArticlePipelineService.run', () => {
     expect(checkArg.calloutPlacements).toBeDefined()
   })
 
+  it('persists the conceptual segmentation and feeds it to the outline (DET-347)', async () => {
+    const { prisma, article } = makeStubPrisma()
+    const s = makeServices({})
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.generate,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.ai,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // Segmentation ran and its artifact was persisted onto `segments`.
+    expect(
+      s.segmentation.segment as unknown as jest.Mock,
+    ).toHaveBeenCalledTimes(1)
+    expect(article.segments).toBeTruthy()
+
+    // The reshaping plan (outline) consumed the segmentation as its 3rd argument.
+    const planMock = s.plan.build as unknown as jest.Mock
+    const segmentationArg = planMock.mock.calls[0][2]
+    expect(segmentationArg).toBeTruthy()
+    expect(segmentationArg.segments[0].id).toBe('seg-0')
+  })
+
+  it('degrades to no-segmentation (outline still runs) when segmentation throws', async () => {
+    const { prisma, statusLog, article } = makeStubPrisma()
+    const s = makeServices({
+      segmentation: {
+        segment: jest.fn(async () => {
+          throw new Error('segmentation blew up')
+        }),
+      },
+    })
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.generate,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.ai,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // A segmentation failure must NOT fail the article — it still reaches FINAL,
+    // and the outline was called with a null segmentation (degraded path).
+    expect(statusLog).toContain(TransformedArticleStatus.FINAL)
+    expect(article.segments).toBeFalsy()
+    const planMock = s.plan.build as unknown as jest.Mock
+    expect(planMock.mock.calls[0][2]).toBeNull()
+  })
+
   it('ends BLOCKED when the fidelity gate rejects', async () => {
     const { prisma, statusLog } = makeStubPrisma()
     const blockedReport: FidelityReport = { ...okReport, approved: false }
@@ -255,6 +346,7 @@ describe('ArticlePipelineService.run', () => {
       prisma as never,
       s.diagnosis,
       s.structure,
+      s.segmentation,
       s.plan,
       s.generate,
       s.fidelity,
@@ -284,6 +376,7 @@ describe('ArticlePipelineService.run', () => {
       prisma as never,
       s.diagnosis,
       s.structure,
+      s.segmentation,
       s.plan,
       s.generate,
       s.fidelity,

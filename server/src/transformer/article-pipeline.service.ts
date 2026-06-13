@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { placeCallouts } from './callout-placement.util'
+import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { buildCoverageReport, type CoverageBlock } from './coverage.util'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
@@ -33,6 +34,7 @@ import { StructureModelService } from './structure-model.service'
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
   ArticleJsonV2,
+  ConceptualSegmentation,
   CoverageReport,
   EditorialLayout,
   FidelityReport,
@@ -70,6 +72,7 @@ export class ArticlePipelineService {
     private readonly prisma: PrismaService,
     private readonly sourceDiagnosis: SourceDiagnosisService,
     private readonly structureModel: StructureModelService,
+    private readonly segmentation: ConceptualSegmentationService,
     private readonly reshapingPlan: ReshapingPlanService,
     private readonly generator: ArticleGeneratorService,
     private readonly fidelity: FidelityCheckerService,
@@ -170,9 +173,22 @@ export class ArticlePipelineService {
       structureModel: structureModel as unknown as Prisma.InputJsonValue,
     })
 
+    // --- 6b. Conceptual segmentation (DET-347) ------------------------------
+    // Group the classified blocks into ordered learning segments BEFORE the
+    // outline, so the reshaping plan builds sections from whole concepts instead
+    // of isolated blocks (which turned transcripts into fragment lists). Runs
+    // within the MODELING phase (no new status enum). Best-effort: a failure
+    // degrades to no-segmentation and the outline still runs exactly as before —
+    // segmentation is an optional input to the plan, never a hard gate.
+    const segments = await this.trySegment(articleId, structureModel, blocks)
+
     // --- 7. Reshaping plan --------------------------------------------------
     await this.setStatus(articleId, TransformedArticleStatus.PLANNING)
-    const plan = await this.reshapingPlan.build(structureModel, blocks)
+    const plan = await this.reshapingPlan.build(
+      structureModel,
+      blocks,
+      segments,
+    )
     await this.persist(articleId, {
       reshapingPlan: plan as unknown as Prisma.InputJsonValue,
     })
@@ -257,6 +273,38 @@ export class ArticlePipelineService {
       illustrationPlan: plan as unknown as Prisma.InputJsonValue,
     })
     return plan
+  }
+
+  // --- Conceptual segmentation, best-effort (DET-347) -----------------------
+
+  /**
+   * Build + persist the conceptual segmentation; never throws — a failure logs and
+   * yields null so the outline still runs (degraded to no-segmentation, exactly as
+   * the pipeline behaved before DET-347). On success the segment→block mapping is
+   * persisted onto `segments` and returned so the reshaping plan can consume it.
+   */
+  private async trySegment(
+    articleId: string,
+    structureModel: SourceStructureModel,
+    blocks: LoadedBlock[],
+  ): Promise<ConceptualSegmentation | null> {
+    try {
+      const segmentation = await this.segmentation.segment(
+        structureModel,
+        blocks,
+      )
+      await this.persist(articleId, {
+        segments: segmentation as unknown as Prisma.InputJsonValue,
+      })
+      return segmentation
+    } catch (error) {
+      this.logger.warn(
+        `Conceptual segmentation failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
   }
 
   // --- AI extras, best-effort (DET-319) -------------------------------------
