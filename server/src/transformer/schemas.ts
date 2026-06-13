@@ -893,15 +893,116 @@ const learningConceptCandidate = z.object({
 
 export type LearningConceptCandidate = z.infer<typeof learningConceptCandidate>
 
+// --- Article-level concept extraction (DET-351) ----------------------------
+//
+// A WHOLE-ARTICLE learning-extraction stage that runs after generation and
+// returns rich concept candidates + terminology + relationships for the Concept
+// Library / Proof-of-Learning flow. Distinct from the DET-258 study layer and the
+// DET-283 per-section candidates: this stage covers the full article in one pass
+// so a concept-rich source can never finalize with zero candidates (the bug this
+// fixes — both observed failures returned conceptCandidateCount: 0).
+//
+// Like every other extraction lane the model is UNTRUSTED. The LLM proposes the
+// candidates; CODE owns the invariants (`learning-layer.service.ts`):
+//  - grounding: a candidate without ≥1 real sourceBlockId is dropped;
+//  - `normalizedName` is computed in code (never prompt-trusted) and candidates
+//    are deduplicated by it (acceptance criterion);
+//  - `articleSectionIds` are resolved in code from the candidate's grounded
+//    blocks against the article's section index, never taken from the model;
+//  - `eligibleForLibraryReview` is set in code from importance (high ⇒ eligible);
+//  - `validationStatus` is forced 'pending' and `aiAssisted` true — NOTHING is
+//    auto-promoted to permanent knowledge without explicit user validation.
+
+const conceptCandidateType = z.enum([
+  'core_concept',
+  'supporting_concept',
+  'term',
+  'process',
+  'distinction',
+  'method',
+  'model',
+  'misconception',
+])
+
+export type ConceptCandidateType = z.infer<typeof conceptCandidateType>
+
+const conceptImportance = z.enum(['high', 'medium', 'low'])
+export type ConceptImportance = z.infer<typeof conceptImportance>
+
+/** Cognitive state a freshly-extracted candidate may be SUGGESTED for — never the
+ *  earned states; extraction can only propose 'Seen' or 'Parsed'. */
+const suggestedCognitiveState = z.enum(['Seen', 'Parsed'])
+
+const conceptRelationshipType = z.enum([
+  'related_to',
+  'prerequisite_of',
+  'confused_with',
+  'contrasts_with',
+  'example_of',
+  'applied_in',
+  'misconception_about',
+])
+
+export type ConceptRelationshipType = z.infer<typeof conceptRelationshipType>
+
+/**
+ * A proposed relationship between two concept candidates. `targetNormalizedName`
+ * points at another candidate's code-computed `normalizedName`; the service drops
+ * any relationship whose target does not resolve to a real candidate (no dangling
+ * edges) and whose `type` is not a known relationship kind.
+ */
+const conceptRelationshipCandidate = z.object({
+  type: conceptRelationshipType,
+  targetNormalizedName: z.string().min(1),
+  rationale: z.string().min(1).optional(),
+})
+
+export type ConceptRelationshipCandidate = z.infer<
+  typeof conceptRelationshipCandidate
+>
+
+/**
+ * A whole-article concept CANDIDATE (DET-351). A proposal for the Concept
+ * Library — never an earned Concept: `aiAssisted` is forced true and
+ * `validationStatus` starts 'pending'. `name`/`type`/`importance` come from the
+ * model; `normalizedName`, `articleSectionIds` and `eligibleForLibraryReview` are
+ * code-owned. `sourceBlockIds` is non-empty (grounding is required; the service
+ * drops ungrounded candidates). `conceptId` is stamped only when the user later
+ * validates the candidate, making promotion idempotent.
+ */
+const articleConceptCandidate = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  normalizedName: z.string().min(1),
+  domain: z.string().min(1).optional(),
+  type: conceptCandidateType,
+  shortDefinition: z.string().min(1).optional(),
+  sourceBlockIds,
+  articleSectionIds: z.array(z.string().min(1)),
+  importance: conceptImportance,
+  suggestedCognitiveState,
+  /** Code-set from importance: high-importance candidates are surfaced for
+   *  Concept Library review (and potential Living Concept generation). */
+  eligibleForLibraryReview: z.boolean(),
+  aiAssisted: z.literal(true),
+  validationStatus,
+  conceptId: z.string().min(1).optional(),
+  relationshipCandidates: z.array(conceptRelationshipCandidate).optional(),
+})
+
+export type ArticleConceptCandidate = z.infer<typeof articleConceptCandidate>
+
 /**
  * Stored learning layer (code-managed ids + validationStatus). `conceptCandidates`
- * is an ADDITIVE optional parallel array (DET-283): old stored rows predate it and
- * still parse. `concepts` / `retrievalPrompts` and their update flow are untouched.
+ * (DET-283) and `articleConceptCandidates` (DET-351) are ADDITIVE optional parallel
+ * arrays: old stored rows predate them and still parse. `concepts` /
+ * `retrievalPrompts` and their update flow are untouched.
  */
 export const LearningLayerSchema = z.object({
   concepts: z.array(learningConcept),
   retrievalPrompts: z.array(retrievalPrompt),
   conceptCandidates: z.array(learningConceptCandidate).optional(),
+  articleConceptCandidates: z.array(articleConceptCandidate).optional(),
 })
 
 export type LearningLayer = z.infer<typeof LearningLayerSchema>
@@ -944,3 +1045,42 @@ export const ConceptCandidatesLlmSchema = z.object({
     }),
   ),
 })
+
+/**
+ * What the LLM returns for the DET-351 whole-article extraction. Deliberately
+ * PERMISSIVE so a single off-taxonomy value never fails the whole pass:
+ *  - `type` / `importance` / `suggestedCognitiveState` fall back via `.catch`;
+ *  - `sourceBlockIds` is loosened to allow empties — the service drops ungrounded
+ *    candidates in code rather than the model omitting them to pass the schema;
+ *  - relationship `type` / `targetName` stay free `string`s; the service maps
+ *    them to the known relationship enum and resolves targets to real candidates,
+ *    dropping anything that does not resolve.
+ * Everything code-owns (`id`, `normalizedName`, `articleSectionIds`,
+ * `eligibleForLibraryReview`, `validationStatus`, `aiAssisted`) is ABSENT here.
+ */
+export const ArticleConceptExtractionLlmSchema = z.object({
+  candidates: z.array(
+    z.object({
+      name: z.string().min(1),
+      domain: z.string().min(1).optional(),
+      type: conceptCandidateType.catch('term'),
+      shortDefinition: z.string().min(1).optional(),
+      sourceBlockIds: z.array(z.string()).default([]),
+      importance: conceptImportance.catch('medium'),
+      suggestedCognitiveState: suggestedCognitiveState.catch('Seen'),
+      relationships: z
+        .array(
+          z.object({
+            type: z.string().min(1),
+            targetName: z.string().min(1),
+            rationale: z.string().min(1).optional(),
+          }),
+        )
+        .default([]),
+    }),
+  ),
+})
+
+export type ArticleConceptExtractionLlm = z.infer<
+  typeof ArticleConceptExtractionLlmSchema
+>
