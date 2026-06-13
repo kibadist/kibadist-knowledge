@@ -5,6 +5,11 @@ import type {
   ArticleLearningEvent,
   ArticleLearningEventDraft,
 } from './article-learning-events'
+// The v3 source-grounded learning-article contract (DET-344). The dependency
+// runs one way — `article-v3.ts` imports nothing from here — so a generated
+// article's `articleJson` can carry either the legacy v2 or the new v3 shape,
+// and the reader dispatches on `schemaVersion` (DET-357).
+import type { ArticleJsonV3 } from './article-v3'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
@@ -1558,8 +1563,11 @@ export interface TransformedArticle {
   id: string
   sourceId: string
   status: TransformedArticleStatus
-  // Always v2 — the server adapts legacy v1 at the read boundary (DET-277).
-  articleJson: ArticleJsonV2 | null
+  // The legacy source-preserving v2 shape (server adapts v1 → v2 at the read
+  // boundary, DET-277) OR the new source-grounded learning v3 shape (DET-344).
+  // The reader dispatches on `schemaVersion`; v2 renders through the Compendium,
+  // v3 through the learning-first reader (DET-357).
+  articleJson: ArticleJsonV2 | ArticleJsonV3 | null
   fidelityReport: FidelityReport | null
   fidelityScore: number | null
   coverageReport: CoverageReport | null
