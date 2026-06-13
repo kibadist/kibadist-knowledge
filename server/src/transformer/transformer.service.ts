@@ -6,6 +6,7 @@ import {
   TransformerSourceType,
 } from '@kibadist/prisma'
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -30,6 +31,7 @@ import type {
   LearningConcept,
   LearningConceptCandidate,
   LearningLayer,
+  RetrievalPrompt,
   SourceStructureModel,
 } from './schemas'
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
@@ -811,6 +813,131 @@ export class TransformerService {
         ),
       }
     })
+  }
+
+  /**
+   * Edit a learning item's CONTENT in place (DET-359): the v3 review panel lets
+   * the reader fix a concept's label/definition (or importance) before deciding
+   * on it. This is content-only — it NEVER changes validationStatus and NEVER
+   * creates a Concept row, so editing can't be a back door to internalizing
+   * knowledge. The item id is looked up across `concepts` and `conceptCandidates`
+   * (retrieval prompts have their own endpoint). At least one field must be set.
+   */
+  async editLearningItem(
+    userId: string,
+    articleId: string,
+    itemId: string,
+    edit: {
+      label?: string
+      definition?: string
+      importance?: 'high' | 'medium' | 'low'
+    },
+  ): Promise<LearningLayer> {
+    if (
+      edit.label === undefined &&
+      edit.definition === undefined &&
+      edit.importance === undefined
+    ) {
+      throw new BadRequestException('Nothing to edit')
+    }
+    const article = await this.findOwnedArticle(userId, articleId)
+    const current = article.learningLayer as LearningLayer | null
+    if (!current) throw new NotFoundException('No learning layer')
+    const inConcepts = current.concepts.some((c) => c.id === itemId)
+    const inCandidates = (current.conceptCandidates ?? []).some(
+      (c) => c.id === itemId,
+    )
+    if (!inConcepts && !inCandidates) {
+      throw new NotFoundException('Learning item not found')
+    }
+    // Only the fields actually provided are overwritten; `importance` applies to
+    // candidates only (concepts have no importance field in the schema).
+    const applyConcept = (c: LearningConcept): LearningConcept => ({
+      ...c,
+      ...(edit.label !== undefined ? { label: edit.label } : {}),
+      ...(edit.definition !== undefined ? { definition: edit.definition } : {}),
+    })
+    const applyCandidate = (
+      c: LearningConceptCandidate,
+    ): LearningConceptCandidate => ({
+      ...c,
+      ...(edit.label !== undefined ? { label: edit.label } : {}),
+      ...(edit.definition !== undefined ? { definition: edit.definition } : {}),
+      ...(edit.importance !== undefined ? { importance: edit.importance } : {}),
+    })
+    return this.withLockedLearningLayer(article.id, (layer) => ({
+      ...layer,
+      concepts: layer.concepts.map((c) =>
+        c.id === itemId ? applyConcept(c) : c,
+      ),
+      conceptCandidates: layer.conceptCandidates?.map((c) =>
+        c.id === itemId ? applyCandidate(c) : c,
+      ),
+    }))
+  }
+
+  /**
+   * Update a retrieval prompt's review state (DET-359). Persists the
+   * suggested/saved/answered/rejected status, the reader's own-words answer, and
+   * in-place prompt edits. It deliberately CANNOT schedule a permanent review
+   * card — there is no "scheduled" status here — so a prompt never becomes a
+   * review card without the explicit, separately-gated downstream action. An
+   * `answered` status requires a non-empty `userAnswer` (the scheduling gate is
+   * a user-authored answer, not a bare status flip). Runs under the per-article
+   * row lock like the other learning-layer mutations.
+   */
+  async updateRetrievalPromptReview(
+    userId: string,
+    articleId: string,
+    promptId: string,
+    patch: {
+      reviewStatus?: 'suggested' | 'saved' | 'answered' | 'rejected'
+      userAnswer?: string
+      prompt?: string
+    },
+  ): Promise<LearningLayer> {
+    if (
+      patch.reviewStatus === undefined &&
+      patch.userAnswer === undefined &&
+      patch.prompt === undefined
+    ) {
+      throw new BadRequestException('Nothing to update')
+    }
+    if (patch.prompt !== undefined && patch.prompt.trim().length === 0) {
+      throw new BadRequestException('Prompt text cannot be empty')
+    }
+    const article = await this.findOwnedArticle(userId, articleId)
+    const current = article.learningLayer as LearningLayer | null
+    if (!current) throw new NotFoundException('No learning layer')
+    const target = current.retrievalPrompts.find((p) => p.id === promptId)
+    if (!target) throw new NotFoundException('Retrieval prompt not found')
+    // The answer is the scheduling gate: marking a prompt 'answered' is only
+    // meaningful with a non-empty answer (either supplied now or already stored).
+    const nextAnswer = patch.userAnswer ?? target.userAnswer
+    if (
+      patch.reviewStatus === 'answered' &&
+      (nextAnswer === undefined || nextAnswer.trim().length === 0)
+    ) {
+      throw new BadRequestException('An answer is required to mark answered')
+    }
+    return this.withLockedLearningLayer(article.id, (layer) => ({
+      ...layer,
+      retrievalPrompts: layer.retrievalPrompts.map(
+        (p): RetrievalPrompt =>
+          p.id === promptId
+            ? {
+                ...p,
+                ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
+                ...(patch.reviewStatus !== undefined
+                  ? { reviewStatus: patch.reviewStatus }
+                  : {}),
+                ...(patch.userAnswer !== undefined
+                  ? { userAnswer: patch.userAnswer }
+                  : {}),
+              }
+            : p,
+      ),
+    }))
   }
 
   /**

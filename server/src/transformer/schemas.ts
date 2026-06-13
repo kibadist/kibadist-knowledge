@@ -801,6 +801,17 @@ const retrievalPrompt = z.object({
   id: z.string().min(1),
   prompt: z.string().min(1),
   sourceBlockIds,
+  // Additive v3 review fields (DET-359). All optional so learning-layer rows
+  // stored before this lane still parse. `reviewStatus` is the lifecycle the v3
+  // panel persists; it never includes a "scheduled" state — permanent review
+  // scheduling stays a downstream, explicitly-gated step.
+  promptType: z.string().min(1).optional(),
+  linkedConceptIds: z.array(z.string()).optional(),
+  expectedAnswerBlockIds: z.array(z.string()).optional(),
+  reviewStatus: z
+    .enum(['suggested', 'saved', 'answered', 'rejected'])
+    .optional(),
+  userAnswer: z.string().optional(),
 })
 
 export type RetrievalPrompt = z.infer<typeof retrievalPrompt>
@@ -830,6 +841,10 @@ const learningConceptCandidate = z.object({
   // Concept that validation created (DET-283). Its presence makes promotion
   // idempotent — re-validating never creates a second Concept row.
   conceptId: z.string().min(1).optional(),
+  // Additive v3 review fields (DET-359). Optional so old rows still parse; the
+  // v3 adapter defaults importance to 'medium' when absent.
+  importance: z.enum(['high', 'medium', 'low']).optional(),
+  sourceSpanPreview: z.string().min(1).optional(),
 })
 
 export type LearningConceptCandidate = z.infer<typeof learningConceptCandidate>
