@@ -7,6 +7,7 @@ import type {
   ArticleSectionV2,
   FidelityFinding,
   FidelityReport,
+  KeyClaim,
   SourcePreservingArticle,
 } from './transformer.types'
 
@@ -545,6 +546,57 @@ export const ArticleLlmV2Schema = z.object({
 
 export type ArticleLlmV2 = z.infer<typeof ArticleLlmV2Schema>
 
+// --- Key claims — the v3 claims layer (DET-352) ----------------------------
+
+/** The claim taxonomy (mirrors `ClaimType` in transformer.types.ts). */
+const claimType = z.enum([
+  'definition',
+  'mechanism',
+  'distinction',
+  'historical_claim',
+  'causal_claim',
+  'classification',
+  'example',
+  'caveat',
+])
+
+/**
+ * A stored key claim (`KeyClaim`). Annotated `z.ZodType<KeyClaim>` so it can never
+ * drift from the frozen contract. Both `sourceBlockIds` and `articleSectionIds`
+ * are non-empty — a claim with no provenance or no home section is never stored
+ * (the service drops it in code). `confidence` is clamped to 0–1 in code.
+ */
+const keyClaim: z.ZodType<KeyClaim> = z.object({
+  id: z.string().min(1),
+  text: z.string().min(1),
+  sourceBlockIds,
+  articleSectionIds: z.array(z.string().min(1)).min(1),
+  claimType,
+  confidence: z.number().min(0).max(1),
+})
+
+/**
+ * What the CLAIM-EXTRACTOR LLM returns (DET-352) — no `id` (code mints it) and no
+ * `articleSectionIds` (code DERIVES them from the article's section→block map, so
+ * the model is never trusted for structural mapping; it only reports the claim,
+ * its grounding blocks, its type and a confidence). `sourceBlockIds` is loosened
+ * to allow empties so the service can DROP ungrounded claims in code rather than
+ * the model omitting them to satisfy the schema (mirrors the learning-layer lane).
+ * `confidence` defaults to 0.5 and is clamped in code.
+ */
+export const ClaimExtractionLlmSchema = z.object({
+  claims: z.array(
+    z.object({
+      text: z.string().min(1),
+      sourceBlockIds: z.array(z.string()).default([]),
+      claimType,
+      confidence: z.number().catch(0.5).default(0.5),
+    }),
+  ),
+})
+
+export type ClaimExtractionLlm = z.infer<typeof ClaimExtractionLlmSchema>
+
 export const ArticleJsonV2Schema: z.ZodType<ArticleJsonV2> = z.object({
   schemaVersion: z.literal('v2'),
   mode: z.literal('source_preserving_article'),
@@ -574,6 +626,7 @@ export const ArticleJsonV2Schema: z.ZodType<ArticleJsonV2> = z.object({
   calloutPlacements: calloutPlacements.optional(),
   shape: articleShape.optional(),
   reorderings: z.array(reorderingAudit).optional(),
+  keyClaims: z.array(keyClaim).optional(),
 })
 
 // --- Fidelity report (step 9) ----------------------------------------------

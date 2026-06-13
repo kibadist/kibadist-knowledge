@@ -16,7 +16,7 @@ import { AiService } from '../ai/ai.service'
 import { ConceptStateService } from '../concept-state/concept-state.service'
 import { fetchReadable } from '../inbox/url-fetch.util'
 import { PrismaService } from '../prisma/prisma.service'
-import { toArticleV2 } from './article-compat.util'
+import { isArticleV2, toArticleV2 } from './article-compat.util'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { placeCallouts } from './callout-placement.util'
 import type { CreateTextSourceDto } from './dto/create-text-source.dto'
@@ -666,10 +666,18 @@ export class TransformerService {
     articleId: string,
   ): Promise<LearningLayer> {
     const article = await this.findOwnedArticle(userId, articleId)
+    // Pass the article's extracted key claims (DET-352) as retrieval-prompt seeds.
+    const stored = article.articleJson as
+      | SourcePreservingArticle
+      | ArticleJsonV2
+      | null
+    const keyClaims =
+      stored && isArticleV2(stored) ? (stored.keyClaims ?? []) : []
     return this.articlePipeline.generateLearningLayer(
       article.id,
       article.sourceId,
       article.blocksVersion,
+      keyClaims,
     )
   }
 
