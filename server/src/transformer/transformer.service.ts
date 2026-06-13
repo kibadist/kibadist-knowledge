@@ -674,6 +674,47 @@ export class TransformerService {
   }
 
   /**
+   * Generate AI-suggested retrieval prompts + misconception candidates for an
+   * article (DET-353, on demand) and merge them into its learningLayer JSON.
+   *
+   * The stage grounds every prompt in the article's pinned source blocks; concept
+   * candidates already extracted onto the learning layer (DET-283) are passed
+   * through as linking targets, and the stored structure model supplies the key
+   * claims. The result is additive — `retrievalPromptCandidates` / `misconceptions`
+   * sit beside the existing `concepts` / `retrievalPrompts` / `conceptCandidates`,
+   * written under the per-article row lock. Nothing here creates a permanent review
+   * card: every item is `ai_suggested` until the learner validates or answers it.
+   */
+  async generateLearningPrompts(
+    userId: string,
+    articleId: string,
+  ): Promise<LearningLayer> {
+    const article = await this.findOwnedArticle(userId, articleId)
+    if (!article.articleJson) {
+      throw new ConflictException('Article has not been generated yet')
+    }
+    const v2 = toArticleV2(
+      article.articleJson as unknown as SourcePreservingArticle | ArticleJsonV2,
+    )
+    const structureModel =
+      (article.structureModel as SourceStructureModel | null) ?? null
+    const existing = article.learningLayer as LearningLayer | null
+    const conceptCandidates = existing?.conceptCandidates ?? []
+    const set = await this.articlePipeline.generateLearningPrompts(
+      v2,
+      structureModel,
+      conceptCandidates,
+      article.sourceId,
+      article.blocksVersion,
+    )
+    return this.withLockedLearningLayer(article.id, (layer) => ({
+      ...layer,
+      retrievalPromptCandidates: set.retrievalPrompts,
+      misconceptions: set.misconceptions,
+    }))
+  }
+
+  /**
    * Mutate an article's learningLayer JSON atomically (DET-283). The learning
    * layer is a single JSON blob, so concurrent mutations (re-extracting a
    * section's candidates while validating another, say) would each write back

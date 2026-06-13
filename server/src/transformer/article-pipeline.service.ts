@@ -14,6 +14,7 @@ import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningPromptsService } from './learning-prompts.service'
 import { buildReadingAids } from './reading-aids.util'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import type {
@@ -22,6 +23,7 @@ import type {
   IllustrationSuggestion,
   LearningConceptCandidate,
   LearningLayer,
+  LearningPromptSet,
   ReshapingPlan,
   SourceStructureModel,
 } from './schemas'
@@ -73,6 +75,7 @@ export class ArticlePipelineService {
     private readonly enrichment: ArticleEnrichmentService,
     private readonly editorialLayout: EditorialLayoutService,
     private readonly learning: LearningLayerService,
+    private readonly learningPrompts: LearningPromptsService,
     private readonly ai: AiService,
   ) {}
 
@@ -396,6 +399,31 @@ export class ArticlePipelineService {
       learningLayer: layer as unknown as Prisma.InputJsonValue,
     })
     return layer
+  }
+
+  /**
+   * Generate the learning-prompt set for an article (DET-353, on demand). Loads
+   * the article's PINNED blocks and delegates grounding + code guards to the
+   * learning-prompt service; persistence (into the learningLayer JSON, under the
+   * per-article row lock) is the caller's job — this never touches articleJson.
+   * Concept candidates are passed through as linking targets (the caller reads the
+   * article's already-extracted candidates); key claims come from the structure
+   * model when available.
+   */
+  async generateLearningPrompts(
+    article: ArticleJsonV2,
+    structureModel: SourceStructureModel | null,
+    conceptCandidates: LearningConceptCandidate[],
+    sourceId: string,
+    blocksVersion: number,
+  ): Promise<LearningPromptSet> {
+    const blocks = await this.loadBlocks(sourceId, blocksVersion)
+    return this.learningPrompts.build({
+      article,
+      blocks,
+      conceptCandidates,
+      keyClaims: structureModel?.claims ?? [],
+    })
   }
 
   /**
