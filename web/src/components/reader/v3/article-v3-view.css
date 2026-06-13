@@ -1,0 +1,565 @@
+/**
+ * Article JSON v3 reader styles (DET-357). Light-only editorial-manuscript
+ * theme — all scoped under `.kbapp` and built on the shared paper/ink tokens
+ * (no dark mode, per the project's design invariant). The visual language
+ * mirrors the existing Compendium/transformer surfaces: serif body, mono
+ * small-caps labels, hairline rules, indigo for AI-assisted provenance, brick
+ * accent for held-back/blocked states.
+ */
+
+.kbapp .av3 {
+  max-width: 44rem;
+  margin: 0 auto;
+  color: var(--ink);
+  font-family: var(--font-body), Georgia, serif;
+}
+
+/* ---------------- status banner ---------------- */
+.kbapp .av3-status {
+  margin: 0 0 2rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--rule-soft);
+}
+.kbapp .av3-status--blocked {
+  border-color: rgba(138, 42, 31, 0.45);
+  background: rgba(138, 42, 31, 0.05);
+}
+.kbapp .av3-status--ready {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.kbapp .av3-status-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.kbapp .av3-status-title {
+  margin: 0;
+  font-weight: 600;
+}
+.kbapp .av3-status-note {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+.kbapp .av3-status-sub {
+  margin: 1rem 0 0.4rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-muted);
+}
+.kbapp .av3-blocker-list,
+.kbapp .av3-hint-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.kbapp .av3-blocker-list {
+  list-style: none;
+  padding-left: 0;
+}
+.kbapp .av3-blocker {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  margin: 0.4rem 0;
+}
+.kbapp .av3-blocker-msg {
+  flex: 1;
+}
+
+/* ---------------- hero ---------------- */
+.kbapp .av3-hero {
+  margin-bottom: 2rem;
+}
+.kbapp .av3-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.kbapp .av3-shape {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-muted);
+}
+.kbapp .av3-title {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.08;
+  margin: 0 0 0.6rem;
+}
+.kbapp .av3-dek {
+  font-size: 1.15rem;
+  font-style: italic;
+  color: var(--ink-muted);
+  margin: 0 0 1rem;
+}
+.kbapp .av3-byline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+  border-top: 1px solid var(--rule-soft);
+  padding-top: 0.75rem;
+}
+.kbapp .av3-byline-dot {
+  margin-right: 0.4rem;
+}
+
+/* ---------------- abstract + learning path ---------------- */
+.kbapp .av3-abstract {
+  margin-bottom: 2rem;
+}
+.kbapp .av3-path {
+  margin: 0 0 2.5rem;
+  padding: 1rem 1.25rem;
+  border-left: 3px solid var(--rule);
+  background: rgba(0, 0, 0, 0.015);
+}
+.kbapp .av3-path-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+.kbapp .av3-path-item {
+  margin: 0.35rem 0;
+}
+.kbapp .av3-path-outcome {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+/* ---------------- sections ---------------- */
+.kbapp .av3-section {
+  margin-bottom: 2.5rem;
+}
+.kbapp .av3-heading-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 1.5rem 0 0.5rem;
+}
+.kbapp .av3-h2 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.6rem;
+  margin: 0;
+}
+.kbapp .av3-h3 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.25rem;
+  margin: 0;
+}
+.kbapp .av3-heading-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.kbapp .av3-heading-btn:hover {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+.kbapp .av3-section-role {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-muted);
+}
+.kbapp .av3-section-outcome {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--ink-muted);
+  margin: 0 0 0.75rem;
+}
+.kbapp .av3-subsection {
+  margin-top: 1.5rem;
+  padding-left: 1rem;
+  border-left: 1px solid var(--rule-soft);
+}
+
+/* ---------------- paragraphs ---------------- */
+.kbapp .av3-paragraph {
+  display: block;
+  width: 100%;
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+.kbapp .av3-paragraph--grounded {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+}
+.kbapp .av3-paragraph--grounded:hover {
+  background: rgba(0, 0, 0, 0.025);
+}
+.kbapp .av3-paragraph--lede {
+  font-size: 1.18rem;
+}
+.kbapp .av3-source-ref {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-muted);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.kbapp .av3-paragraph--grounded:hover .av3-source-ref {
+  opacity: 1;
+}
+/* AI scaffolding — unmistakably distinct from source-grounded prose (indigo). */
+.kbapp .av3-paragraph--ai {
+  border-left: 2px solid var(--indigo);
+  padding-left: 0.85rem;
+  color: var(--ink);
+}
+.kbapp .av3-ai-chip {
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+/* ---------------- callouts ---------------- */
+.kbapp .av3-callout-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+.kbapp .av3-callout-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.kbapp .av3-callout {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--rule-soft);
+  border-left: 3px solid var(--rule);
+  background: rgba(0, 0, 0, 0.015);
+}
+.kbapp .av3-callout--clickable {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.kbapp .av3-callout--clickable:hover {
+  border-left-color: var(--accent);
+}
+.kbapp .av3-callout--ai {
+  border-left-color: var(--indigo);
+}
+.kbapp .av3-callout-kind {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-muted);
+  margin: 0 0 0.35rem;
+}
+.kbapp .av3-callout-title {
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+.kbapp .av3-callout-body {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* ---------------- tables ---------------- */
+.kbapp .av3-table-block {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 1.25rem 0;
+}
+.kbapp .av3-table-block--clickable {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.kbapp .av3-table-wrap {
+  margin: 0;
+}
+.kbapp .av3-table-title {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-muted);
+  margin-bottom: 0.4rem;
+}
+.kbapp .av3-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+.kbapp .av3-table th,
+.kbapp .av3-table td {
+  border: 1px solid var(--rule-soft);
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+}
+.kbapp .av3-table th {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background: rgba(0, 0, 0, 0.025);
+}
+
+/* ---------------- learning panels ---------------- */
+.kbapp .av3-panels {
+  margin-top: 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+.kbapp .av3-panel {
+  border-top: 2px solid var(--ink);
+  padding-top: 1rem;
+}
+.kbapp .av3-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.kbapp .av3-panel-h {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.35rem;
+  margin: 0 0 0.5rem;
+}
+.kbapp .av3-unplaced {
+  margin-top: 2.5rem;
+}
+
+.kbapp .av3-concept-list,
+.kbapp .av3-prompt-list,
+.kbapp .av3-misc-list,
+.kbapp .av3-claim-list,
+.kbapp .av3-notes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.kbapp .av3-concept,
+.kbapp .av3-prompt,
+.kbapp .av3-misc {
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.kbapp .av3-concept-top {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.kbapp .av3-concept-name {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+.kbapp .av3-concept-def {
+  margin: 0.35rem 0;
+  color: var(--ink-muted);
+  font-size: 0.95rem;
+}
+.kbapp .av3-concept-foot,
+.kbapp .av3-prompt-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+}
+.kbapp .av3-imp--high {
+  color: var(--accent);
+  border-color: rgba(138, 42, 31, 0.45);
+  background: rgba(138, 42, 31, 0.08);
+}
+.kbapp .av3-imp--medium {
+  color: var(--ochre);
+  border-color: rgba(138, 90, 31, 0.45);
+  background: rgba(138, 90, 31, 0.08);
+}
+.kbapp .av3-imp--low {
+  color: var(--ink-muted);
+  border-color: var(--rule-soft);
+}
+.kbapp .av3-diff--easy {
+  color: var(--olive);
+  border-color: rgba(91, 102, 56, 0.45);
+}
+.kbapp .av3-diff--medium {
+  color: var(--ochre);
+  border-color: rgba(138, 90, 31, 0.45);
+}
+.kbapp .av3-diff--hard {
+  color: var(--accent);
+  border-color: rgba(138, 42, 31, 0.45);
+}
+.kbapp .av3-prompt-q {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+.kbapp .av3-misc-wrong {
+  margin: 0;
+  color: var(--accent);
+}
+.kbapp .av3-misc-right {
+  margin: 0.25rem 0;
+  color: var(--olive);
+}
+.kbapp .av3-claim {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.kbapp .av3-claim-text {
+  flex: 1;
+}
+.kbapp .av3-term-list {
+  margin: 0;
+}
+.kbapp .av3-term {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.kbapp .av3-term-name {
+  font-weight: 600;
+}
+.kbapp .av3-term-def {
+  margin: 0.2rem 0 0;
+  color: var(--ink-muted);
+}
+.kbapp .av3-source-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--indigo);
+  cursor: pointer;
+}
+.kbapp .av3-source-btn:hover {
+  text-decoration: underline;
+}
+
+/* ---------------- drawers ---------------- */
+.kbapp .av3-drawer {
+  margin-top: 2rem;
+  border-top: 1px solid var(--rule-soft);
+}
+.kbapp .av3-drawer-summary {
+  cursor: pointer;
+  padding: 0.85rem 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.kbapp .av3-drawer-count {
+  font-size: 0.65rem;
+  border: 1px solid var(--rule-soft);
+  padding: 0 0.35rem;
+}
+.kbapp .av3-drawer-body {
+  padding-bottom: 1rem;
+}
+.kbapp .av3-notes-group {
+  margin-bottom: 1rem;
+}
+.kbapp .av3-notes-h {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-muted);
+  margin: 0 0 0.4rem;
+}
+.kbapp .av3-note {
+  margin: 0.3rem 0;
+  font-size: 0.9rem;
+}
+
+/* ---------------- quality report ---------------- */
+.kbapp .av3-quality-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.kbapp .av3-quality-cell {
+  border: 1px solid var(--rule-soft);
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.kbapp .av3-quality-val {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.4rem;
+}
+.kbapp .av3-quality-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+}
+.kbapp .av3-quality-counts {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+.kbapp .av3-quality-count {
+  font-weight: 700;
+  color: var(--ink);
+}

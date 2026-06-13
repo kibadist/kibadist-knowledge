@@ -1,0 +1,1433 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ArticleV3View — snapshots > renders the v3 concept explainer 1`] = `
+<div>
+  <article
+    aria-label="Generated learning article"
+    class="av3"
+  >
+    <header
+      class="av3-hero"
+    >
+      <div
+        class="av3-eyebrow"
+      >
+        <span
+          class="chip av3-kind chip-info"
+        >
+          Web article
+        </span>
+        <span
+          class="av3-shape"
+        >
+          Concept explainer
+        </span>
+      </div>
+      <h1
+        class="av3-title"
+      >
+        Systems, Boundaries, and the Environment
+      </h1>
+      <p
+        class="av3-dek"
+      >
+        What a system is, where its boundary lies, and how open and closed systems differ.
+      </p>
+      <p
+        class="av3-byline"
+      >
+        <span
+          class="av3-byline-part"
+        >
+          <span>
+            6
+             min read
+          </span>
+        </span>
+        <span
+          class="av3-byline-part"
+        >
+          <span
+            aria-hidden="true"
+            class="av3-byline-dot"
+          >
+            ·
+          </span>
+          <span>
+            15
+            /
+            20
+             
+            source blocks
+          </span>
+        </span>
+        <span
+          class="av3-byline-part"
+        >
+          <span
+            aria-hidden="true"
+            class="av3-byline-dot"
+          >
+            ·
+          </span>
+          <a
+            href="https://en.wikipedia.org/wiki/System"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            en.wikipedia.org
+          </a>
+        </span>
+      </p>
+    </header>
+    <section
+      class="av3-abstract"
+    >
+      <button
+        class="av3-paragraph av3-paragraph--grounded av3-paragraph--lede"
+        type="button"
+      >
+        A system is a set of interacting parts considered as a whole, separated from its environment by a boundary.
+        <span
+          aria-hidden="true"
+          class="av3-source-ref"
+        >
+          source ¶ (
+          1
+          )
+        </span>
+      </button>
+    </section>
+    <section
+      aria-label="What you will learn"
+      class="av3-path"
+    >
+      <h2
+        class="av3-panel-h"
+      >
+        What you'll learn
+      </h2>
+      <ol
+        class="av3-path-list"
+      >
+        <li
+          class="av3-path-item"
+        >
+          <span
+            class="av3-path-label"
+          >
+            <a
+              href="#av3-sec-def"
+            >
+              What a system is
+            </a>
+          </span>
+        </li>
+        <li
+          class="av3-path-item"
+        >
+          <span
+            class="av3-path-label"
+          >
+            <a
+              href="#av3-sec-types"
+            >
+              Open, closed, and isolated systems
+            </a>
+          </span>
+        </li>
+      </ol>
+    </section>
+    <div
+      class="av3-body"
+    >
+      <section
+        class="av3-section"
+        id="av3-sec-def"
+      >
+        <div
+          class="av3-heading-row"
+        >
+          <h2
+            class="av3-h2"
+          >
+            <button
+              class="av3-heading-btn"
+              type="button"
+            >
+              What is a system?
+            </button>
+          </h2>
+          <span
+            class="av3-section-role"
+          >
+            Definition
+          </span>
+        </div>
+        <button
+          class="av3-paragraph av3-paragraph--grounded"
+          type="button"
+        >
+          A system is a group of interacting or interdependent elements forming a unified whole.
+          <span
+            aria-hidden="true"
+            class="av3-source-ref"
+          >
+            source ¶ (
+            1
+            )
+          </span>
+        </button>
+        <aside
+          aria-label="Section notes"
+          class="av3-callout-rail"
+        >
+          <button
+            class="av3-callout av3-callout--clickable"
+            type="button"
+          >
+            <p
+              class="av3-callout-kind av3-callout-kind--definition"
+            >
+              Definition
+            </p>
+            <p
+              class="av3-callout-title"
+            >
+              System
+            </p>
+            <p
+              class="av3-callout-body"
+            >
+              A set of interacting parts considered as a whole.
+            </p>
+          </button>
+        </aside>
+      </section>
+      <section
+        class="av3-section"
+        id="av3-sec-types"
+      >
+        <div
+          class="av3-heading-row"
+        >
+          <h2
+            class="av3-h2"
+          >
+            <button
+              class="av3-heading-btn"
+              type="button"
+            >
+              Open, closed, and isolated systems
+            </button>
+          </h2>
+          <span
+            class="av3-section-role"
+          >
+            Types
+          </span>
+        </div>
+        <button
+          class="av3-paragraph av3-paragraph--grounded"
+          type="button"
+        >
+          Systems are classified by what crosses their boundary: matter, energy, both, or neither.
+          <span
+            aria-hidden="true"
+            class="av3-source-ref"
+          >
+            source ¶ (
+            1
+            )
+          </span>
+        </button>
+        <button
+          class="av3-table-block av3-table-block--clickable"
+          type="button"
+        >
+          <figure
+            class="av3-table-wrap"
+          >
+            <figcaption
+              class="av3-table-title"
+            >
+              Open vs closed vs isolated
+            </figcaption>
+            <table
+              class="av3-table"
+            >
+              <thead>
+                <tr>
+                  <th>
+                    Type
+                  </th>
+                  <th>
+                    Matter
+                  </th>
+                  <th>
+                    Energy
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    Open
+                  </td>
+                  <td>
+                    Crosses
+                  </td>
+                  <td>
+                    Crosses
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Closed
+                  </td>
+                  <td>
+                    Does not cross
+                  </td>
+                  <td>
+                    Crosses
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Isolated
+                  </td>
+                  <td>
+                    Does not cross
+                  </td>
+                  <td>
+                    Does not cross
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </figure>
+        </button>
+      </section>
+    </div>
+    <section
+      aria-label="Additional notes"
+      class="av3-unplaced"
+    >
+      <h2
+        class="av3-panel-h"
+      >
+        Notes
+      </h2>
+      <div
+        class="av3-callout-stack"
+      >
+        <button
+          class="av3-callout av3-callout--clickable"
+          type="button"
+        >
+          <p
+            class="av3-callout-kind av3-callout-kind--remember"
+          >
+            Remember
+          </p>
+          <p
+            class="av3-callout-body"
+          >
+            The boundary is a modelling choice, not always a physical wall.
+          </p>
+        </button>
+      </div>
+    </section>
+    <div
+      class="av3-panels"
+    >
+      <section
+        aria-label="Key concepts"
+        class="av3-panel"
+      >
+        <div
+          class="av3-panel-head"
+        >
+          <h2
+            class="av3-panel-h"
+          >
+            Key concepts
+          </h2>
+          <span
+            class="chip chip-ai"
+          >
+            ✦ AI-suggested · not yet accepted
+          </span>
+        </div>
+        <ul
+          class="av3-concept-list"
+        >
+          <li
+            class="av3-concept"
+          >
+            <div
+              class="av3-concept-top"
+            >
+              <span
+                class="av3-concept-name"
+              >
+                System
+              </span>
+              <span
+                class="chip av3-imp av3-imp--high"
+              >
+                high
+              </span>
+              <span
+                class="chip chip-quiet"
+              >
+                Core concept
+              </span>
+            </div>
+            <p
+              class="av3-concept-def"
+            >
+              A set of interacting parts considered as a whole.
+            </p>
+            <div
+              class="av3-concept-foot"
+            >
+              <span
+                class="av3-concept-state"
+              >
+                suggested state: 
+                Parsed
+              </span>
+              <button
+                class="av3-source-btn"
+                type="button"
+              >
+                source ¶ (
+                1
+                )
+              </button>
+            </div>
+          </li>
+          <li
+            class="av3-concept"
+          >
+            <div
+              class="av3-concept-top"
+            >
+              <span
+                class="av3-concept-name"
+              >
+                Boundary
+              </span>
+              <span
+                class="chip av3-imp av3-imp--medium"
+              >
+                medium
+              </span>
+              <span
+                class="chip chip-quiet"
+              >
+                Supporting
+              </span>
+            </div>
+            <p
+              class="av3-concept-def"
+            >
+              The interface separating a system from its environment.
+            </p>
+            <div
+              class="av3-concept-foot"
+            >
+              <span
+                class="av3-concept-state"
+              >
+                suggested state: 
+                Seen
+              </span>
+              <button
+                class="av3-source-btn"
+                type="button"
+              >
+                source ¶ (
+                1
+                )
+              </button>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <section
+        aria-label="Retrieval prompts"
+        class="av3-panel"
+      >
+        <div
+          class="av3-panel-head"
+        >
+          <h2
+            class="av3-panel-h"
+          >
+            Retrieval prompts
+          </h2>
+          <span
+            class="chip chip-ai"
+          >
+            ✦ AI-suggested · not yet scheduled
+          </span>
+        </div>
+        <ul
+          class="av3-prompt-list"
+        >
+          <li
+            class="av3-prompt"
+          >
+            <p
+              class="av3-prompt-q"
+            >
+              What distinguishes an open system from a closed system?
+            </p>
+            <div
+              class="av3-prompt-foot"
+            >
+              <span
+                class="chip chip-quiet"
+              >
+                Distinction
+              </span>
+              <span
+                class="chip av3-diff av3-diff--medium"
+              >
+                medium
+              </span>
+              <button
+                class="av3-source-btn"
+                type="button"
+              >
+                answer source (
+                1
+                )
+              </button>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <section
+        aria-label="Key claims"
+        class="av3-panel"
+      >
+        <h2
+          class="av3-panel-h"
+        >
+          Key claims
+        </h2>
+        <ul
+          class="av3-claim-list"
+        >
+          <li
+            class="av3-claim"
+          >
+            <span
+              class="chip chip-quiet av3-claim-type"
+            >
+              Definition
+            </span>
+            <span
+              class="av3-claim-text"
+            >
+              A system is separated from its environment by a boundary.
+            </span>
+            <button
+              class="av3-source-btn"
+              type="button"
+            >
+              source ¶ (
+              1
+              )
+            </button>
+          </li>
+        </ul>
+      </section>
+      <section
+        aria-label="Terminology"
+        class="av3-panel"
+      >
+        <h2
+          class="av3-panel-h"
+        >
+          Terminology
+        </h2>
+        <dl
+          class="av3-term-list"
+        >
+          <div
+            class="av3-term"
+          >
+            <dt
+              class="av3-term-name"
+            >
+              Environment
+            </dt>
+            <dd
+              class="av3-term-def"
+            >
+              Everything outside the system boundary that can affect it.
+              <button
+                class="av3-source-btn"
+                type="button"
+              >
+                source ¶ (
+                1
+                )
+              </button>
+            </dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+    <details
+      class="av3-drawer"
+    >
+      <summary
+        class="av3-drawer-summary"
+      >
+        Source notes & references
+        <span
+          class="av3-drawer-count"
+        >
+          3
+        </span>
+      </summary>
+      <div
+        class="av3-drawer-body"
+      >
+        <div
+          class="av3-notes-group"
+        >
+          <h3
+            class="av3-notes-h"
+          >
+            References
+          </h3>
+          <ul
+            class="av3-notes-list"
+          >
+            <li>
+              <a
+                href="https://en.wikipedia.org/wiki/Systems_theory"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Systems theory — Wikipedia
+              </a>
+            </li>
+            <li>
+              von Bertalanffy, General System Theory (1968)
+            </li>
+          </ul>
+        </div>
+        <div
+          class="av3-notes-group"
+        >
+          <h3
+            class="av3-notes-h"
+          >
+            Notes
+          </h3>
+          <ul
+            class="av3-notes-list"
+          >
+            <li
+              class="av3-note"
+            >
+              <span
+                class="chip chip-quiet av3-note-kind"
+              >
+                Removed nav
+              </span>
+               
+              Wikipedia sidebar and category navigation were removed.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </details>
+    <details
+      class="av3-drawer av3-drawer--quality"
+    >
+      <summary
+        class="av3-drawer-summary"
+      >
+        Quality report
+      </summary>
+    </details>
+  </article>
+</div>
+`;
+
+exports[`ArticleV3View — snapshots > renders the v3 lesson article 1`] = `
+<div>
+  <article
+    aria-label="Generated learning article"
+    class="av3"
+  >
+    <section
+      class="av3-status av3-status--ready"
+    >
+      <span
+        class="chip chip-cleared"
+      >
+        Ready for review
+      </span>
+      <span
+        class="av3-status-note"
+      >
+        Passed every quality gate — review the concepts and prompts below.
+      </span>
+    </section>
+    <header
+      class="av3-hero"
+    >
+      <div
+        class="av3-eyebrow"
+      >
+        <span
+          class="chip av3-kind chip-info"
+        >
+          Lesson transcript
+        </span>
+        <span
+          class="av3-shape"
+        >
+          Lesson
+        </span>
+      </div>
+      <h1
+        class="av3-title"
+      >
+        How a Transformer Block Works
+      </h1>
+      <p
+        class="av3-dek"
+      >
+        The instructor walks through attention, the MLP, and why non-linearity matters.
+      </p>
+      <p
+        class="av3-byline"
+      >
+        <span
+          class="av3-byline-part"
+        >
+          <span>
+            7
+             min read
+          </span>
+        </span>
+        <span
+          class="av3-byline-part"
+        >
+          <span
+            aria-hidden="true"
+            class="av3-byline-dot"
+          >
+            ·
+          </span>
+          <span>
+            11
+            /
+            12
+             
+            source blocks
+          </span>
+        </span>
+        <span
+          class="av3-byline-part"
+        >
+          <span
+            aria-hidden="true"
+            class="av3-byline-dot"
+          >
+            ·
+          </span>
+          <a
+            href="https://www.youtube.com/watch?v=example"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            youtube.com
+          </a>
+        </span>
+      </p>
+    </header>
+    <section
+      class="av3-abstract"
+    >
+      <button
+        class="av3-paragraph av3-paragraph--grounded av3-paragraph--lede"
+        type="button"
+      >
+        A transformer block routes information with attention, then transforms it with a small feed-forward network.
+        <span
+          aria-hidden="true"
+          class="av3-source-ref"
+        >
+          source ¶ (
+          1
+          )
+        </span>
+      </button>
+    </section>
+    <section
+      aria-label="What you will learn"
+      class="av3-path"
+    >
+      <h2
+        class="av3-panel-h"
+      >
+        What you'll learn
+      </h2>
+      <ol
+        class="av3-path-list"
+      >
+        <li
+          class="av3-path-item"
+        >
+          <span
+            class="av3-path-label"
+          >
+            <a
+              href="#av3-s-attention"
+            >
+              How attention routes information
+            </a>
+          </span>
+          <span
+            class="av3-path-outcome"
+          >
+            Explain query, key, and value in your own words.
+          </span>
+        </li>
+        <li
+          class="av3-path-item"
+        >
+          <span
+            class="av3-path-label"
+          >
+            <a
+              href="#av3-s-mlp"
+            >
+              Why the MLP needs a non-linearity
+            </a>
+          </span>
+        </li>
+      </ol>
+    </section>
+    <div
+      class="av3-body"
+    >
+      <section
+        class="av3-section"
+        id="av3-s-attention"
+      >
+        <div
+          class="av3-heading-row"
+        >
+          <h2
+            class="av3-h2"
+          >
+            <button
+              class="av3-heading-btn"
+              type="button"
+            >
+              Attention routes information
+            </button>
+          </h2>
+          <span
+            class="av3-section-role"
+          >
+            Mechanism
+          </span>
+        </div>
+        <p
+          class="av3-section-outcome"
+        >
+          You can describe what Q, K, and V each do.
+        </p>
+        <button
+          class="av3-paragraph av3-paragraph--grounded"
+          type="button"
+        >
+          Each token emits a query, a key, and a value; attention compares queries to keys to decide how much of each value to mix in.
+          <span
+            aria-hidden="true"
+            class="av3-source-ref"
+          >
+            source ¶ (
+            1
+            )
+          </span>
+        </button>
+        <p
+          class="av3-paragraph av3-paragraph--ai"
+        >
+          Think of it as a soft lookup table the model learns end to end.
+          <span
+            class="chip chip-ai av3-ai-chip"
+          >
+            ✦ AI-assisted
+          </span>
+        </p>
+        <aside
+          aria-label="Section notes"
+          class="av3-callout-rail"
+        >
+          <button
+            class="av3-callout av3-callout--clickable"
+            type="button"
+          >
+            <p
+              class="av3-callout-kind av3-callout-kind--source_analogy"
+            >
+              Analogy
+            </p>
+            <p
+              class="av3-callout-title"
+            >
+              Attention as a mixer
+            </p>
+            <p
+              class="av3-callout-body"
+            >
+              The instructor likens attention to an audio mixer blending tracks.
+            </p>
+          </button>
+        </aside>
+      </section>
+      <section
+        class="av3-section"
+        id="av3-s-mlp"
+      >
+        <div
+          class="av3-heading-row"
+        >
+          <h2
+            class="av3-h2"
+          >
+            <button
+              class="av3-heading-btn"
+              type="button"
+            >
+              The MLP transforms each token
+            </button>
+          </h2>
+          <span
+            class="av3-section-role"
+          >
+            Mechanism
+          </span>
+        </div>
+        <button
+          class="av3-paragraph av3-paragraph--grounded"
+          type="button"
+        >
+          The MLP expands the representation, applies a non-linearity, then projects it back down.
+          <span
+            aria-hidden="true"
+            class="av3-source-ref"
+          >
+            source ¶ (
+            1
+            )
+          </span>
+        </button>
+        <button
+          class="av3-table-block av3-table-block--clickable"
+          type="button"
+        >
+          <figure
+            class="av3-table-wrap"
+          >
+            <figcaption
+              class="av3-table-title"
+            >
+              Stages of the MLP
+            </figcaption>
+            <table
+              class="av3-table"
+            >
+              <thead>
+                <tr>
+                  <th>
+                    Stage
+                  </th>
+                  <th>
+                    Operation
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    Expand
+                  </td>
+                  <td>
+                    Project up to a wider hidden size
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Activate
+                  </td>
+                  <td>
+                    Apply the non-linearity
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Project
+                  </td>
+                  <td>
+                    Project back down to the model size
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </figure>
+        </button>
+        <section
+          class="av3-subsection"
+          id="av3-s-mlp-nonlin"
+        >
+          <div
+            class="av3-heading-row"
+          >
+            <h3
+              class="av3-h3"
+            >
+              <button
+                class="av3-heading-btn"
+                type="button"
+              >
+                Why a non-linearity?
+              </button>
+            </h3>
+            <span
+              class="av3-section-role"
+            >
+              Definition
+            </span>
+          </div>
+          <button
+            class="av3-paragraph av3-paragraph--grounded"
+            type="button"
+          >
+            Without a non-linearity, stacking layers collapses to a single linear map.
+            <span
+              aria-hidden="true"
+              class="av3-source-ref"
+            >
+              source ¶ (
+              1
+              )
+            </span>
+          </button>
+        </section>
+      </section>
+    </div>
+    <div
+      class="av3-panels"
+    >
+      <section
+        aria-label="Key concepts"
+        class="av3-panel"
+      >
+        <div
+          class="av3-panel-head"
+        >
+          <h2
+            class="av3-panel-h"
+          >
+            Key concepts
+          </h2>
+          <span
+            class="chip chip-ai"
+          >
+            ✦ AI-suggested · not yet accepted
+          </span>
+        </div>
+        <ul
+          class="av3-concept-list"
+        >
+          <li
+            class="av3-concept"
+          >
+            <div
+              class="av3-concept-top"
+            >
+              <span
+                class="av3-concept-name"
+              >
+                Attention
+              </span>
+              <span
+                class="chip av3-imp av3-imp--high"
+              >
+                high
+              </span>
+              <span
+                class="chip chip-quiet"
+              >
+                Core concept
+              </span>
+            </div>
+            <p
+              class="av3-concept-def"
+            >
+              A mechanism that mixes token values weighted by query–key similarity.
+            </p>
+            <div
+              class="av3-concept-foot"
+            >
+              <span
+                class="av3-concept-state"
+              >
+                suggested state: 
+                Parsed
+              </span>
+              <button
+                class="av3-source-btn"
+                type="button"
+              >
+                source ¶ (
+                1
+                )
+              </button>
+            </div>
+          </li>
+          <li
+            class="av3-concept"
+          >
+            <div
+              class="av3-concept-top"
+            >
+              <span
+                class="av3-concept-name"
+              >
+                Multi-layer perceptron
+              </span>
+              <span
+                class="chip av3-imp av3-imp--medium"
+              >
+                medium
+              </span>
+              <span
+                class="chip chip-quiet"
+              >
+                Supporting
+              </span>
+            </div>
+            <p
+              class="av3-concept-def"
+            >
+              A per-token feed-forward network: expand, non-linearity, project down.
+            </p>
+            <div
+              class="av3-concept-foot"
+            >
+              <span
+                class="av3-concept-state"
+              >
+                suggested state: 
+                Seen
+              </span>
+              <button
+                class="av3-source-btn"
+                type="button"
+              >
+                source ¶ (
+                1
+                )
+              </button>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <section
+        aria-label="Retrieval prompts"
+        class="av3-panel"
+      >
+        <div
+          class="av3-panel-head"
+        >
+          <h2
+            class="av3-panel-h"
+          >
+            Retrieval prompts
+          </h2>
+          <span
+            class="chip chip-ai"
+          >
+            ✦ AI-suggested · not yet scheduled
+          </span>
+        </div>
+        <ul
+          class="av3-prompt-list"
+        >
+          <li
+            class="av3-prompt"
+          >
+            <p
+              class="av3-prompt-q"
+            >
+              What do the query, key, and value vectors each represent in attention?
+            </p>
+            <div
+              class="av3-prompt-foot"
+            >
+              <span
+                class="chip chip-quiet"
+              >
+                Mechanism
+              </span>
+              <span
+                class="chip av3-diff av3-diff--medium"
+              >
+                medium
+              </span>
+              <button
+                class="av3-source-btn"
+                type="button"
+              >
+                answer source (
+                1
+                )
+              </button>
+            </div>
+          </li>
+          <li
+            class="av3-prompt"
+          >
+            <p
+              class="av3-prompt-q"
+            >
+              Why does the MLP need a non-linearity?
+            </p>
+            <div
+              class="av3-prompt-foot"
+            >
+              <span
+                class="chip chip-quiet"
+              >
+                Definition
+              </span>
+              <span
+                class="chip av3-diff av3-diff--easy"
+              >
+                easy
+              </span>
+              <button
+                class="av3-source-btn"
+                type="button"
+              >
+                answer source (
+                1
+                )
+              </button>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <section
+        aria-label="Common misconceptions"
+        class="av3-panel"
+      >
+        <div
+          class="av3-panel-head"
+        >
+          <h2
+            class="av3-panel-h"
+          >
+            Watch out for…
+          </h2>
+          <span
+            class="chip chip-ai"
+          >
+            ✦ AI-suggested
+          </span>
+        </div>
+        <ul
+          class="av3-misc-list"
+        >
+          <li
+            class="av3-misc"
+          >
+            <p
+              class="av3-misc-wrong"
+            >
+              ✗ 
+              Attention "looks at" tokens one at a time.
+            </p>
+            <p
+              class="av3-misc-right"
+            >
+              ✓ 
+              Attention computes all pairwise interactions in parallel.
+            </p>
+            <button
+              class="av3-source-btn"
+              type="button"
+            >
+              source ¶ (
+              1
+              )
+            </button>
+          </li>
+        </ul>
+      </section>
+      <section
+        aria-label="Key claims"
+        class="av3-panel"
+      >
+        <h2
+          class="av3-panel-h"
+        >
+          Key claims
+        </h2>
+        <ul
+          class="av3-claim-list"
+        >
+          <li
+            class="av3-claim"
+          >
+            <span
+              class="chip chip-quiet av3-claim-type"
+            >
+              Mechanism
+            </span>
+            <span
+              class="av3-claim-text"
+            >
+              Attention decides how much of each value to mix using query–key similarity.
+            </span>
+            <button
+              class="av3-source-btn"
+              type="button"
+            >
+              source ¶ (
+              1
+              )
+            </button>
+          </li>
+        </ul>
+      </section>
+      <section
+        aria-label="Terminology"
+        class="av3-panel"
+      >
+        <h2
+          class="av3-panel-h"
+        >
+          Terminology
+        </h2>
+        <dl
+          class="av3-term-list"
+        >
+          <div
+            class="av3-term"
+          >
+            <dt
+              class="av3-term-name"
+            >
+              Non-linearity
+            </dt>
+            <dd
+              class="av3-term-def"
+            >
+              A function that breaks linearity so stacked layers can express more.
+              <button
+                class="av3-source-btn"
+                type="button"
+              >
+                source ¶ (
+                1
+                )
+              </button>
+            </dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+    <details
+      class="av3-drawer"
+    >
+      <summary
+        class="av3-drawer-summary"
+      >
+        Source notes & references
+        <span
+          class="av3-drawer-count"
+        >
+          2
+        </span>
+      </summary>
+      <div
+        class="av3-drawer-body"
+      >
+        <div
+          class="av3-notes-group"
+        >
+          <h3
+            class="av3-notes-h"
+          >
+            References
+          </h3>
+          <ul
+            class="av3-notes-list"
+          >
+            <li>
+              <a
+                href="https://arxiv.org/abs/1706.03762"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Attention Is All You Need (Vaswani et al., 2017)
+              </a>
+            </li>
+          </ul>
+        </div>
+        <div
+          class="av3-notes-group"
+        >
+          <h3
+            class="av3-notes-h"
+          >
+            Notes
+          </h3>
+          <ul
+            class="av3-notes-list"
+          >
+            <li
+              class="av3-note"
+            >
+              <span
+                class="chip chip-quiet av3-note-kind"
+              >
+                Aside
+              </span>
+               
+              Instructor housekeeping about the course schedule was dropped.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </details>
+    <details
+      class="av3-drawer av3-drawer--quality"
+    >
+      <summary
+        class="av3-drawer-summary"
+      >
+        Quality report
+      </summary>
+    </details>
+  </article>
+</div>
+`;
