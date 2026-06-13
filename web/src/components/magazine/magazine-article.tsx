@@ -22,8 +22,15 @@ import {
   type PlannedFigure,
   type StreamItem,
 } from '@/lib/editorial-layout'
+import {
+  hasProvenanceContent,
+  type SourceTrace,
+  type SourceTraceIndex,
+} from '@/lib/source-trace'
 
 import './magazine-article.css'
+import { ProvenancePanel } from './provenance-panel'
+import { SourceTraceDrawer } from './source-trace-drawer'
 
 const CAPTURE_LABEL: Record<CaptureSource, string> = {
   PASTE: 'Pasted text',
@@ -55,6 +62,13 @@ export interface MagazineArticleProps {
     sourceUrl?: string | null
     captureSource?: CaptureSource | null
   }
+  /** Source-trace index (DET-358). When present, paragraphs/callouts/tables become
+   *  inspectable (hover/click → source-trace drawer) and a provenance appendix —
+   *  claims, concepts, candidates, prompts, quality warnings — renders below the
+   *  article. Absent ⇒ the reader renders exactly as before (pure presentation). */
+  sourceTrace?: SourceTraceIndex | null
+  /** Operator view: reveal raw source-block ids in the drawer (`?debug=1`). */
+  debug?: boolean
 }
 
 /**
@@ -74,7 +88,14 @@ export function MagazineArticle({
   enrichment,
   editorialLayout,
   provenance,
+  sourceTrace,
+  debug = false,
 }: MagazineArticleProps) {
+  // The open trace for the slide-in drawer (DET-358). A rendered block resolves
+  // its trace by `block_id`; the appendix rows carry their trace directly.
+  const [openTrace, setOpenTrace] = useState<SourceTrace | null>(null)
+  const traces = sourceTrace?.byBlockId ?? null
+  const showProvenance = sourceTrace ? hasProvenanceContent(sourceTrace) : false
   // The deterministic layout engine resolves the article + its editorial lanes
   // into a render-ready plan (DET-318): figures placed after each section's
   // opening paragraphs (never front-loaded), in-column vs span sized by type,
@@ -198,11 +219,20 @@ export function MagazineArticle({
           then supplies a generative standfirst, marked "not from your source". */}
       {plan.ledeParagraphs.length > 0 ? (
         <div className='kb-mag-lede'>
-          {plan.ledeParagraphs.map((p) => (
-            <p key={p.blockId} id={p.blockId}>
-              <InlineRuns runs={p.runs} />
-            </p>
-          ))}
+          {plan.ledeParagraphs.map((p) => {
+            const it = interactiveTrace(traces?.get(p.blockId), setOpenTrace)
+            return (
+              <p
+                key={p.blockId}
+                id={p.blockId}
+                className={it.className || undefined}
+                {...it.handlers}
+              >
+                <InlineRuns runs={p.runs} />
+                {it.flag}
+              </p>
+            )
+          })}
         </div>
       ) : plan.standfirst ? (
         <div className='kb-mag-lede'>
@@ -231,6 +261,8 @@ export function MagazineArticle({
                   key={itemKey(item, i)}
                   item={item}
                   articleId={articleId}
+                  traces={traces}
+                  onOpen={setOpenTrace}
                 />
               ))}
             </Fragment>
@@ -318,8 +350,61 @@ export function MagazineArticle({
           <span>Source-grounded · light-only</span>
         </div>
       </div>
+
+      {/* Provenance appendix (DET-358): claims, concepts, candidates, prompts and
+          quality warnings — each opens the same source-trace drawer the inline
+          blocks use. Only rendered when there is provenance to show. */}
+      {sourceTrace && showProvenance && (
+        <ProvenancePanel index={sourceTrace} onInspect={setOpenTrace} />
+      )}
+
+      <SourceTraceDrawer
+        trace={openTrace}
+        debug={debug}
+        onClose={() => setOpenTrace(null)}
+      />
     </article>
   )
+}
+
+/**
+ * Resolve the interactive props for a rendered block from its source trace
+ * (DET-358). Returns the class to append, the DOM handlers (click + keyboard +
+ * a11y role), and an inline flag node for unsupported blocks so a broken
+ * traceability link is visible without interaction. A block with no trace (or no
+ * index) is inert — the reader renders exactly as before.
+ */
+function interactiveTrace(
+  trace: SourceTrace | undefined,
+  onOpen: (trace: SourceTrace) => void,
+): {
+  className: string
+  flag: React.ReactNode
+  handlers: Record<string, unknown>
+} {
+  if (!trace) return { className: '', flag: null, handlers: {} }
+  const highRisk = trace.fidelityRisk === 'high' || trace.confidence === 'low'
+  const className = `kb-mag-traceable${
+    trace.unsupported ? ' is-unsupported' : highRisk ? ' is-highrisk' : ''
+  }`
+  const open = () => onOpen(trace)
+  const handlers: Record<string, unknown> = {
+    role: 'button',
+    tabIndex: 0,
+    'aria-label': `Inspect source for this ${trace.label.toLowerCase()}`,
+    'data-trace-block': trace.id,
+    onClick: open,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        open()
+      }
+    },
+  }
+  const flag = trace.unsupported ? (
+    <span className='kb-mag-traceflag'> ⚑ unsupported</span>
+  ) : null
+  return { className, flag, handlers }
 }
 
 /** The honesty marker for AI world-knowledge that is NOT grounded in the user's
@@ -348,9 +433,14 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function StreamItemView({
   item,
   articleId,
+  traces,
+  onOpen,
 }: {
   item: StreamItem
   articleId: string
+  /** Per-block source traces (DET-358); null when provenance is off. */
+  traces: Map<string, SourceTrace> | null
+  onOpen: (trace: SourceTrace) => void
 }) {
   switch (item.kind) {
     case 'block':
@@ -359,6 +449,8 @@ function StreamItemView({
           block={item.block}
           isLead={item.isLead ?? false}
           figureRef={item.figureRef}
+          trace={traces?.get(item.block.block_id)}
+          onOpen={onOpen}
         />
       )
     case 'figure':
@@ -420,27 +512,43 @@ function MagazineBlock({
   block,
   isLead,
   figureRef,
+  trace,
+  onOpen,
 }: {
   block: ArticleBlockV2
   isLead: boolean
   /** Figure number to bind as a trailing `(Fig. N)` reference (figure↔prose). */
   figureRef?: number
+  /** Source trace for this block (DET-358); undefined ⇒ inert (no affordance). */
+  trace?: SourceTrace
+  onOpen: (trace: SourceTrace) => void
 }) {
+  // The interactive props (class, handlers, unsupported flag) when this block
+  // carries a trace; all empty/inert when it doesn't, so the render is unchanged.
+  const it = interactiveTrace(trace, onOpen)
+  const cls = (base?: string) =>
+    [base, it.className].filter(Boolean).join(' ') || undefined
+
   switch (block.type) {
     case 'paragraph':
       return (
-        <p className={isLead ? 'kb-mag-lead' : undefined} id={block.block_id}>
+        <p
+          className={cls(isLead ? 'kb-mag-lead' : undefined)}
+          id={block.block_id}
+          {...it.handlers}
+        >
           <InlineRuns runs={block.content.runs} />
           {figureRef !== undefined && (
             <span className='kb-mag-figref'> (Fig. {figureRef})</span>
           )}
+          {it.flag}
         </p>
       )
     case 'heading':
       // Section titles come from `section.heading` (§ bars); heading blocks are
       // in-column sub-heads.
       return (
-        <h3 id={block.block_id}>
+        <h3 className={cls()} id={block.block_id} {...it.handlers}>
           <InlineRuns runs={block.content.runs} />
         </h3>
       )
@@ -452,15 +560,23 @@ function MagazineBlock({
         </li>
       ))
       return block.content.ordered ? (
-        <ol id={block.block_id}>{items}</ol>
+        <ol className={cls()} id={block.block_id} {...it.handlers}>
+          {items}
+        </ol>
       ) : (
-        <ul id={block.block_id}>{items}</ul>
+        <ul className={cls()} id={block.block_id} {...it.handlers}>
+          {items}
+        </ul>
       )
     }
     case 'quote':
       // A quote becomes the pull-quote — the magazine's spanning display device.
       return (
-        <blockquote className='kb-mag-pull' id={block.block_id}>
+        <blockquote
+          className={cls('kb-mag-pull')}
+          id={block.block_id}
+          {...it.handlers}
+        >
           <p>
             <InlineRuns runs={block.content.runs} />
           </p>
@@ -472,11 +588,16 @@ function MagazineBlock({
     case 'callout':
       // An aside becomes a marginal note (the mono side-note).
       return (
-        <div className='kb-mag-marginal' id={block.block_id}>
+        <div
+          className={cls('kb-mag-marginal')}
+          id={block.block_id}
+          {...it.handlers}
+        >
           <span className='mh'>
             {block.content.title ?? block.content.variant ?? 'Note'}
           </span>
           <InlineRuns runs={block.content.runs} />
+          {it.flag}
         </div>
       )
     case 'table': {
@@ -484,7 +605,7 @@ function MagazineBlock({
       if (rows.length === 0) return null
       const [head, ...body] = block.content.header ? rows : [null, ...rows]
       return (
-        <table id={block.block_id}>
+        <table className={cls()} id={block.block_id} {...it.handlers}>
           {head && (
             <thead>
               <tr>
@@ -511,7 +632,7 @@ function MagazineBlock({
     }
     case 'code':
       return (
-        <pre id={block.block_id}>
+        <pre className={cls()} id={block.block_id} {...it.handlers}>
           <code>{block.content.text}</code>
         </pre>
       )

@@ -29,6 +29,7 @@ import {
   useArticleLearningState,
 } from '@/lib/article-learning-events'
 import type { ArticleV2 } from '@/lib/article-v2'
+import { buildSourceTraceIndex } from '@/lib/source-trace'
 import {
   ARTICLE_STEPS,
   articleStatusLabel,
@@ -262,6 +263,7 @@ export default function ReadPage() {
               inboxItemId={id}
               surface={effectiveView}
               initialMode={initialMode}
+              debug={params.get('debug') === '1'}
             />
           ) : (
             // No article row exists yet — the companion pipeline hasn't started
@@ -368,11 +370,14 @@ function ArticleView({
   inboxItemId,
   surface,
   initialMode,
+  debug = false,
 }: {
   articleId: string
   inboxItemId: string
   surface: 'article' | 'exercise'
   initialMode?: ReadingMode
+  /** Reveal raw source-block ids in the provenance drawer (`?debug=1`, DET-358). */
+  debug?: boolean
 }) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -418,6 +423,28 @@ function ArticleView({
       sourceAvailable: (blocksQuery.data?.length ?? 0) > 0,
     }),
     [sourceQuery.data?.url, sourceQuery.data?.type, blocksQuery.data],
+  )
+
+  // The source-trace index (DET-358) for the v3 reader's provenance UI, built from
+  // the RICH transformer payload (per-block transformation metadata, the pinned
+  // source blocks, the fidelity report and the AI learning layer) — NOT the lossy
+  // learning ArticleV2. Keyed by the same block ids the renderer puts on the DOM.
+  const sourceTrace = useMemo(
+    () =>
+      article?.articleJson
+        ? buildSourceTraceIndex({
+            article: article.articleJson,
+            blocks: blocksQuery.data ?? [],
+            fidelityReport: article.fidelityReport,
+            learningLayer: article.learningLayer,
+          })
+        : null,
+    [
+      article?.articleJson,
+      article?.fidelityReport,
+      article?.learningLayer,
+      blocksQuery.data,
+    ],
   )
 
   // Hydrate prior activity so completion markers survive a reload. Gated on the
@@ -576,6 +603,8 @@ function ArticleView({
           enrichment={article.enrichment}
           editorialLayout={article.editorialLayout}
           provenance={provenance}
+          sourceTrace={sourceTrace}
+          debug={debug}
         />
       ) : (
         <ReadingSurface
