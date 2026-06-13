@@ -1311,6 +1311,50 @@ enum TransformerBlockClass {
   UNCERTAIN
 }
 
+// The editorial ROLE of a source block (DET-346). A richer, learning-oriented
+// taxonomy than TransformerBlockClass: it distinguishes core learning material
+// (claims, definitions, examples, analogies, caveats) from transcript filler,
+// navigation, references, and source-notes clutter, so article generation can
+// keep the substance and move/discard the rest. Assigned by the role classifier
+// (deterministic pre-pass + one batched LLM call); code guards enforce that the
+// substance roles are never DISCARDed. UNKNOWN is the preserve-by-default value.
+enum SourceBlockRole {
+  CORE_CLAIM
+  DEFINITION
+  EXAMPLE
+  ANALOGY
+  CAVEAT
+  TRANSITION
+  INSTRUCTOR_ASIDE
+  FILLER
+  NAVIGATION
+  REFERENCE
+  BIBLIOGRAPHY
+  EXTERNAL_LINK
+  CAPTION
+  TABLE
+  UNKNOWN
+}
+
+// How important a block is to understanding the source (DET-346).
+enum SourceBlockImportance {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+// Where a classified block should land in the generated article (DET-346).
+// MAIN_BODY = part of the article prose; CALLOUT = preserved aside (analogies,
+// caveats, instructor asides); SOURCE_NOTES = moved out of the body but kept for
+// reference/fidelity (references, bibliography, external links); DISCARD =
+// dropped (filler, navigation). Only non-substance roles may reach DISCARD.
+enum SourceBlockPlacement {
+  MAIN_BODY
+  CALLOUT
+  SOURCE_NOTES
+  DISCARD
+}
+
 // A TransformedArticle's lifecycle (Wave B). QUEUED→MODELING→PLANNING→
 // GENERATING→CHECKING then FINAL (passed the fidelity gate) or BLOCKED (gate
 // rejected) ; FAILED = could not produce schema-valid artifacts (loud failure).
@@ -1393,6 +1437,18 @@ model TransformerSourceBlock {
   classificationStatus String                 @default("pending")
   removable            Boolean                @default(false)
   noiseReason          String?
+  // Editorial role classification (DET-346). Distinct from the noise-oriented
+  // `classification` above: `role` drives placement (main body / callout /
+  // source notes / discard) so generation keeps the learning substance and
+  // moves the filler/navigation/reference clutter. `roleConfidence` is 0–1.
+  // All nullable + `roleStatus` defaults to "pending" so existing rows and the
+  // pre-classify path stay valid before the LLM pass runs.
+  role                 SourceBlockRole?
+  importance           SourceBlockImportance?
+  placement            SourceBlockPlacement?
+  roleReason           String?
+  roleConfidence       Float?
+  roleStatus           String                 @default("pending")
 
   source TransformerSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 

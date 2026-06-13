@@ -14,6 +14,7 @@ import {
 } from '../source-document/source-document'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { BlockClassifierService } from './block-classifier.service'
+import { BlockRoleClassifierService } from './block-role-classifier.service'
 import { extractPdfPages } from './pdf-pages.util'
 import {
   type SegmentedSource,
@@ -68,6 +69,7 @@ export class PipelineService implements OnApplicationBootstrap {
   constructor(
     private readonly prisma: PrismaService,
     private readonly classifier: BlockClassifierService,
+    private readonly roleClassifier: BlockRoleClassifierService,
     // Optional so the Wave A unit tests (which exercise only extract→classify)
     // can construct the pipeline without the M2/M3 article services. In the app
     // it is always provided by DI; `onSourceReady` no-ops when it is absent.
@@ -240,16 +242,24 @@ export class PipelineService implements OnApplicationBootstrap {
       orderBy: { orderIndex: 'asc' },
       select: { id: true, orderIndex: true, blockType: true, text: true },
     })
-    const resolved = await this.classifier.classify(
-      rows.map((r) => ({
-        index: r.orderIndex,
-        blockType: r.blockType,
-        text: r.text,
-      })),
-    )
+    const classifierInput = rows.map((r) => ({
+      index: r.orderIndex,
+      blockType: r.blockType,
+      text: r.text,
+    }))
+    // Two independent classification passes: the noise-oriented classifier
+    // (DET-250) and the editorial role classifier (DET-346). They share the same
+    // input and don't depend on each other, so run them concurrently. Both are
+    // internally defensive (a failed LLM call falls back rather than throwing),
+    // so classification never blocks the source reaching READY.
+    const [resolved, roleResolved] = await Promise.all([
+      this.classifier.classify(classifierInput),
+      this.roleClassifier.classify(classifierInput),
+    ])
     await this.prisma.$transaction(
       rows.map((r) => {
         const c = resolved.get(r.orderIndex)
+        const role = roleResolved.get(r.orderIndex)
         return this.prisma.transformerSourceBlock.update({
           where: { id: r.id },
           data: {
@@ -257,6 +267,12 @@ export class PipelineService implements OnApplicationBootstrap {
             classificationStatus: 'classified',
             removable: c?.removable ?? false,
             noiseReason: c?.noiseReason ?? null,
+            role: role?.role ?? null,
+            importance: role?.importance ?? null,
+            placement: role?.placement ?? null,
+            roleReason: role?.reason ?? null,
+            roleConfidence: role?.confidence ?? null,
+            roleStatus: 'classified',
           },
         })
       }),
