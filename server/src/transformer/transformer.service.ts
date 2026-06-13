@@ -421,6 +421,48 @@ export class TransformerService {
     return { id }
   }
 
+  /**
+   * Force a source through the v3 Source-Grounded Learning engine (DET-343),
+   * regardless of the global feature flag. This is the per-source PREVIEW opt-in
+   * made a first-class, browser-triggerable action: it tags the source as v3
+   * preview material (so future auto-runs route to v3 too) and runs v3 now. It
+   * exists so the v3 learning layer — provenance, key concepts/claims, retrieval
+   * prompts, the quality verdict — is observable in the reader without flipping
+   * an env flag. Shares `transform`'s READY + in-flight guards.
+   */
+  async transformV3(userId: string, sourceId: string): Promise<{ id: string }> {
+    const source = await this.prisma.transformerSource.findFirst({
+      where: { id: sourceId, userId },
+      select: { id: true, status: true, metadata: true },
+    })
+    if (!source) throw new NotFoundException('Source not found')
+    if (source.status !== TransformerSourceStatus.READY) {
+      throw new ConflictException('Source is not ready to transform')
+    }
+    const inFlight = await this.prisma.transformedArticle.findFirst({
+      where: { sourceId, status: { in: [...ARTICLE_IN_FLIGHT] } },
+      select: { id: true },
+    })
+    if (inFlight) {
+      throw new ConflictException(
+        'An article for this source is already running',
+      )
+    }
+    // Persist the preview opt-in so the source keeps routing to v3 on re-runs.
+    const metadata =
+      source.metadata &&
+      typeof source.metadata === 'object' &&
+      !Array.isArray(source.metadata)
+        ? (source.metadata as Record<string, unknown>)
+        : {}
+    await this.prisma.transformerSource.update({
+      where: { id: sourceId },
+      data: { metadata: { ...metadata, v3Preview: true } },
+    })
+    const id = await this.articlePipelineV3.createAndRun(sourceId)
+    return { id }
+  }
+
   /** Article detail (ownership-scoped via the source's userId; 404 otherwise). */
   async getArticle(
     userId: string,

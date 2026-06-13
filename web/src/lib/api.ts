@@ -1983,6 +1983,12 @@ export const api = {
     request<{ id: string }>(`/transformer/sources/${id}/transform`, {
       method: 'POST',
     }),
+  // Force this source through the v3 Source-Grounded Learning engine (DET-343),
+  // independent of the global flag — makes the v3 learning layer observable.
+  transformSourceV3: (id: string) =>
+    request<{ id: string }>(`/transformer/sources/${id}/transform-v3`, {
+      method: 'POST',
+    }),
   // The article + fidelity + coverage + status (poll while non-terminal).
   getTransformedArticle: (id: string) =>
     request<TransformedArticle>(`/transformer/articles/${id}`),
