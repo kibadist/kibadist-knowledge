@@ -7,6 +7,7 @@ import {
 import { Injectable, Logger } from '@nestjs/common'
 import { AiService } from '../ai/ai.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { toArticleV2 } from './article-compat.util'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { placeCallouts } from './callout-placement.util'
@@ -16,6 +17,8 @@ import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import type { PromptConceptCandidate } from './learning-prompts.prompt'
+import { LearningPromptsService } from './learning-prompts.service'
 import { buildReadingAids } from './reading-aids.util'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import type {
@@ -25,6 +28,7 @@ import type {
   IllustrationSuggestion,
   LearningConceptCandidate,
   LearningLayer,
+  LearningPromptSet,
   ReshapingPlan,
   SourceStructureModel,
 } from './schemas'
@@ -81,6 +85,7 @@ export class ArticlePipelineService {
     private readonly enrichment: ArticleEnrichmentService,
     private readonly editorialLayout: EditorialLayoutService,
     private readonly learning: LearningLayerService,
+    private readonly learningPrompts: LearningPromptsService,
     private readonly ai: AiService,
   ) {}
 
@@ -513,7 +518,7 @@ export class ArticlePipelineService {
     const built = await this.learning.build(blocks)
     const existing = await this.prisma.transformedArticle.findUnique({
       where: { id: articleId },
-      select: { learningLayer: true },
+      select: { learningLayer: true, articleJson: true, structureModel: true },
     })
     const prior = (existing?.learningLayer as LearningLayer | null) ?? null
     const layer: LearningLayer = {
@@ -525,10 +530,83 @@ export class ArticlePipelineService {
         ? { articleConceptCandidates: prior.articleConceptCandidates }
         : {}),
     }
+
+    // Learning prompts + misconceptions (DET-353): an additive source-grounded
+    // study lane that consumes the generated article (sections/source examples/
+    // callouts), the prior concept candidates, and the structure model's key
+    // claims. Best-effort — a failure leaves the DET-258 layer intact and only
+    // logs. NOTHING here schedules a permanent review card: every prompt starts
+    // `ai_suggested` and is only promoted when the learner validates/answers it.
+    const promptSet = await this.tryBuildLearningPrompts(
+      articleId,
+      existing?.articleJson as
+        | SourcePreservingArticle
+        | ArticleJsonV2
+        | null
+        | undefined,
+      existing?.structureModel as SourceStructureModel | null | undefined,
+      prior,
+      blocks,
+    )
+    if (promptSet) {
+      layer.retrievalPromptCandidates = promptSet.retrievalPrompts
+      layer.misconceptions = promptSet.misconceptions
+    }
+
     await this.persist(articleId, {
       learningLayer: layer as unknown as Prisma.InputJsonValue,
     })
     return layer
+  }
+
+  /**
+   * Build the DET-353 retrieval-prompt + misconception set for an article; never
+   * throws — a failure (or a missing/ungenerated article) logs and yields null so
+   * the DET-258 learning layer still persists. Concept candidates are drawn from
+   * BOTH the DET-283 per-section candidates and the DET-351 whole-article
+   * candidates (normalized to id/label/definition); key claims come from the stored
+   * structure model.
+   */
+  private async tryBuildLearningPrompts(
+    articleId: string,
+    articleJson: SourcePreservingArticle | ArticleJsonV2 | null | undefined,
+    structureModel: SourceStructureModel | null | undefined,
+    prior: LearningLayer | null,
+    blocks: LoadedBlock[],
+  ): Promise<LearningPromptSet | null> {
+    if (!articleJson) return null
+    try {
+      const article = toArticleV2(articleJson)
+      const conceptCandidates: PromptConceptCandidate[] = [
+        ...(prior?.conceptCandidates ?? []).map((c) => ({
+          id: c.id,
+          label: c.label,
+          definition: c.definition,
+        })),
+        ...(prior?.articleConceptCandidates ?? []).map((c) => ({
+          id: c.id,
+          label: c.name,
+          definition: c.shortDefinition ?? c.name,
+        })),
+      ]
+      const keyClaims = (structureModel?.claims ?? []).map((c) => ({
+        text: c.text,
+        sourceBlockIds: c.sourceBlockIds,
+      }))
+      return await this.learningPrompts.build({
+        article,
+        blocks,
+        conceptCandidates,
+        keyClaims,
+      })
+    } catch (error) {
+      this.logger.warn(
+        `Learning prompts failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
   }
 
   /**

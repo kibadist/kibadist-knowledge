@@ -8,6 +8,8 @@ import type {
   ArticleSectionV2,
   LearningConceptCandidate,
   LearningLayer,
+  MisconceptionCandidate,
+  RetrievalPromptCandidate,
 } from '@/lib/api'
 import { LearningToolsPanel } from '../learning-tools-panel'
 import type { InspectorSelection } from '../source-inspector-panel'
@@ -125,5 +127,109 @@ describe('LearningToolsPanel concept candidates (DET-283)', () => {
     const link = screen.getByRole('link', { name: /in inbox/i })
     expect(link).toHaveAttribute('href', '/inbox/con-1')
     expect(screen.queryByRole('button', { name: 'Validate' })).toBeNull()
+  })
+})
+
+/**
+ * DET-353 retrieval-prompt + misconception rendering. The panel renders the richer
+ * `retrievalPromptCandidates` (question + type/difficulty + expected-answer refs)
+ * and `misconceptions` (wrong belief + correction), each plainly AI-suggested, and
+ * opens the inspector at the grounding blocks when its refs button is clicked.
+ */
+function prompt(
+  over: Partial<RetrievalPromptCandidate> = {},
+): RetrievalPromptCandidate {
+  return {
+    id: 'rp1',
+    question: 'What is a system?',
+    expectedAnswerSourceBlockIds: ['b1', 'b2'],
+    relatedConceptCandidateIds: [],
+    promptType: 'definition',
+    difficulty: 'easy',
+    status: 'ai_suggested',
+    ...over,
+  }
+}
+
+function misconception(
+  over: Partial<MisconceptionCandidate> = {},
+): MisconceptionCandidate {
+  return {
+    id: 'm1',
+    misconception: 'A closed system exchanges nothing.',
+    correction: 'A closed system still exchanges energy, just not matter.',
+    sourceBlockIds: ['b3'],
+    relatedConceptCandidateIds: [],
+    confidence: 0.8,
+    status: 'ai_suggested',
+    ...over,
+  }
+}
+
+describe('LearningToolsPanel retrieval prompts + misconceptions (DET-353)', () => {
+  it('renders active-recall prompts with their question, type and difficulty', () => {
+    renderPanel({
+      concepts: [],
+      retrievalPrompts: [],
+      retrievalPromptCandidates: [prompt()],
+    })
+    expect(
+      screen.getByRole('heading', { name: 'Active recall prompts' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('What is a system?')).toBeInTheDocument()
+    expect(screen.getByText('definition')).toBeInTheDocument()
+    expect(screen.getByText('easy')).toBeInTheDocument()
+  })
+
+  it("a prompt's expected-answer refs open the inspector with its grounding blocks", async () => {
+    const onInspect = vi.fn()
+    renderPanel(
+      {
+        concepts: [],
+        retrievalPrompts: [],
+        retrievalPromptCandidates: [prompt()],
+      },
+      onInspect,
+    )
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /expected answer/ }))
+    expect(onInspect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Retrieval prompt',
+        sourceBlockIds: ['b1', 'b2'],
+      }),
+    )
+  })
+
+  it('renders a grounded misconception with its correction and an AI-suggested chip', () => {
+    renderPanel({
+      concepts: [],
+      retrievalPrompts: [],
+      misconceptions: [misconception()],
+    })
+    expect(
+      screen.getByRole('heading', { name: 'Misconceptions to watch for' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('A closed system exchanges nothing.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/still exchanges energy/)).toBeInTheDocument()
+    expect(screen.getByText('AI-suggested')).toBeInTheDocument()
+    // Grounded ⇒ it offers a source-refs button.
+    expect(
+      screen.getByRole('button', { name: /source refs/ }),
+    ).toBeInTheDocument()
+  })
+
+  it('marks an ungrounded misconception as general, with no source-refs button', () => {
+    renderPanel({
+      concepts: [],
+      retrievalPrompts: [],
+      misconceptions: [misconception({ sourceBlockIds: [] })],
+    })
+    expect(
+      screen.getByText('general — not from your source'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /source refs/ })).toBeNull()
   })
 })

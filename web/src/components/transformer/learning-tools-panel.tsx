@@ -8,6 +8,8 @@ import {
   api,
   type LearningConceptCandidate,
   type LearningLayer,
+  type MisconceptionCandidate,
+  type RetrievalPromptCandidate,
 } from '@/lib/api'
 
 import type { InspectorSelection } from './source-inspector-panel'
@@ -54,11 +56,15 @@ export function LearningToolsPanel({
   })
 
   const candidates = layer?.conceptCandidates ?? []
+  const promptCandidates = layer?.retrievalPromptCandidates ?? []
+  const misconceptions = layer?.misconceptions ?? []
   const hasContent =
     layer &&
     (layer.concepts.length > 0 ||
       layer.retrievalPrompts.length > 0 ||
-      candidates.length > 0)
+      candidates.length > 0 ||
+      promptCandidates.length > 0 ||
+      misconceptions.length > 0)
 
   return (
     // The stable id is the target of the per-section "Candidates ready" link in
@@ -198,9 +204,126 @@ export function LearningToolsPanel({
               onInspect={onInspect}
             />
           )}
+
+          {promptCandidates.length > 0 && (
+            <RetrievalPromptCandidates
+              prompts={promptCandidates}
+              onInspect={onInspect}
+            />
+          )}
+
+          {misconceptions.length > 0 && (
+            <Misconceptions
+              misconceptions={misconceptions}
+              onInspect={onInspect}
+            />
+          )}
         </>
       )}
     </section>
+  )
+}
+
+/**
+ * AI-suggested active-recall prompts (DET-353). Each prompt shows its question, a
+ * pedagogical-type + difficulty chip, and an "expected answer" source-refs button
+ * that opens the inspector at the blocks whose content holds the answer. Every
+ * prompt is plainly AI-suggested — none is a scheduled review card until the
+ * learner validates or answers it.
+ */
+function RetrievalPromptCandidates({
+  prompts,
+  onInspect,
+}: {
+  prompts: RetrievalPromptCandidate[]
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  return (
+    <div className='tf-prompts'>
+      <h4 className='tf-aux-h'>Active recall prompts</h4>
+      <ul className='tf-prompt-list'>
+        {prompts.map((p) => (
+          <li key={p.id} className='tf-prompt'>
+            <div className='tf-prompt-q'>{p.question}</div>
+            <div className='tf-prompt-meta'>
+              <span className='chip chip-quiet'>
+                {p.promptType.replace(/_/g, ' ')}
+              </span>
+              <span className='chip chip-quiet'>{p.difficulty}</span>
+              <button
+                type='button'
+                className='tf-ref-btn'
+                onClick={() =>
+                  onInspect({
+                    kind: 'Retrieval prompt',
+                    transformedText: p.question,
+                    sourceBlockIds: p.expectedAnswerSourceBlockIds,
+                  })
+                }
+              >
+                expected answer ({p.expectedAnswerSourceBlockIds.length})
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * Misconception candidates (DET-353): a likely wrong belief paired with a
+ * source-faithful correction. Every card carries an always-visible "AI-suggested"
+ * chip; a grounded one also offers a source-refs button into the inspector, while
+ * an ungrounded one is labelled "general — not from your source" so a learner can
+ * tell apart what the source corrects from what is AI background.
+ */
+function Misconceptions({
+  misconceptions,
+  onInspect,
+}: {
+  misconceptions: MisconceptionCandidate[]
+  onInspect: (selection: InspectorSelection) => void
+}) {
+  return (
+    <div className='tf-misconceptions'>
+      <h4 className='tf-aux-h'>Misconceptions to watch for</h4>
+      <ul className='tf-misconception-list'>
+        {misconceptions.map((m) => (
+          <li key={m.id} className='tf-misconception'>
+            <div className='tf-misconception-top'>
+              <span className='tf-misconception-wrong'>{m.misconception}</span>
+              <span className='chip chip-ai'>AI-suggested</span>
+            </div>
+            <p className='tf-misconception-fix'>
+              <span className='tf-misconception-label'>Correction:</span>{' '}
+              {m.correction}
+            </p>
+            <div className='tf-misconception-foot'>
+              {m.sourceBlockIds.length > 0 ? (
+                <button
+                  type='button'
+                  className='tf-ref-btn'
+                  onClick={() =>
+                    onInspect({
+                      kind: 'Misconception',
+                      transformedText: `${m.misconception} — ${m.correction}`,
+                      sourceBlockIds: m.sourceBlockIds,
+                    })
+                  }
+                >
+                  source refs ({m.sourceBlockIds.length})
+                </button>
+              ) : (
+                <span className='block-sub'>
+                  general — not from your source
+                </span>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

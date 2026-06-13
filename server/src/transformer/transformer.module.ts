@@ -13,6 +13,7 @@ import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningPromptsService } from './learning-prompts.service'
 import { PipelineService } from './pipeline.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import { RewriteService } from './rewrite.service'
@@ -49,6 +50,7 @@ import { TransformerService } from './transformer.service'
     ArticleEnrichmentService,
     EditorialLayoutService,
     LearningLayerService,
+    LearningPromptsService,
     ArticlePipelineService,
   ],
   exports: [TransformerService, PipelineService],

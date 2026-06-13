@@ -9,6 +9,7 @@ import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningPromptsService } from './learning-prompts.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import { SourceDiagnosisService } from './source-diagnosis.service'
 import { StructureModelService } from './structure-model.service'
@@ -176,6 +177,9 @@ function makeServices(overrides: {
     build: jest.fn(async () => ({})),
   } as unknown as EditorialLayoutService
   const learning = {} as LearningLayerService
+  const learningPrompts = {
+    build: jest.fn(async () => ({ retrievalPrompts: [], misconceptions: [] })),
+  } as unknown as LearningPromptsService
   // Real diagnosis service over a stub ConfigService (v3 flag off ⇒ always v2).
   const diagnosis = new SourceDiagnosisService({
     get: () => undefined,
@@ -200,6 +204,7 @@ function makeServices(overrides: {
     enrichment,
     editorialLayout,
     learning,
+    learningPrompts,
     diagnosis,
     ai,
   }
@@ -221,6 +226,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
       s.ai,
     )
 
@@ -284,6 +290,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
       s.ai,
     )
 
@@ -323,6 +330,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
       s.ai,
     )
 
@@ -354,6 +362,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
       s.ai,
     )
 
@@ -384,6 +393,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
       s.ai,
     )
 
