@@ -22,9 +22,11 @@ import { WorkspaceId } from '../workspaces/workspace-id.decorator'
 import { WorkspacesService } from '../workspaces/workspaces.service'
 import { CreateTextSourceDto } from './dto/create-text-source.dto'
 import { CreateUrlSourceDto } from './dto/create-url-source.dto'
+import { EditLearningItemDto } from './dto/edit-learning-item.dto'
 import { RenderIllustrationDto } from './dto/render-illustration.dto'
 import { UpdateIllustrationDto } from './dto/update-illustration.dto'
 import { UpdateLearningItemDto } from './dto/update-learning-item.dto'
+import { UpdateRetrievalPromptDto } from './dto/update-retrieval-prompt.dto'
 import { TransformerService } from './transformer.service'
 
 /**
@@ -269,6 +271,51 @@ export class TransformerController {
       id,
       itemId,
       dto.validationStatus,
+    )
+  }
+
+  /**
+   * Edit a learning item's content in place (DET-359). Content-only — it never
+   * carries a validation status, so it can't internalize a concept. Mirrors the
+   * other learning-layer mutations' user/workspace scoping (resolved in service).
+   */
+  @Patch('articles/:id/learning-layer/items/:itemId/edit')
+  editLearningItem(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: EditLearningItemDto,
+  ) {
+    return this.transformer.editLearningItem(user.userId, id, itemId, {
+      label: dto.label,
+      definition: dto.definition,
+      importance: dto.importance,
+    })
+  }
+
+  /**
+   * Update a retrieval prompt's review state (DET-359): suggested/saved/answered/
+   * rejected, the reader's own-words answer, and in-place prompt edits. It can
+   * never schedule a permanent review card (no "scheduled" status exists here),
+   * so a prompt never becomes a review card without the explicit downstream
+   * action that scheduling requires.
+   */
+  @Patch('articles/:id/learning-layer/retrieval-prompts/:promptId')
+  updateRetrievalPrompt(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('promptId') promptId: string,
+    @Body() dto: UpdateRetrievalPromptDto,
+  ) {
+    return this.transformer.updateRetrievalPromptReview(
+      user.userId,
+      id,
+      promptId,
+      {
+        reviewStatus: dto.reviewStatus,
+        userAnswer: dto.userAnswer,
+        prompt: dto.prompt,
+      },
     )
   }
 }

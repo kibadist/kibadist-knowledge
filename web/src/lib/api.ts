@@ -1419,6 +1419,18 @@ export interface LearningRetrievalPrompt {
   id: string
   prompt: string
   sourceBlockIds: string[]
+  // Additive (DET-359): the v3 review fields. Old learning-layer rows predate
+  // them and omit them; the v3 adapter defaults each gracefully.
+  /** The kind of recall the prompt exercises (grouping key). */
+  promptType?: string
+  /** Concept-candidate ids this prompt exercises. */
+  linkedConceptIds?: string[]
+  /** Source blocks that hold the expected answer. */
+  expectedAnswerBlockIds?: string[]
+  /** Review lifecycle: suggested | saved | answered | rejected. */
+  reviewStatus?: 'suggested' | 'saved' | 'answered' | 'rejected'
+  /** The reader's own-words answer, stored verbatim (gates scheduling). */
+  userAnswer?: string
 }
 
 // A per-section concept-extraction CANDIDATE (DET-283). A PROPOSAL — never an
@@ -1440,6 +1452,12 @@ export interface LearningConceptCandidate {
   /** The INBOX "to learn" Concept created when the user validated this
    *  candidate (DET-283). Present ⇒ validation already promoted it. */
   conceptId?: string
+  // Additive (DET-359): v3 review fields. Old rows omit them; the v3 adapter
+  // defaults importance to 'medium' when absent.
+  /** Generator-assigned importance: high | medium | low. */
+  importance?: 'high' | 'medium' | 'low'
+  /** A short preview of the source span backing the candidate. */
+  sourceSpanPreview?: string
 }
 
 export interface LearningLayer {
@@ -2056,6 +2074,38 @@ export const api = {
     request<LearningLayer>(
       `/transformer/articles/${articleId}/sections/${sectionId}/concepts`,
       { method: 'POST' },
+    ),
+  // v3 review panels (DET-359): edit a concept/candidate's text in place. Edits
+  // are content-only — they never touch validation status or create knowledge.
+  editLearningItem: (
+    articleId: string,
+    itemId: string,
+    edit: {
+      label?: string
+      definition?: string
+      importance?: 'high' | 'medium' | 'low'
+    },
+  ) =>
+    request<LearningLayer>(
+      `/transformer/articles/${articleId}/learning-layer/items/${itemId}/edit`,
+      { method: 'PATCH', body: JSON.stringify(edit) },
+    ),
+  // v3 review panels (DET-359): update a retrieval prompt's review state. This
+  // endpoint never schedules a permanent review card — it only persists the
+  // suggested/saved/answered/rejected status, the user-authored answer, and
+  // in-place prompt edits. Scheduling stays gated on the answer downstream.
+  setRetrievalPromptReview: (
+    articleId: string,
+    promptId: string,
+    patch: {
+      reviewStatus?: 'suggested' | 'saved' | 'answered' | 'rejected'
+      userAnswer?: string
+      prompt?: string
+    },
+  ) =>
+    request<LearningLayer>(
+      `/transformer/articles/${articleId}/learning-layer/retrieval-prompts/${promptId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
     ),
 
   // --- Concept Library (DET-187) ---

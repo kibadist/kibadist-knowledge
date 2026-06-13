@@ -15,6 +15,7 @@ import {
 } from '@/components/deep-reading'
 import { MagazineArticle } from '@/components/magazine/magazine-article'
 import { ArticleReader } from '@/components/reader/article-reader'
+import { ArticleReviewPanels } from '@/components/transformer/review/article-review-panels'
 import { SourceInspector } from '@/components/transformer/source-inspector'
 import {
   ApiError,
@@ -568,15 +569,24 @@ function ArticleView({
         // The Article tab is the finished, readable Compendium render (DET-318) —
         // a magazine/encyclopedia presentation of the same Article JSON v2, with
         // any rendered illustrations placed as plates. The active-recall modes
-        // stay on the Exercise tab.
-        <MagazineArticle
-          article={learningArticle}
-          articleId={articleId}
-          illustrations={article.illustrationPlan?.suggestions ?? []}
-          enrichment={article.enrichment}
-          editorialLayout={article.editorialLayout}
-          provenance={provenance}
-        />
+        // stay on the Exercise tab. Below it, the DET-359 review surface lets the
+        // reader vet AI-suggested concepts and retrieval prompts — nothing here
+        // is internalized or scheduled without an explicit action.
+        <>
+          <MagazineArticle
+            article={learningArticle}
+            articleId={articleId}
+            illustrations={article.illustrationPlan?.suggestions ?? []}
+            enrichment={article.enrichment}
+            editorialLayout={article.editorialLayout}
+            provenance={provenance}
+          />
+          <ArticleReviewPanels
+            articleId={articleId}
+            layer={article.learningLayer}
+            state={article.status === 'BLOCKED' ? 'blocked' : 'ready'}
+          />
+        </>
       ) : (
         <ReadingSurface
           surface={surface}
