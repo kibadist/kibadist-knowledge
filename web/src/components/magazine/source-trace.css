@@ -1,0 +1,325 @@
+/*
+ * Source-trace provenance UI (DET-358) — the slide-in trace drawer + the
+ * provenance appendix below the article. Light-only, on the shared editorial
+ * `.kbapp` tokens (inherited; selectors are bare to match magazine-article.css).
+ */
+
+/* ---- Inline block affordance: a paragraph/block becomes inspectable ---- */
+.kb-mag-traceable {
+  cursor: pointer;
+  position: relative;
+  border-radius: 1px;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.kb-mag-traceable:hover,
+.kb-mag-traceable:focus-visible {
+  background: var(--paper-hi);
+  box-shadow:
+    -10px 0 0 var(--paper-hi),
+    10px 0 0 var(--paper-hi);
+  outline: none;
+}
+/* The provenance dot: a quiet margin tick that a block carries a source trace. */
+.kb-mag-traceable::after {
+  content: "";
+  position: absolute;
+  top: 0.55em;
+  left: -14px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.kb-mag-traceable:hover::after,
+.kb-mag-traceable:focus-visible::after {
+  opacity: 0.7;
+}
+/* Unsupported / high-risk inline blocks stay visible without a click. */
+.kb-mag-traceable.is-unsupported {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+  padding-left: 10px;
+}
+.kb-mag-traceable.is-highrisk {
+  box-shadow: inset 3px 0 0 var(--rule);
+  padding-left: 10px;
+}
+.kb-mag-traceflag {
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  vertical-align: super;
+  margin-left: 4px;
+  user-select: none;
+}
+
+/* ---- The drawer ---- */
+.kb-trace-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(26, 23, 20, 0.28);
+  border: none;
+  cursor: pointer;
+}
+.kb-trace {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(460px, 92vw);
+  z-index: 91;
+  background: var(--paper);
+  border-left: 1px solid var(--rule);
+  box-shadow: -10px 0 0 var(--rule);
+  padding: 26px;
+  overflow-y: auto;
+  animation: kb-trace-slide-in 0.25s ease;
+}
+.kb-trace.is-unsupported {
+  border-left: 3px solid var(--accent);
+}
+@keyframes kb-trace-slide-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.kb-trace-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--rule-soft);
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+}
+.kb-trace-kicker {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ink-muted);
+}
+.kb-trace-close {
+  background: transparent;
+  border: 1px solid var(--rule-soft);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  color: var(--ink-muted);
+  transition: all 0.15s;
+}
+.kb-trace-close:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.kb-trace-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.kb-trace-section,
+.kb-trace-ref {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+  margin: 0 0 10px;
+}
+.kb-trace-ref a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.kb-trace-ref a:hover {
+  text-decoration: underline;
+}
+.kb-trace-block {
+  margin-bottom: 22px;
+}
+.kb-trace-h {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ink-muted);
+  margin: 0 0 10px;
+}
+.kb-trace-generated {
+  font-family: var(--font-body), serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 0;
+  padding: 14px;
+  background: var(--paper-hi);
+  border: 1px solid var(--rule-soft);
+  white-space: pre-wrap;
+}
+.kb-trace-source {
+  margin: 0 0 16px;
+  border-left: 3px solid var(--accent);
+  padding: 4px 0 4px 16px;
+}
+.kb-trace-source blockquote {
+  margin: 0;
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.kb-trace-source figcaption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.kb-trace-loc {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.kb-trace-id,
+.kb-trace-ids {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  background: var(--paper-2);
+  padding: 1px 5px;
+  border: 1px solid var(--rule-soft);
+}
+.kb-trace-warn {
+  margin-top: 12px;
+}
+
+/* ---- The provenance appendix ---- */
+.kb-prov {
+  margin: 48px auto 0;
+  max-width: 760px;
+  border-top: 1px solid var(--rule);
+  padding-top: 28px;
+}
+.kb-prov-head {
+  margin-bottom: 22px;
+}
+.kb-prov-kicker {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--ink-muted);
+}
+.kb-prov-sub {
+  font-family: var(--font-body), serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin: 8px 0 0;
+}
+.kb-prov-group {
+  margin-bottom: 24px;
+}
+.kb-prov-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+  margin: 0 0 10px;
+}
+.kb-prov-count {
+  font-size: 10px;
+  color: var(--ink-muted);
+  background: var(--paper-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: 999px;
+  padding: 0 7px;
+  line-height: 16px;
+}
+.kb-prov-empty {
+  font-family: var(--font-body), serif;
+  font-size: 13.5px;
+  color: var(--ink-faint);
+  margin: 0;
+}
+.kb-prov-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kb-prov-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  background: var(--paper-hi);
+  border: 1px solid var(--rule-soft);
+  border-left: 3px solid var(--rule-soft);
+  padding: 10px 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.kb-prov-row:hover,
+.kb-prov-row:focus-visible {
+  border-left-color: var(--accent);
+  background: var(--paper);
+  outline: none;
+}
+.kb-prov-row.is-unsupported {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--paper-hi));
+}
+.kb-prov-row-text {
+  font-family: var(--font-body), serif;
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.kb-prov-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.kb-prov-row-section {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+.kb-prov-row-srccount {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
