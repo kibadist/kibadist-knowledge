@@ -1,5 +1,6 @@
 import {
   type Prisma,
+  SourceBlockPlacement,
   TransformedArticleStatus,
   TransformerBlockClass,
 } from '@kibadist/prisma'
@@ -26,6 +27,8 @@ import type {
   ReshapingPlan,
   SourceStructureModel,
 } from './schemas'
+import { SourceDiagnosisService } from './source-diagnosis.service'
+import type { SourceDiagnosisMetadata } from './source-diagnosis.types'
 import type { ClassifiedBlockInput } from './structure-model.service'
 import { StructureModelService } from './structure-model.service'
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
@@ -67,6 +70,7 @@ export class ArticlePipelineService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly sourceDiagnosis: SourceDiagnosisService,
     private readonly structureModel: StructureModelService,
     private readonly segmentation: ConceptualSegmentationService,
     private readonly reshapingPlan: ReshapingPlanService,
@@ -144,6 +148,22 @@ export class ArticlePipelineService {
     const blocks = await this.loadBlocks(sourceId, blocksVersion)
     if (blocks.length === 0) {
       throw new Error('Source has no blocks at the pinned version')
+    }
+
+    // --- 5b. Source diagnosis (DET-345) -------------------------------------
+    // Deterministic, no LLM: detect the SourceKind and select the v3 ArticleShape
+    // BEFORE any prompt is built, then store the diagnosis on the job. The router
+    // decides v2 (default) vs v3 (flag + targeted-kind gated); v3 has no generator
+    // yet, so EVERY article still runs the v2 pipeline below — the decision is
+    // recorded for rollout/analytics and never alters the v2 output. Never fatal:
+    // a diagnosis failure logs and leaves the article on the conservative path.
+    const meta = await this.loadSourceMeta(sourceId)
+    const routing = this.tryDiagnose(articleId, blocks, meta)
+    if (routing) {
+      await this.persist(articleId, {
+        sourceDiagnosis: routing.diagnosis as unknown as Prisma.InputJsonValue,
+      })
+      this.logger.log(`Article ${articleId} routing — ${routing.reason}`)
     }
 
     // --- 6. Structure model -------------------------------------------------
@@ -476,6 +496,51 @@ export class ArticlePipelineService {
     return buildCoverageReport(article, coverageBlocks, plan.removedBlocks)
   }
 
+  /**
+   * Run the source diagnosis + routing decision; never throws. A failure logs and
+   * yields null so the article still runs the v2 pipeline (the conservative path).
+   */
+  private tryDiagnose(
+    articleId: string,
+    blocks: LoadedBlock[],
+    meta: SourceDiagnosisMetadata,
+  ): ReturnType<SourceDiagnosisService['route']> | null {
+    try {
+      return this.sourceDiagnosis.route(blocks, meta)
+    } catch (error) {
+      this.logger.warn(
+        `Source diagnosis failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
+  }
+
+  /** Load the detection-relevant metadata projection for a source. */
+  private async loadSourceMeta(
+    sourceId: string,
+  ): Promise<SourceDiagnosisMetadata> {
+    const source = await this.prisma.transformerSource.findUnique({
+      where: { id: sourceId },
+      select: { type: true, url: true, fileName: true, metadata: true },
+    })
+    if (!source) return {}
+    const pageCount =
+      source.metadata &&
+      typeof source.metadata === 'object' &&
+      !Array.isArray(source.metadata) &&
+      typeof (source.metadata as { pageCount?: unknown }).pageCount === 'number'
+        ? (source.metadata as { pageCount: number }).pageCount
+        : null
+    return {
+      sourceType: source.type,
+      url: source.url,
+      fileName: source.fileName,
+      pageCount,
+    }
+  }
+
   /** Load the pinned-version blocks for a source as M2/M3 inputs. */
   async loadBlocks(
     sourceId: string,
@@ -491,6 +556,7 @@ export class ArticlePipelineService {
         headingLevel: true,
         classification: true,
         removable: true,
+        placement: true,
       },
     })
     return rows.map((r) => ({
@@ -499,7 +565,13 @@ export class ArticlePipelineService {
       classification: r.classification ?? TransformerBlockClass.UNCERTAIN,
       text: r.text,
       headingLevel: r.headingLevel,
-      removable: r.removable,
+      // Main-body generation ignores filler/navigation/reference clutter by
+      // default (DET-346): a block is excluded from the body when the noise
+      // classifier marked it removable OR the role classifier recommends it be
+      // discarded / moved to source notes. SOURCE_NOTES blocks (references,
+      // bibliography, external links) are kept in the DB with their placement
+      // for the fidelity/source-notes lane — they just don't enter the prose.
+      removable: r.removable || excludedFromMainBody(r.placement),
       uncertain:
         r.classification === TransformerBlockClass.UNCERTAIN ||
         !r.classification,
@@ -540,4 +612,17 @@ export class ArticlePipelineService {
       )
     }
   }
+}
+
+/**
+ * Whether a role classifier placement (DET-346) keeps a block OUT of the main
+ * body: DISCARD (filler/navigation) and SOURCE_NOTES (references, bibliography,
+ * external links) are both excluded from the generated prose. MAIN_BODY /
+ * CALLOUT and a null placement (un-role-classified) keep the block in play.
+ */
+function excludedFromMainBody(placement: SourceBlockPlacement | null): boolean {
+  return (
+    placement === SourceBlockPlacement.DISCARD ||
+    placement === SourceBlockPlacement.SOURCE_NOTES
+  )
 }
