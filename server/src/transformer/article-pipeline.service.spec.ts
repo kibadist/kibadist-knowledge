@@ -5,11 +5,14 @@ import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { CalloutGeneratorService } from './callout-generator.service'
+import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningPromptsService } from './learning-prompts.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
+import { SourceDiagnosisService } from './source-diagnosis.service'
 import { StructureModelService } from './structure-model.service'
 import { TableGeneratorService } from './table-generator.service'
 import type { ArticleJsonV2, FidelityReport } from './transformer.types'
@@ -38,7 +41,20 @@ function makeStubPrisma() {
   const transformerSourceBlock = {
     findMany: jest.fn(async () => blockRows),
   }
-  const prisma = { transformedArticle, transformerSourceBlock }
+  // loadSourceMeta (DET-345) reads the source row for detection metadata.
+  const transformerSource = {
+    findUnique: jest.fn(async () => ({
+      type: 'TEXT',
+      url: null,
+      fileName: null,
+      metadata: null,
+    })),
+  }
+  const prisma = {
+    transformedArticle,
+    transformerSourceBlock,
+    transformerSource,
+  }
   return { prisma, article, statusLog }
 }
 
@@ -98,6 +114,7 @@ const okReport: FidelityReport = {
 
 function makeServices(overrides: {
   structure?: Partial<StructureModelService>
+  segmentation?: Partial<ConceptualSegmentationService>
   plan?: Partial<ReshapingPlanService>
   generate?: Partial<ArticleGeneratorService>
   fidelity?: Partial<FidelityCheckerService>
@@ -120,6 +137,26 @@ function makeServices(overrides: {
     })),
     ...overrides.structure,
   } as unknown as StructureModelService
+  const segmentation = {
+    // A minimal segmentation: one high-importance segment over b1, no orphans.
+    segment: jest.fn(async () => ({
+      segments: [
+        {
+          id: 'seg-0',
+          title: 'A claim',
+          role: 'orientation',
+          sourceBlockIds: ['b1'],
+          importance: 'high',
+          summary: 'A claim',
+          mustPreserveClaims: [],
+          suggestedArticlePlacement: 'main_body',
+        },
+      ],
+      unsegmentedBlocks: [],
+      warnings: [],
+    })),
+    ...overrides.segmentation,
+  } as unknown as ConceptualSegmentationService
   const plan = {
     build: jest.fn(async () => ({ removedBlocks: [] })),
     ...overrides.plan,
@@ -148,6 +185,13 @@ function makeServices(overrides: {
     build: jest.fn(async () => ({})),
   } as unknown as EditorialLayoutService
   const learning = {} as LearningLayerService
+  const learningPrompts = {
+    build: jest.fn(async () => ({ retrievalPrompts: [], misconceptions: [] })),
+  } as unknown as LearningPromptsService
+  // Real diagnosis service over a stub ConfigService (v3 flag off ⇒ always v2).
+  const diagnosis = new SourceDiagnosisService({
+    get: () => undefined,
+  } as never)
   const ai = {
     image: jest.fn(async () => ({
       base64: '',
@@ -160,6 +204,7 @@ function makeServices(overrides: {
   } as unknown as AiService
   return {
     structure,
+    segmentation,
     plan,
     generate,
     callouts,
@@ -169,6 +214,8 @@ function makeServices(overrides: {
     enrichment,
     editorialLayout,
     learning,
+    learningPrompts,
+    diagnosis,
     ai,
   }
 }
@@ -179,7 +226,9 @@ describe('ArticlePipelineService.run', () => {
     const s = makeServices({})
     const pipeline = new ArticlePipelineService(
       prisma as never,
+      s.diagnosis,
       s.structure,
+      s.segmentation,
       s.plan,
       s.generate,
       s.callouts,
@@ -189,6 +238,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
       s.ai,
     )
 
@@ -237,15 +287,14 @@ describe('ArticlePipelineService.run', () => {
     expect(checkArg.calloutPlacements).toBeDefined()
   })
 
-  it('ends BLOCKED when the fidelity gate rejects', async () => {
-    const { prisma, statusLog } = makeStubPrisma()
-    const blockedReport: FidelityReport = { ...okReport, approved: false }
-    const s = makeServices({
-      fidelity: { check: jest.fn(async () => blockedReport) },
-    })
+  it('persists the conceptual segmentation and feeds it to the outline (DET-347)', async () => {
+    const { prisma, article } = makeStubPrisma()
+    const s = makeServices({})
     const pipeline = new ArticlePipelineService(
       prisma as never,
+      s.diagnosis,
       s.structure,
+      s.segmentation,
       s.plan,
       s.generate,
       s.callouts,
@@ -255,6 +304,83 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
+      s.ai,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // Segmentation ran and its artifact was persisted onto `segments`.
+    expect(
+      s.segmentation.segment as unknown as jest.Mock,
+    ).toHaveBeenCalledTimes(1)
+    expect(article.segments).toBeTruthy()
+
+    // The reshaping plan (outline) consumed the segmentation as its 3rd argument.
+    const planMock = s.plan.build as unknown as jest.Mock
+    const segmentationArg = planMock.mock.calls[0][2]
+    expect(segmentationArg).toBeTruthy()
+    expect(segmentationArg.segments[0].id).toBe('seg-0')
+  })
+
+  it('degrades to no-segmentation (outline still runs) when segmentation throws', async () => {
+    const { prisma, statusLog, article } = makeStubPrisma()
+    const s = makeServices({
+      segmentation: {
+        segment: jest.fn(async () => {
+          throw new Error('segmentation blew up')
+        }),
+      },
+    })
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.ai,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // A segmentation failure must NOT fail the article — it still reaches FINAL,
+    // and the outline was called with a null segmentation (degraded path).
+    expect(statusLog).toContain(TransformedArticleStatus.FINAL)
+    expect(article.segments).toBeFalsy()
+    const planMock = s.plan.build as unknown as jest.Mock
+    expect(planMock.mock.calls[0][2]).toBeNull()
+  })
+
+  it('ends BLOCKED when the fidelity gate rejects', async () => {
+    const { prisma, statusLog } = makeStubPrisma()
+    const blockedReport: FidelityReport = { ...okReport, approved: false }
+    const s = makeServices({
+      fidelity: { check: jest.fn(async () => blockedReport) },
+    })
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
       s.ai,
     )
 
@@ -275,7 +401,9 @@ describe('ArticlePipelineService.run', () => {
     })
     const pipeline = new ArticlePipelineService(
       prisma as never,
+      s.diagnosis,
       s.structure,
+      s.segmentation,
       s.plan,
       s.generate,
       s.callouts,
@@ -285,6 +413,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
       s.ai,
     )
 

@@ -7,13 +7,18 @@ import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { BlockClassifierService } from './block-classifier.service'
+import { BlockRoleClassifierService } from './block-role-classifier.service'
 import { CalloutGeneratorService } from './callout-generator.service'
+import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningPromptsService } from './learning-prompts.service'
 import { PipelineService } from './pipeline.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
+import { RewriteService } from './rewrite.service'
+import { SourceDiagnosisService } from './source-diagnosis.service'
 import { StructureModelService } from './structure-model.service'
 import { TableGeneratorService } from './table-generator.service'
 import { TransformerController } from './transformer.controller'
@@ -35,8 +40,12 @@ import { TransformerService } from './transformer.service'
     TransformerService,
     PipelineService,
     BlockClassifierService,
+    BlockRoleClassifierService,
+    SourceDiagnosisService,
     StructureModelService,
+    ConceptualSegmentationService,
     ReshapingPlanService,
+    RewriteService,
     ArticleGeneratorService,
     CalloutGeneratorService,
     TableGeneratorService,
@@ -45,6 +54,7 @@ import { TransformerService } from './transformer.service'
     ArticleEnrichmentService,
     EditorialLayoutService,
     LearningLayerService,
+    LearningPromptsService,
     ArticlePipelineService,
   ],
   exports: [TransformerService, PipelineService],

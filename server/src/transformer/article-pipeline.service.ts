@@ -1,31 +1,40 @@
 import {
   type Prisma,
+  SourceBlockPlacement,
   TransformedArticleStatus,
   TransformerBlockClass,
 } from '@kibadist/prisma'
 import { Injectable, Logger } from '@nestjs/common'
 import { AiService } from '../ai/ai.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { toArticleV2 } from './article-compat.util'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { CalloutGeneratorService } from './callout-generator.service'
 import { placeCallouts } from './callout-placement.util'
+import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { buildCoverageReport, type CoverageBlock } from './coverage.util'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import type { PromptConceptCandidate } from './learning-prompts.prompt'
+import { LearningPromptsService } from './learning-prompts.service'
 import { buildReadingAids } from './reading-aids.util'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import type {
+  ArticleConceptCandidate,
   ArticleEnrichment,
   IllustrationPlan,
   IllustrationSuggestion,
   LearningConceptCandidate,
   LearningLayer,
+  LearningPromptSet,
   ReshapingPlan,
   SourceStructureModel,
 } from './schemas'
+import { SourceDiagnosisService } from './source-diagnosis.service'
+import type { SourceDiagnosisMetadata } from './source-diagnosis.types'
 import { buildSourceNotes } from './source-notes.util'
 import type { ClassifiedBlockInput } from './structure-model.service'
 import { StructureModelService } from './structure-model.service'
@@ -36,6 +45,7 @@ import {
   type ArticleComparisonTable,
   type ArticleGeneratedCallout,
   type ArticleJsonV2,
+  type ConceptualSegmentation,
   type CoverageReport,
   type EditorialLayout,
   type FidelityReport,
@@ -71,7 +81,9 @@ export class ArticlePipelineService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly sourceDiagnosis: SourceDiagnosisService,
     private readonly structureModel: StructureModelService,
+    private readonly segmentation: ConceptualSegmentationService,
     private readonly reshapingPlan: ReshapingPlanService,
     private readonly generator: ArticleGeneratorService,
     private readonly callouts: CalloutGeneratorService,
@@ -81,6 +93,7 @@ export class ArticlePipelineService {
     private readonly enrichment: ArticleEnrichmentService,
     private readonly editorialLayout: EditorialLayoutService,
     private readonly learning: LearningLayerService,
+    private readonly learningPrompts: LearningPromptsService,
     private readonly ai: AiService,
   ) {}
 
@@ -151,6 +164,22 @@ export class ArticlePipelineService {
       throw new Error('Source has no blocks at the pinned version')
     }
 
+    // --- 5b. Source diagnosis (DET-345) -------------------------------------
+    // Deterministic, no LLM: detect the SourceKind and select the v3 ArticleShape
+    // BEFORE any prompt is built, then store the diagnosis on the job. The router
+    // decides v2 (default) vs v3 (flag + targeted-kind gated); v3 has no generator
+    // yet, so EVERY article still runs the v2 pipeline below — the decision is
+    // recorded for rollout/analytics and never alters the v2 output. Never fatal:
+    // a diagnosis failure logs and leaves the article on the conservative path.
+    const meta = await this.loadSourceMeta(sourceId)
+    const routing = this.tryDiagnose(articleId, blocks, meta)
+    if (routing) {
+      await this.persist(articleId, {
+        sourceDiagnosis: routing.diagnosis as unknown as Prisma.InputJsonValue,
+      })
+      this.logger.log(`Article ${articleId} routing — ${routing.reason}`)
+    }
+
     // --- 6. Structure model -------------------------------------------------
     await this.setStatus(articleId, TransformedArticleStatus.MODELING)
     const structureModel = await this.structureModel.build(blocks)
@@ -158,9 +187,22 @@ export class ArticlePipelineService {
       structureModel: structureModel as unknown as Prisma.InputJsonValue,
     })
 
+    // --- 6b. Conceptual segmentation (DET-347) ------------------------------
+    // Group the classified blocks into ordered learning segments BEFORE the
+    // outline, so the reshaping plan builds sections from whole concepts instead
+    // of isolated blocks (which turned transcripts into fragment lists). Runs
+    // within the MODELING phase (no new status enum). Best-effort: a failure
+    // degrades to no-segmentation and the outline still runs exactly as before —
+    // segmentation is an optional input to the plan, never a hard gate.
+    const segments = await this.trySegment(articleId, structureModel, blocks)
+
     // --- 7. Reshaping plan --------------------------------------------------
     await this.setStatus(articleId, TransformedArticleStatus.PLANNING)
-    const plan = await this.reshapingPlan.build(structureModel, blocks)
+    const plan = await this.reshapingPlan.build(
+      structureModel,
+      blocks,
+      segments,
+    )
     await this.persist(articleId, {
       reshapingPlan: plan as unknown as Prisma.InputJsonValue,
     })
@@ -230,6 +272,15 @@ export class ArticlePipelineService {
     // Editorial layout (the generative presentation lane) is another fast text
     // call, so it stays INLINE beside enrichment and ships at the terminal status.
     const editorialLayout = await this.tryEditorialLayout(articleId, article)
+    // Whole-article concept extraction (DET-351). A source-grounded learning lane
+    // that mints the Concept Library candidates for this article so a concept-rich
+    // source never finalizes with zero (the bug this fixes). Best-effort: a failure
+    // logs and yields null, and the article still finalizes without candidates.
+    const articleConceptCandidates = await this.tryExtractArticleConcepts(
+      articleId,
+      article,
+      blocks,
+    )
 
     await this.persist(articleId, {
       fidelityReport: report as unknown as Prisma.InputJsonValue,
@@ -242,6 +293,18 @@ export class ArticlePipelineService {
         ? {
             editorialLayout:
               editorialLayout as unknown as Prisma.InputJsonValue,
+          }
+        : {}),
+      // Seed the learningLayer column with the extracted candidates. The DET-258
+      // study concepts / DET-283 per-section candidates are still produced on
+      // demand and merged in (see generateLearningLayer) without clobbering these.
+      ...(articleConceptCandidates
+        ? {
+            learningLayer: {
+              concepts: [],
+              retrievalPrompts: [],
+              articleConceptCandidates,
+            } as unknown as Prisma.InputJsonValue,
           }
         : {}),
       status: report.approved
@@ -313,6 +376,38 @@ export class ArticlePipelineService {
     }
   }
 
+  // --- Conceptual segmentation, best-effort (DET-347) -----------------------
+
+  /**
+   * Build + persist the conceptual segmentation; never throws — a failure logs and
+   * yields null so the outline still runs (degraded to no-segmentation, exactly as
+   * the pipeline behaved before DET-347). On success the segment→block mapping is
+   * persisted onto `segments` and returned so the reshaping plan can consume it.
+   */
+  private async trySegment(
+    articleId: string,
+    structureModel: SourceStructureModel,
+    blocks: LoadedBlock[],
+  ): Promise<ConceptualSegmentation | null> {
+    try {
+      const segmentation = await this.segmentation.segment(
+        structureModel,
+        blocks,
+      )
+      await this.persist(articleId, {
+        segments: segmentation as unknown as Prisma.InputJsonValue,
+      })
+      return segmentation
+    } catch (error) {
+      this.logger.warn(
+        `Conceptual segmentation failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
+  }
+
   // --- AI extras, best-effort (DET-319) -------------------------------------
 
   /** Build enrichment; never throws — a failure logs and yields null so the
@@ -344,6 +439,29 @@ export class ArticlePipelineService {
     } catch (error) {
       this.logger.warn(
         `Editorial layout failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
+  }
+
+  /**
+   * Extract the whole-article concept candidates (DET-351); never throws — a
+   * failure logs and yields null so the article still finalizes without them.
+   * Returns the candidate list (possibly empty) on success, null on failure, so
+   * the caller can tell "ran, found none" from "did not run".
+   */
+  private async tryExtractArticleConcepts(
+    articleId: string,
+    article: ArticleJsonV2,
+    blocks: LoadedBlock[],
+  ): Promise<ArticleConceptCandidate[] | null> {
+    try {
+      return await this.learning.extractArticleConcepts(article, blocks)
+    } catch (error) {
+      this.logger.warn(
+        `Concept extraction failed for ${articleId}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       )
@@ -458,18 +576,111 @@ export class ArticlePipelineService {
     }
   }
 
-  /** Generate + persist the learning layer for an article (never touches articleJson). */
+  /**
+   * Generate + persist the DET-258 study layer (concepts + retrieval prompts) for
+   * an article on demand (never touches articleJson). The article's DET-283
+   * per-section candidates and DET-351 whole-article candidates live in the SAME
+   * learningLayer JSON column, so we read the existing row and carry them forward —
+   * regenerating the study concepts must never wipe the extracted candidates.
+   */
   async generateLearningLayer(
     articleId: string,
     sourceId: string,
     blocksVersion: number,
   ): Promise<LearningLayer> {
     const blocks = await this.loadBlocks(sourceId, blocksVersion)
-    const layer = await this.learning.build(blocks)
+    const built = await this.learning.build(blocks)
+    const existing = await this.prisma.transformedArticle.findUnique({
+      where: { id: articleId },
+      select: { learningLayer: true, articleJson: true, structureModel: true },
+    })
+    const prior = (existing?.learningLayer as LearningLayer | null) ?? null
+    const layer: LearningLayer = {
+      ...built,
+      ...(prior?.conceptCandidates
+        ? { conceptCandidates: prior.conceptCandidates }
+        : {}),
+      ...(prior?.articleConceptCandidates
+        ? { articleConceptCandidates: prior.articleConceptCandidates }
+        : {}),
+    }
+
+    // Learning prompts + misconceptions (DET-353): an additive source-grounded
+    // study lane that consumes the generated article (sections/source examples/
+    // callouts), the prior concept candidates, and the structure model's key
+    // claims. Best-effort — a failure leaves the DET-258 layer intact and only
+    // logs. NOTHING here schedules a permanent review card: every prompt starts
+    // `ai_suggested` and is only promoted when the learner validates/answers it.
+    const promptSet = await this.tryBuildLearningPrompts(
+      articleId,
+      existing?.articleJson as
+        | SourcePreservingArticle
+        | ArticleJsonV2
+        | null
+        | undefined,
+      existing?.structureModel as SourceStructureModel | null | undefined,
+      prior,
+      blocks,
+    )
+    if (promptSet) {
+      layer.retrievalPromptCandidates = promptSet.retrievalPrompts
+      layer.misconceptions = promptSet.misconceptions
+    }
+
     await this.persist(articleId, {
       learningLayer: layer as unknown as Prisma.InputJsonValue,
     })
     return layer
+  }
+
+  /**
+   * Build the DET-353 retrieval-prompt + misconception set for an article; never
+   * throws — a failure (or a missing/ungenerated article) logs and yields null so
+   * the DET-258 learning layer still persists. Concept candidates are drawn from
+   * BOTH the DET-283 per-section candidates and the DET-351 whole-article
+   * candidates (normalized to id/label/definition); key claims come from the stored
+   * structure model.
+   */
+  private async tryBuildLearningPrompts(
+    articleId: string,
+    articleJson: SourcePreservingArticle | ArticleJsonV2 | null | undefined,
+    structureModel: SourceStructureModel | null | undefined,
+    prior: LearningLayer | null,
+    blocks: LoadedBlock[],
+  ): Promise<LearningPromptSet | null> {
+    if (!articleJson) return null
+    try {
+      const article = toArticleV2(articleJson)
+      const conceptCandidates: PromptConceptCandidate[] = [
+        ...(prior?.conceptCandidates ?? []).map((c) => ({
+          id: c.id,
+          label: c.label,
+          definition: c.definition,
+        })),
+        ...(prior?.articleConceptCandidates ?? []).map((c) => ({
+          id: c.id,
+          label: c.name,
+          definition: c.shortDefinition ?? c.name,
+        })),
+      ]
+      const keyClaims = (structureModel?.claims ?? []).map((c) => ({
+        text: c.text,
+        sourceBlockIds: c.sourceBlockIds,
+      }))
+      return await this.learningPrompts.build({
+        article,
+        blocks,
+        conceptCandidates,
+        keyClaims,
+      })
+    } catch (error) {
+      this.logger.warn(
+        `Learning prompts failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
   }
 
   /**
@@ -502,6 +713,51 @@ export class ArticlePipelineService {
     return buildCoverageReport(article, coverageBlocks, plan.removedBlocks)
   }
 
+  /**
+   * Run the source diagnosis + routing decision; never throws. A failure logs and
+   * yields null so the article still runs the v2 pipeline (the conservative path).
+   */
+  private tryDiagnose(
+    articleId: string,
+    blocks: LoadedBlock[],
+    meta: SourceDiagnosisMetadata,
+  ): ReturnType<SourceDiagnosisService['route']> | null {
+    try {
+      return this.sourceDiagnosis.route(blocks, meta)
+    } catch (error) {
+      this.logger.warn(
+        `Source diagnosis failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
+  }
+
+  /** Load the detection-relevant metadata projection for a source. */
+  private async loadSourceMeta(
+    sourceId: string,
+  ): Promise<SourceDiagnosisMetadata> {
+    const source = await this.prisma.transformerSource.findUnique({
+      where: { id: sourceId },
+      select: { type: true, url: true, fileName: true, metadata: true },
+    })
+    if (!source) return {}
+    const pageCount =
+      source.metadata &&
+      typeof source.metadata === 'object' &&
+      !Array.isArray(source.metadata) &&
+      typeof (source.metadata as { pageCount?: unknown }).pageCount === 'number'
+        ? (source.metadata as { pageCount: number }).pageCount
+        : null
+    return {
+      sourceType: source.type,
+      url: source.url,
+      fileName: source.fileName,
+      pageCount,
+    }
+  }
+
   /** Load the pinned-version blocks for a source as M2/M3 inputs. */
   async loadBlocks(
     sourceId: string,
@@ -517,6 +773,7 @@ export class ArticlePipelineService {
         headingLevel: true,
         classification: true,
         removable: true,
+        placement: true,
       },
     })
     return rows.map((r) => ({
@@ -525,7 +782,13 @@ export class ArticlePipelineService {
       classification: r.classification ?? TransformerBlockClass.UNCERTAIN,
       text: r.text,
       headingLevel: r.headingLevel,
-      removable: r.removable,
+      // Main-body generation ignores filler/navigation/reference clutter by
+      // default (DET-346): a block is excluded from the body when the noise
+      // classifier marked it removable OR the role classifier recommends it be
+      // discarded / moved to source notes. SOURCE_NOTES blocks (references,
+      // bibliography, external links) are kept in the DB with their placement
+      // for the fidelity/source-notes lane — they just don't enter the prose.
+      removable: r.removable || excludedFromMainBody(r.placement),
       uncertain:
         r.classification === TransformerBlockClass.UNCERTAIN ||
         !r.classification,
@@ -566,4 +829,17 @@ export class ArticlePipelineService {
       )
     }
   }
+}
+
+/**
+ * Whether a role classifier placement (DET-346) keeps a block OUT of the main
+ * body: DISCARD (filler/navigation) and SOURCE_NOTES (references, bibliography,
+ * external links) are both excluded from the generated prose. MAIN_BODY /
+ * CALLOUT and a null placement (un-role-classified) keep the block in play.
+ */
+function excludedFromMainBody(placement: SourceBlockPlacement | null): boolean {
+  return (
+    placement === SourceBlockPlacement.DISCARD ||
+    placement === SourceBlockPlacement.SOURCE_NOTES
+  )
 }

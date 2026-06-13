@@ -11,6 +11,7 @@ import {
 } from './schemas'
 import type { ClassifiedBlockInput } from './structure-model.service'
 import { repairReshapingPlan } from './traceability-repair.util'
+import type { ConceptualSegmentation } from './transformer.types'
 
 /**
  * Protected classes whose blocks may NEVER be removed by the plan — even if the
@@ -77,6 +78,12 @@ export class ReshapingPlanService {
   async build(
     structureModel: SourceStructureModel,
     blocks: ClassifiedBlockInput[],
+    // Optional conceptual segmentation (DET-347). When present it is fed to the
+    // planner so sections are built from whole learning segments instead of
+    // isolated blocks; absent (an older source or a degraded segmentation run)
+    // the planner behaves exactly as before. It only INFORMS grouping — the code
+    // guards below still re-validate every cited id against the real blocks.
+    segmentation?: ConceptualSegmentation | null,
   ): Promise<ReshapingPlan> {
     const known = new Set(blocks.map((b) => b.id))
     const byId = new Map(blocks.map((b) => [b.id, b]))
@@ -105,6 +112,7 @@ export class ReshapingPlanService {
       JSON.stringify(structureModel),
       content,
       removable,
+      segmentation ?? null,
     )
     const plan = await completeJson(this.ai, {
       system,

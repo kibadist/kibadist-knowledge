@@ -589,6 +589,77 @@ export interface EditorialLayout {
   figurePlacements?: EditorialFigurePlacement[]
 }
 
+/* ===========================================================================
+ * Conceptual segmentation (DET-347) — a pre-outline learning lane.
+ * ===========================================================================
+ *
+ * WHY this exists. The earlier pipeline modelled the source as a flat inventory
+ * (structure model) and then let the reshaping plan pick blocks section-by-block.
+ * For TRANSCRIPTS that produced a fragment list — each block became its own tiny
+ * section and the instructor's teaching arc was lost. Conceptual segmentation
+ * sits BETWEEN the structure model and the reshaping plan: it groups the
+ * classified source blocks into a handful of coherent LEARNING SEGMENTS (by
+ * teaching intent, not by sentence) so the outline can build sections from whole
+ * concepts instead of isolated blocks.
+ *
+ * THE INVARIANT (same as every other stage). A segment never adds substance: it
+ * only GROUPS real source blocks. Every segment carries a non-empty
+ * `sourceBlockIds` drawn from the source, and `mustPreserveClaims` are quotes of
+ * what the source already says (the downstream fidelity check must keep them).
+ * The segment→block mapping is persisted so coverage and fidelity reports can
+ * audit that no high-importance block was dropped on the floor.
+ */
+
+/** What a segment is DOING for the learner — its teaching role (DET-347). */
+export type SegmentRole =
+  | 'orientation'
+  | 'definition'
+  | 'mechanism'
+  | 'distinction'
+  | 'example'
+  | 'analogy'
+  | 'history'
+  | 'application'
+  | 'caveat'
+  | 'summary'
+
+/** How load-bearing a segment is for understanding the source (DET-347). */
+export type SegmentImportance = 'high' | 'medium' | 'low'
+
+/** Where a segment should land in the rendered article (DET-347). */
+export type SegmentArticlePlacement = 'main_body' | 'callout' | 'source_notes'
+
+/**
+ * One coherent learning segment — an ordered group of source blocks that teach a
+ * single idea. `id` is code-minted (`seg-N`) so it is stable and reproducible;
+ * `sourceBlockIds` is the segment→block mapping the coverage/fidelity reports
+ * audit. `mustPreserveClaims` are source claims this segment must not lose.
+ */
+export interface SourceSegment {
+  id: string
+  title: string
+  role: SegmentRole
+  sourceBlockIds: string[]
+  importance: SegmentImportance
+  summary: string
+  mustPreserveClaims: string[]
+  suggestedArticlePlacement: SegmentArticlePlacement
+}
+
+/**
+ * The persisted conceptual-segmentation artifact (DET-347). `segments` are in
+ * source-reading order (the service sorts them by their earliest cited block so
+ * the teaching arc is preserved unless a later outline stage records a reorder).
+ * `unsegmentedBlocks` records every non-removable block that no segment covers,
+ * WITH a reason — the coverage guard guarantees no high-importance block is left
+ * unsegmented without one. `warnings` carries any code-appended audit notes.
+ */
+export interface ConceptualSegmentation {
+  segments: SourceSegment[]
+  unsegmentedBlocks: { blockId: string; reason: string }[]
+  warnings: string[]
+}
+
 /** One audited reading-order move (DET-275). */
 export interface ArticleReorderingAudit {
   sourceBlockId: string

@@ -7,6 +7,7 @@ import {
 
 import type { AiService } from '../ai/ai.service'
 import { BlockClassifierService } from './block-classifier.service'
+import { BlockRoleClassifierService } from './block-role-classifier.service'
 import { PipelineService } from './pipeline.service'
 
 /**
@@ -89,6 +90,27 @@ function stubClassifier(): BlockClassifierService {
   return c
 }
 
+/** A role classifier that marks every block UNKNOWN / main_body (no real AI). */
+function stubRoleClassifier(): BlockRoleClassifierService {
+  const ai = { complete: jest.fn() } as unknown as AiService
+  const c = new BlockRoleClassifierService(ai)
+  jest.spyOn(c, 'classify').mockImplementation(async (input) => {
+    const map = new Map()
+    for (const b of input) {
+      map.set(b.index, {
+        index: b.index,
+        role: 'UNKNOWN',
+        importance: 'LOW',
+        placement: 'MAIN_BODY',
+        reason: null,
+        confidence: 0,
+      })
+    }
+    return map
+  })
+  return c
+}
+
 describe('PipelineService.run', () => {
   it('text source: walks INGESTED→EXTRACTING→EXTRACTED→SEGMENTED→CLASSIFYING→READY', async () => {
     const { prisma, blocks, statusLog } = makeStubPrisma({
@@ -101,7 +123,11 @@ describe('PipelineService.run', () => {
       blocksVersion: 0,
       metadata: null,
     })
-    const pipeline = new PipelineService(prisma as never, stubClassifier())
+    const pipeline = new PipelineService(
+      prisma as never,
+      stubClassifier(),
+      stubRoleClassifier(),
+    )
 
     await pipeline.run('s1')
 
@@ -118,6 +144,10 @@ describe('PipelineService.run', () => {
     expect(blocks.every((b) => b.classificationStatus === 'classified')).toBe(
       true,
     )
+    // Role classification (DET-346) is persisted alongside the noise class.
+    expect(blocks.every((b) => b.roleStatus === 'classified')).toBe(true)
+    expect(blocks.every((b) => b.role === 'UNKNOWN')).toBe(true)
+    expect(blocks.every((b) => b.placement === 'MAIN_BODY')).toBe(true)
   })
 
   it('PDF source with no file bytes → EXTRACTION_FAILED with a message', async () => {
@@ -132,7 +162,11 @@ describe('PipelineService.run', () => {
       metadata: null,
     }
     const { prisma, statusLog } = makeStubPrisma(source)
-    const pipeline = new PipelineService(prisma as never, stubClassifier())
+    const pipeline = new PipelineService(
+      prisma as never,
+      stubClassifier(),
+      stubRoleClassifier(),
+    )
 
     await pipeline.run('s2')
 
@@ -152,7 +186,11 @@ describe('PipelineService.run', () => {
       blocksVersion: 0,
       metadata: null,
     })
-    const pipeline = new PipelineService(prisma as never, stubClassifier())
+    const pipeline = new PipelineService(
+      prisma as never,
+      stubClassifier(),
+      stubRoleClassifier(),
+    )
 
     await Promise.all([pipeline.run('s3'), pipeline.run('s3')])
 
@@ -166,7 +204,11 @@ describe('PipelineService.onApplicationBootstrap (startup sweep)', () => {
     const { prisma } = makeStubPrisma({})
     prisma.transformerSource.updateMany.mockResolvedValueOnce({ count: 2 })
     prisma.transformedArticle.updateMany.mockResolvedValueOnce({ count: 1 })
-    const pipeline = new PipelineService(prisma as never, stubClassifier())
+    const pipeline = new PipelineService(
+      prisma as never,
+      stubClassifier(),
+      stubRoleClassifier(),
+    )
 
     await pipeline.onApplicationBootstrap()
 

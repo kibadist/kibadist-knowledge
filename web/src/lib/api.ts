@@ -1503,11 +1503,54 @@ export interface LearningConceptCandidate {
   conceptId?: string
 }
 
+// The pedagogical category of a retrieval prompt (DET-353). Mirrors the server
+// RetrievalPromptType enum byte-for-byte.
+export type RetrievalPromptType =
+  | 'definition'
+  | 'mechanism'
+  | 'distinction'
+  | 'sequence'
+  | 'analogy'
+  | 'misconception_repair'
+  | 'transfer'
+
+// A richer active-recall prompt CANDIDATE (DET-353). Distinct from the DET-258
+// LearningRetrievalPrompt above: it carries the expected-answer source blocks, a
+// pedagogical type + difficulty, links to concept candidates, and a lifecycle
+// status. AI-suggested at generation; nothing is scheduled as a permanent review
+// card until the learner validates/answers it (status flips downstream).
+export interface RetrievalPromptCandidate {
+  id: string
+  question: string
+  expectedAnswerSourceBlockIds: string[]
+  relatedConceptCandidateIds: string[]
+  promptType: RetrievalPromptType
+  difficulty: 'easy' | 'medium' | 'hard'
+  status: 'ai_suggested' | 'user_validated' | 'rejected'
+}
+
+// A misconception candidate (DET-353): a likely wrong belief + a source-faithful
+// correction. sourceBlockIds MAY be empty — an ungrounded one is kept but stays
+// clearly AI-suggested. confidence is in [0,1].
+export interface MisconceptionCandidate {
+  id: string
+  misconception: string
+  correction: string
+  sourceBlockIds: string[]
+  relatedConceptCandidateIds: string[]
+  confidence: number
+  status: 'ai_suggested' | 'validated' | 'rejected'
+}
+
 export interface LearningLayer {
   concepts: LearningConcept[]
   retrievalPrompts: LearningRetrievalPrompt[]
   // Additive (DET-283): old learning-layer rows predate this and omit it.
   conceptCandidates?: LearningConceptCandidate[]
+  // Additive (DET-353): AI-suggested active-recall prompts + misconception
+  // candidates. Old learning-layer rows predate these and omit them.
+  retrievalPromptCandidates?: RetrievalPromptCandidate[]
+  misconceptions?: MisconceptionCandidate[]
 }
 
 // GET /transformer/articles/:id — the article + fidelity + coverage + status.
