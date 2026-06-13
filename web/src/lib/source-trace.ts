@@ -112,6 +112,11 @@ export interface SourceTraceIndex {
   blocksById: Map<string, TraceSourceBlock>
   /** Per article-block traces keyed by the rendered `block_id`. */
   byBlockId: Map<string, SourceTrace>
+  /** Callout (aside) blocks. Collected separately because the editorial layout
+   *  may route a callout into a non-interactive marginal device — listing them
+   *  in the provenance appendix guarantees an inspection path regardless of
+   *  where the callout renders (DET-358). */
+  callouts: SourceTrace[]
   /** Source-grounded claims (the reading-aids highlights). */
   claims: SourceTrace[]
   /** AI-extracted concept cards. */
@@ -370,6 +375,7 @@ export function buildSourceTraceIndex({
 }: BuildSourceTraceIndexArgs): SourceTraceIndex {
   const blocksById = buildBlocksById(blocks)
   const byBlockId = new Map<string, SourceTrace>()
+  const callouts: SourceTrace[] = []
   const claims: SourceTrace[] = []
   const concepts: SourceTrace[] = []
   const conceptCandidates: SourceTrace[] = []
@@ -380,6 +386,7 @@ export function buildSourceTraceIndex({
     return {
       blocksById,
       byBlockId,
+      callouts,
       claims,
       concepts,
       conceptCandidates,
@@ -409,20 +416,22 @@ export function buildSourceTraceIndex({
   // --- Every body block (paragraph / list / quote / table / code / callout…) ---
   const walkSection = (section: ArticleSectionV2) => {
     for (const block of section.blocks) {
-      byBlockId.set(
-        block.id,
-        makeTrace({
-          id: block.id,
-          kind: blockTraceKind(block.type),
-          generatedText: blockGeneratedText(block),
-          sourceBlockIds: block.sourceBlockIds,
-          blocksById,
-          transformationType: block.transformationType,
-          fidelityRisk: block.fidelityRisk,
-          sectionId: section.id,
-          sectionHeading: section.heading,
-        }),
-      )
+      const trace = makeTrace({
+        id: block.id,
+        kind: blockTraceKind(block.type),
+        generatedText: blockGeneratedText(block),
+        sourceBlockIds: block.sourceBlockIds,
+        blocksById,
+        transformationType: block.transformationType,
+        fidelityRisk: block.fidelityRisk,
+        sectionId: section.id,
+        sectionHeading: section.heading,
+      })
+      byBlockId.set(block.id, trace)
+      // Callouts also surface in the provenance appendix — the layout may render
+      // one as a non-interactive marginal device, so the appendix is the
+      // guaranteed inspection path for them (DET-358).
+      if (block.type === 'callout') callouts.push(trace)
     }
     for (const sub of section.subsections ?? []) walkSection(sub)
   }
@@ -504,6 +513,7 @@ export function buildSourceTraceIndex({
   return {
     blocksById,
     byBlockId,
+    callouts,
     claims,
     concepts,
     conceptCandidates,
@@ -515,6 +525,7 @@ export function buildSourceTraceIndex({
 /** True when an index carries any appendix-level provenance to surface. */
 export function hasProvenanceContent(index: SourceTraceIndex): boolean {
   return (
+    index.callouts.length > 0 ||
     index.claims.length > 0 ||
     index.concepts.length > 0 ||
     index.conceptCandidates.length > 0 ||

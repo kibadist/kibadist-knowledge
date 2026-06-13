@@ -35,6 +35,12 @@ export function ProvenancePanel({
       </div>
 
       <TraceGroup
+        title='Callouts'
+        empty='No callouts in this article.'
+        traces={index.callouts}
+        onInspect={onInspect}
+      />
+      <TraceGroup
         title='Claims'
         empty='No source-grounded claims surfaced.'
         traces={index.claims}

@@ -74,6 +74,38 @@ describe('MagazineArticle provenance (transcript fixture)', () => {
     expect(id.textContent).toBe('t-b1')
   })
 
+  it('keeps a callout inspectable even when the layout renders it as a marginal', () => {
+    const { container } = renderReader(transcriptFixture)
+    // The editorial layout consumes the callout into a marginal device; the fix
+    // (DET-358) carries the source block id through so the marginal stays a
+    // hover/click source-trace affordance instead of inert presentation.
+    const marginal = container.querySelector('#t-callout-1') as HTMLElement
+    expect(marginal).toBeTruthy()
+    expect(marginal.className).toContain('kb-mag-marginal')
+    expect(marginal.className).toContain('kb-mag-traceable')
+    expect(marginal.getAttribute('role')).toBe('button')
+    expect(marginal.getAttribute('aria-label')).toBe(
+      'Inspect source for this callout',
+    )
+
+    fireEvent.click(marginal)
+    const drawer = container.querySelector('.kb-trace') as HTMLElement
+    expect(drawer).toBeTruthy()
+    // The drawer shows the callout's original source text.
+    expect(drawer.textContent).toContain('not every cell')
+  })
+
+  it('lists every callout in the provenance appendix as an inspection path', () => {
+    const { container } = renderReader(transcriptFixture)
+    const panel = container.querySelector('.kb-prov') as HTMLElement
+    expect(within(panel).getByText('Callouts')).toBeTruthy()
+    const row = within(panel).getByText(/count of mitochondria varies/i)
+    fireEvent.click(row)
+    const drawer = container.querySelector('.kb-trace') as HTMLElement
+    expect(drawer).toBeTruthy()
+    expect(drawer.textContent).toContain('not every cell')
+  })
+
   it('renders the provenance appendix with claims, concepts, prompts and warnings', () => {
     const { container, getByText } = renderReader(transcriptFixture)
     const panel = container.querySelector('.kb-prov') as HTMLElement

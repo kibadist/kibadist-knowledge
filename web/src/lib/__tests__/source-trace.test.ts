@@ -100,6 +100,15 @@ describe('buildSourceTraceIndex — transcript fixture', () => {
     expect(meaning?.sourceBlocks[0].id).toBe('t-b2')
   })
 
+  it('collects callout blocks into a dedicated provenance group', () => {
+    // The layout may render a callout as a non-interactive marginal, so the
+    // appendix is the guaranteed inspection path (DET-358).
+    expect(index.callouts).toHaveLength(1)
+    expect(index.callouts[0].id).toBe('t-callout-1')
+    expect(index.callouts[0].kind).toBe('callout')
+    expect(index.callouts[0].sourceBlocks[0].id).toBe('t-b2')
+  })
+
   it('reports provenance content present', () => {
     expect(hasProvenanceContent(index)).toBe(true)
   })

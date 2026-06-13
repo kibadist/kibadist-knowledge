@@ -487,16 +487,26 @@ function StreamItemView({
           )}
         </blockquote>
       )
-    case 'marginal':
+    case 'marginal': {
+      // A callout consumed by the marginal device keeps its source trace
+      // (DET-358): the layout carries the source callout's block id, so the
+      // marginal resolves the same trace `MagazineBlock`'s callout branch would
+      // — hover/click opens the drawer, unsupported callouts flag inline.
+      const trace = item.blockId ? traces?.get(item.blockId) : undefined
+      const it = interactiveTrace(trace, onOpen)
+      const cls =
+        ['kb-mag-marginal', it.className].filter(Boolean).join(' ') || undefined
       return (
-        <div className='kb-mag-marginal'>
+        <div className={cls} id={item.blockId} {...it.handlers}>
           <span className='mh'>
             {item.title}
             {item.ai && <AiMark short />}
           </span>
           {item.text}
+          {it.flag}
         </div>
       )
+    }
   }
 }
 
