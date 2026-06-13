@@ -4,6 +4,7 @@ import { AiService } from '../ai/ai.service'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
+import { CalloutGeneratorService } from './callout-generator.service'
 import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
@@ -13,6 +14,7 @@ import { LearningPromptsService } from './learning-prompts.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import { SourceDiagnosisService } from './source-diagnosis.service'
 import { StructureModelService } from './structure-model.service'
+import { TableGeneratorService } from './table-generator.service'
 import type { ArticleJsonV2, FidelityReport } from './transformer.types'
 
 /** Prisma stub: one article row + one block row; records every status set. */
@@ -163,6 +165,12 @@ function makeServices(overrides: {
     generate: jest.fn(async () => sampleArticle),
     ...overrides.generate,
   } as unknown as ArticleGeneratorService
+  const callouts = {
+    generate: jest.fn(async () => []),
+  } as unknown as CalloutGeneratorService
+  const tables = {
+    generate: jest.fn(async () => []),
+  } as unknown as TableGeneratorService
   const fidelity = {
     check: jest.fn(async () => okReport),
     ...overrides.fidelity,
@@ -199,6 +207,8 @@ function makeServices(overrides: {
     segmentation,
     plan,
     generate,
+    callouts,
+    tables,
     fidelity,
     illustrations,
     enrichment,
@@ -221,6 +231,8 @@ describe('ArticlePipelineService.run', () => {
       s.segmentation,
       s.plan,
       s.generate,
+      s.callouts,
+      s.tables,
       s.fidelity,
       s.illustrations,
       s.enrichment,
@@ -285,6 +297,8 @@ describe('ArticlePipelineService.run', () => {
       s.segmentation,
       s.plan,
       s.generate,
+      s.callouts,
+      s.tables,
       s.fidelity,
       s.illustrations,
       s.enrichment,
@@ -325,6 +339,8 @@ describe('ArticlePipelineService.run', () => {
       s.segmentation,
       s.plan,
       s.generate,
+      s.callouts,
+      s.tables,
       s.fidelity,
       s.illustrations,
       s.enrichment,
@@ -357,6 +373,8 @@ describe('ArticlePipelineService.run', () => {
       s.segmentation,
       s.plan,
       s.generate,
+      s.callouts,
+      s.tables,
       s.fidelity,
       s.illustrations,
       s.enrichment,
@@ -388,6 +406,8 @@ describe('ArticlePipelineService.run', () => {
       s.segmentation,
       s.plan,
       s.generate,
+      s.callouts,
+      s.tables,
       s.fidelity,
       s.illustrations,
       s.enrichment,

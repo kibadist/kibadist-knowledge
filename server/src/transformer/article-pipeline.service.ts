@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { toArticleV2 } from './article-compat.util'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
+import { CalloutGeneratorService } from './callout-generator.service'
 import { placeCallouts } from './callout-placement.util'
 import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { buildCoverageReport, type CoverageBlock } from './coverage.util'
@@ -34,16 +35,21 @@ import type {
 } from './schemas'
 import { SourceDiagnosisService } from './source-diagnosis.service'
 import type { SourceDiagnosisMetadata } from './source-diagnosis.types'
+import { buildSourceNotes } from './source-notes.util'
 import type { ClassifiedBlockInput } from './structure-model.service'
 import { StructureModelService } from './structure-model.service'
+import { TableGeneratorService } from './table-generator.service'
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
-import type {
-  ArticleJsonV2,
-  ConceptualSegmentation,
-  CoverageReport,
-  EditorialLayout,
-  FidelityReport,
-  SourcePreservingArticle,
+import {
+  ARTICLE_SCHEMA_VERSION_V3,
+  type ArticleComparisonTable,
+  type ArticleGeneratedCallout,
+  type ArticleJsonV2,
+  type ConceptualSegmentation,
+  type CoverageReport,
+  type EditorialLayout,
+  type FidelityReport,
+  type SourcePreservingArticle,
 } from './transformer.types'
 
 /** A loaded source block with everything the M2/M3 services need. */
@@ -80,6 +86,8 @@ export class ArticlePipelineService {
     private readonly segmentation: ConceptualSegmentationService,
     private readonly reshapingPlan: ReshapingPlanService,
     private readonly generator: ArticleGeneratorService,
+    private readonly callouts: CalloutGeneratorService,
+    private readonly tables: TableGeneratorService,
     private readonly fidelity: FidelityCheckerService,
     private readonly illustrations: IllustrationPlannerService,
     private readonly enrichment: ArticleEnrichmentService,
@@ -206,9 +214,33 @@ export class ArticlePipelineService {
     // LLM): place the end-matter (keyTerms/examples/caveats) against the sections
     // by source-block overlap and attach it to the stored artifact. The top-level
     // arrays remain the single source of truth — these are placement REFERENCES.
-    const withCallouts: ArticleJsonV2 = {
+    const placement = placeCallouts(generated)
+    // Source-grounded extras (DET-350), attached BEFORE the fidelity check so the
+    // checker rejects any unsupported callout/table:
+    //  - generated callouts + comparison tables are LLM lanes, best-effort (a
+    //    failure yields none and the article still finalizes); their own code
+    //    guards keep every surviving item grounded.
+    //  - source notes (references / bibliography / external links / removed
+    //    navigation / low-importance) are DETERMINISTIC from the blocks, so they
+    //    move out of the article body by default with no hallucination risk.
+    // This is what makes the article schemaVersion 'v3'.
+    const generatedCallouts = await this.tryCallouts(
+      articleId,
+      generated,
+      blocks,
+    )
+    const generatedTables = await this.tryTables(articleId, generated, blocks)
+    const withExtras: ArticleJsonV2 = {
       ...generated,
-      calloutPlacements: placeCallouts(generated),
+      schemaVersion: ARTICLE_SCHEMA_VERSION_V3,
+      calloutPlacements: {
+        ...placement,
+        ...(generatedCallouts.length > 0
+          ? { generated: generatedCallouts }
+          : {}),
+      },
+      tables: generatedTables,
+      sourceNotes: buildSourceNotes(blocks),
     }
     // Reading aids (DET-274) are deterministic too (TOC + reading time +
     // source-grounded highlights drawn from the structure model's preserved
@@ -216,8 +248,8 @@ export class ArticlePipelineService {
     // checker validates the highlights as traceable fragments on the enriched
     // artifact.
     const article: ArticleJsonV2 = {
-      ...withCallouts,
-      readingAids: buildReadingAids(withCallouts, structureModel),
+      ...withExtras,
+      readingAids: buildReadingAids(withExtras, structureModel),
     }
     await this.persist(articleId, {
       articleJson: article as unknown as Prisma.InputJsonValue,
@@ -300,6 +332,48 @@ export class ArticlePipelineService {
       illustrationPlan: plan as unknown as Prisma.InputJsonValue,
     })
     return plan
+  }
+
+  // --- Source-grounded extras, best-effort (DET-350) ------------------------
+
+  /** Generate source-grounded callouts; never throws — a failure logs and yields
+   *  none so the article still finalizes. Surviving callouts are grounded by the
+   *  service's own guards and re-verified by the fidelity checker. */
+  private async tryCallouts(
+    articleId: string,
+    article: ArticleJsonV2,
+    blocks: ClassifiedBlockInput[],
+  ): Promise<ArticleGeneratedCallout[]> {
+    try {
+      return await this.callouts.generate(article, blocks)
+    } catch (error) {
+      this.logger.warn(
+        `Callout generation failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return []
+    }
+  }
+
+  /** Generate source-grounded comparison tables; never throws — a failure logs and
+   *  yields none. Surviving tables are grounded by the service's guards and
+   *  re-verified by the fidelity checker. */
+  private async tryTables(
+    articleId: string,
+    article: ArticleJsonV2,
+    blocks: ClassifiedBlockInput[],
+  ): Promise<ArticleComparisonTable[]> {
+    try {
+      return await this.tables.generate(article, blocks)
+    } catch (error) {
+      this.logger.warn(
+        `Table generation failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return []
+    }
   }
 
   // --- Conceptual segmentation, best-effort (DET-347) -----------------------

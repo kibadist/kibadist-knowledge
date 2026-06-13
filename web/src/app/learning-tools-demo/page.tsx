@@ -4,11 +4,11 @@ import { useState } from 'react'
 
 import '../(app)/transformer/transformer.css'
 
+import { LearningToolsPanel } from '@/components/transformer/learning-tools-panel'
 import {
   type InspectorSelection,
   SourceInspectorPanel,
 } from '@/components/transformer/source-inspector-panel'
-import { LearningToolsPanel } from '@/components/transformer/learning-tools-panel'
 import type {
   ArticleSectionV2,
   LearningLayer,
