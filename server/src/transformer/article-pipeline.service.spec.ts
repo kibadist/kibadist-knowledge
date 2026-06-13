@@ -9,6 +9,7 @@ import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
+import type { IllustrationSuggestion } from './schemas'
 import { StructureModelService } from './structure-model.service'
 import type { ArticleJsonV2, FidelityReport } from './transformer.types'
 
@@ -36,7 +37,15 @@ function makeStubPrisma() {
   const transformerSourceBlock = {
     findMany: jest.fn(async () => blockRows),
   }
-  const prisma = { transformedArticle, transformerSourceBlock }
+  // Auto-render (DET-319/360) upserts rendered bytes here; a no-op stub is enough.
+  const transformerIllustrationImage = {
+    upsert: jest.fn(async () => ({})),
+  }
+  const prisma = {
+    transformedArticle,
+    transformerSourceBlock,
+    transformerIllustrationImage,
+  }
   return { prisma, article, statusLog }
 }
 
@@ -99,6 +108,7 @@ function makeServices(overrides: {
   plan?: Partial<ReshapingPlanService>
   generate?: Partial<ArticleGeneratorService>
   fidelity?: Partial<FidelityCheckerService>
+  illustrations?: Partial<IllustrationPlannerService>
 }) {
   const structure = {
     // A minimal valid structure model: one preserved claim grounded in b1, which
@@ -132,6 +142,7 @@ function makeServices(overrides: {
   } as unknown as FidelityCheckerService
   const illustrations = {
     plan: jest.fn(async () => ({ suggestions: [] })),
+    ...overrides.illustrations,
   } as unknown as IllustrationPlannerService
   const enrichment = {
     build: jest.fn(async () => ({ keyFacts: [] })),
@@ -277,5 +288,116 @@ describe('ArticlePipelineService.run', () => {
     expect(statusLog).toContain(TransformedArticleStatus.FAILED)
     expect(statusLog).not.toContain(TransformedArticleStatus.FINAL)
     expect(String(article.error)).toMatch(/unknown block ids/i)
+  })
+
+  // DET-360: the background illustration pass is gated on the fidelity verdict.
+  // Flush the fire-and-forget (`void illustrateInBackground`) microtasks before
+  // asserting on the planner/render calls it makes.
+  const flush = () => new Promise((resolve) => setImmediate(resolve))
+
+  it('auto-renders illustrations when the article is FINAL (quality ready)', async () => {
+    const { prisma } = makeStubPrisma()
+    const s = makeServices({
+      illustrations: {
+        plan: jest.fn(async () => ({
+          suggestions: [
+            {
+              id: 'sug1',
+              illustrationType: 'editorial_cover',
+              purpose: 'p',
+              visualDescription: 'v',
+              caption: 'c',
+              fidelityRisk: 'low',
+              reason: 'r',
+              sourceBlockIds: ['b1'],
+              eligible: true,
+              approval: 'pending',
+            },
+          ] as IllustrationSuggestion[],
+        })),
+      },
+    })
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.structure,
+      s.plan,
+      s.generate,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.ai,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+    await flush()
+
+    const planMock = s.illustrations.plan as unknown as jest.Mock
+    expect(planMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      {
+        qualityReady: true,
+      },
+    )
+    // An eligible, low-risk suggestion is auto-rendered.
+    expect(s.ai.image as unknown as jest.Mock).toHaveBeenCalled()
+  })
+
+  it('does NOT render illustrations when the article is BLOCKED (draft suggestions only)', async () => {
+    const { prisma, article } = makeStubPrisma()
+    const blockedReport: FidelityReport = { ...okReport, approved: false }
+    const s = makeServices({
+      fidelity: { check: jest.fn(async () => blockedReport) },
+      illustrations: {
+        // Mirror the real planner: a not-ready article yields ineligible drafts.
+        plan: jest.fn(async () => ({
+          suggestions: [
+            {
+              id: 'sug1',
+              illustrationType: 'editorial_cover',
+              purpose: 'p',
+              visualDescription: 'v',
+              caption: 'c',
+              fidelityRisk: 'low',
+              reason: 'r',
+              sourceBlockIds: ['b1'],
+              eligible: false,
+              qualityWarning: 'not ready',
+              approval: 'pending',
+            },
+          ] as IllustrationSuggestion[],
+        })),
+      },
+    })
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.structure,
+      s.plan,
+      s.generate,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.ai,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+    await flush()
+
+    const planMock = s.illustrations.plan as unknown as jest.Mock
+    expect(planMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      {
+        qualityReady: false,
+      },
+    )
+    // No image is rendered; the draft suggestions are persisted unrendered.
+    expect(s.ai.image as unknown as jest.Mock).not.toHaveBeenCalled()
+    const plan = article.illustrationPlan as { suggestions: unknown[] }
+    expect(plan.suggestions).toHaveLength(1)
   })
 })
