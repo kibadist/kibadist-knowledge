@@ -9,6 +9,7 @@ import { ArticlePipelineService } from './article-pipeline.service'
 import { BlockClassifierService } from './block-classifier.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
+import { FidelityReviewService } from './fidelity-review.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
 import { PipelineService } from './pipeline.service'
@@ -37,6 +38,7 @@ import { TransformerService } from './transformer.service'
     ReshapingPlanService,
     ArticleGeneratorService,
     FidelityCheckerService,
+    FidelityReviewService,
     IllustrationPlannerService,
     ArticleEnrichmentService,
     EditorialLayoutService,

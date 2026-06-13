@@ -1,8 +1,10 @@
 import { z } from 'zod'
 
 import type {
+  ArticleBlockerReason,
   ArticleJsonV2,
   ArticleParagraph,
+  ArticleQualityReportV3,
   ArticleSection,
   ArticleSectionV2,
   FidelityFinding,
@@ -604,6 +606,51 @@ export const FidelityReportSchema: z.ZodType<FidelityReport> = z.object({
   emphasisChanges: z.array(fidelityFinding).default([]),
   structuralFindings: z.array(fidelityFinding).default([]),
 })
+
+// --- Article quality report v3 (fidelity review, DET-354) ------------------
+
+const qualityStage = z.enum([
+  'structure-model',
+  'reshaping-plan',
+  'generator',
+  'learning-layer',
+])
+
+const articleBlockerReason: z.ZodType<ArticleBlockerReason> = z.object({
+  code: z.string().min(1),
+  dimension: z.string().min(1),
+  severity,
+  message: z.string().min(1),
+  articleRefs: z.array(z.string().min(1)).optional(),
+  sourceBlockIds: z.array(z.string().min(1)).optional(),
+  stage: qualityStage,
+})
+
+/**
+ * The v3 quality report (DET-354). Produced deterministically by the fidelity
+ * review; this schema exists for read-back / persistence safety (validating a
+ * stored `qualityReport` JSON), mirroring how the fidelity + article schemas pin
+ * their committed contracts with `z.ZodType<...>` so a drift is a compile error.
+ */
+export const ArticleQualityReportV3Schema: z.ZodType<ArticleQualityReportV3> =
+  z.object({
+    sourceCoverageScore: z.number(),
+    importantSourceCoverageScore: z.number(),
+    citationCoverageScore: z.number(),
+    unsupportedClaimCount: z.number(),
+    highSeverityLostInfoCount: z.number(),
+    conceptCandidateCount: z.number(),
+    keyClaimCount: z.number(),
+    retrievalPromptCount: z.number(),
+    tableCount: z.number(),
+    calloutCount: z.number(),
+    exerciseReadinessScore: z.number(),
+    articleReadabilityScore: z.number(),
+    provenanceCompletenessScore: z.number(),
+    reviewerWarnings: z.array(z.string()),
+    blockerReasons: z.array(articleBlockerReason),
+    regenerationHints: z.array(z.string()),
+  })
 
 // --- Illustration plan (step 10, DET-259) ----------------------------------
 

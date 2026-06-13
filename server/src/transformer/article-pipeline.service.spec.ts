@@ -6,6 +6,7 @@ import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
+import { FidelityReviewService } from './fidelity-review.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
@@ -139,7 +140,15 @@ function makeServices(overrides: {
   const editorialLayout = {
     build: jest.fn(async () => ({})),
   } as unknown as EditorialLayoutService
-  const learning = {} as LearningLayerService
+  // Learning extraction now runs inline in the pipeline (DET-354) so the fidelity
+  // review can grade concept/retrieval readiness; stub an empty grounded layer.
+  const learning = {
+    build: jest.fn(async () => ({ concepts: [], retrievalPrompts: [] })),
+  } as unknown as LearningLayerService
+  // The fidelity review is a pure deterministic synthesiser — use the REAL service
+  // so the pipeline test also covers the quality-report rollup + its FINAL/BLOCKED
+  // gate end to end.
+  const fidelityReview = new FidelityReviewService()
   const ai = {
     image: jest.fn(async () => ({
       base64: '',
@@ -159,6 +168,7 @@ function makeServices(overrides: {
     enrichment,
     editorialLayout,
     learning,
+    fidelityReview,
     ai,
   }
 }
@@ -177,6 +187,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.fidelityReview,
       s.ai,
     )
 
@@ -241,6 +252,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.fidelityReview,
       s.ai,
     )
 
@@ -269,6 +281,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.fidelityReview,
       s.ai,
     )
 

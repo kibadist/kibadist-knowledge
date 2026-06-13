@@ -35,6 +35,7 @@ import type {
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
   ArticleJsonV2,
+  ArticleQualityReportV3,
   CoverageReport,
   EditorialLayout,
   FidelityReport,
@@ -116,6 +117,8 @@ export interface TransformerArticleDetail {
   fidelityReport: FidelityReport | null
   fidelityScore: number | null
   coverageReport: CoverageReport | null
+  /** Fidelity-review rollup (DET-354); null on rows generated before the review. */
+  qualityReport: ArticleQualityReportV3 | null
   illustrationPlan: IllustrationPlan | null
   learningLayer: LearningLayer | null
   /** AI-added encyclopedia metadata (DET-319) — NOT source-grounded; UI labels it. */
@@ -444,6 +447,7 @@ export class TransformerService {
       fidelityReport: article.fidelityReport as FidelityReport | null,
       fidelityScore: article.fidelityScore,
       coverageReport: article.coverageReport as CoverageReport | null,
+      qualityReport: article.qualityReport as ArticleQualityReportV3 | null,
       illustrationPlan: article.illustrationPlan as IllustrationPlan | null,
       learningLayer: article.learningLayer as LearningLayer | null,
       enrichment: article.enrichment as ArticleEnrichment | null,
