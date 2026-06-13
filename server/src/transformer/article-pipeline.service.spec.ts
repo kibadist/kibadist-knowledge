@@ -8,6 +8,7 @@ import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningPromptsService } from './learning-prompts.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import { StructureModelService } from './structure-model.service'
 import type { ArticleJsonV2, FidelityReport } from './transformer.types'
@@ -140,6 +141,9 @@ function makeServices(overrides: {
     build: jest.fn(async () => ({})),
   } as unknown as EditorialLayoutService
   const learning = {} as LearningLayerService
+  const learningPrompts = {
+    build: jest.fn(async () => ({ retrievalPrompts: [], misconceptions: [] })),
+  } as unknown as LearningPromptsService
   const ai = {
     image: jest.fn(async () => ({
       base64: '',
@@ -159,6 +163,7 @@ function makeServices(overrides: {
     enrichment,
     editorialLayout,
     learning,
+    learningPrompts,
     ai,
   }
 }
@@ -177,6 +182,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
       s.ai,
     )
 
@@ -241,6 +247,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
       s.ai,
     )
 
@@ -269,6 +276,7 @@ describe('ArticlePipelineService.run', () => {
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
       s.ai,
     )
 

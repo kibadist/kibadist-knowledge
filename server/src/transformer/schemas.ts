@@ -834,15 +834,140 @@ const learningConceptCandidate = z.object({
 
 export type LearningConceptCandidate = z.infer<typeof learningConceptCandidate>
 
+// --- Learning prompts: retrieval + misconceptions (DET-353) -----------------
+//
+// A SEPARATE study aid from the DET-258 learning layer above: AI-suggested active
+// recall prompts and misconception candidates, generated from source-grounded
+// article content (sections, concept candidates, key claims, source examples,
+// callouts). Like every other lane the model is UNTRUSTED — the service grounds
+// every item against the real source block ids, validates concept-candidate links,
+// mints ids, and forces every status to its AI-suggested initial value. NOTHING is
+// scheduled permanently here: a prompt becomes a real review card only when the
+// user validates or answers it (status flips downstream, never at generation).
+//
+// NOTE on naming: the canonical ticket interface is `RetrievalPrompt`, but that
+// name is already taken by the DET-258 learning layer's simpler `{id, prompt,
+// sourceBlockIds}` shape above. We call the richer DET-353 shape
+// `RetrievalPromptCandidate` to avoid the collision and to emphasise it is a
+// candidate — never a permanent card until the learner validates it.
+
+/** The pedagogical category of a retrieval prompt (DET-353). */
+const retrievalPromptType = z.enum([
+  'definition',
+  'mechanism',
+  'distinction',
+  'sequence',
+  'analogy',
+  'misconception_repair',
+  'transfer',
+])
+
+export type RetrievalPromptType = z.infer<typeof retrievalPromptType>
+
+const promptDifficulty = z.enum(['easy', 'medium', 'hard'])
+
+/** Retrieval-prompt lifecycle: AI suggests, the learner validates/answers or rejects. */
+const retrievalPromptStatus = z.enum([
+  'ai_suggested',
+  'user_validated',
+  'rejected',
+])
+
+/** Misconception lifecycle: AI suggests, the learner validates or rejects. */
+const misconceptionStatus = z.enum(['ai_suggested', 'validated', 'rejected'])
+
+/**
+ * A stored active-recall prompt (DET-353). `question` is the prompt the learner
+ * answers; `expectedAnswerSourceBlockIds` are the REAL source blocks whose content
+ * holds the answer (non-empty — the service drops any prompt it cannot ground);
+ * `relatedConceptCandidateIds` link the prompt to the concept candidates it tests
+ * (validated against the article's candidates in code). `status` starts
+ * `ai_suggested` and only the learner ever advances it.
+ */
+const retrievalPromptCandidate = z.object({
+  id: z.string().min(1),
+  question: z.string().min(1),
+  expectedAnswerSourceBlockIds: sourceBlockIds,
+  relatedConceptCandidateIds: z.array(z.string().min(1)),
+  promptType: retrievalPromptType,
+  difficulty: promptDifficulty,
+  status: retrievalPromptStatus,
+})
+
+export type RetrievalPromptCandidate = z.infer<typeof retrievalPromptCandidate>
+
+/**
+ * A stored misconception candidate (DET-353): a likely wrong belief plus its
+ * source-faithful correction. `sourceBlockIds` MAY be empty — per the ticket a
+ * misconception is allowed when it is either source-grounded OR clearly marked as
+ * AI-suggested; an ungrounded one is kept but stays `ai_suggested` (and the
+ * permanent-card gate never schedules it until the learner validates). `confidence`
+ * is clamped to [0,1] in code.
+ */
+const misconceptionCandidate = z.object({
+  id: z.string().min(1),
+  misconception: z.string().min(1),
+  correction: z.string().min(1),
+  sourceBlockIds: z.array(z.string().min(1)),
+  relatedConceptCandidateIds: z.array(z.string().min(1)),
+  confidence: z.number().min(0).max(1),
+  status: misconceptionStatus,
+})
+
+export type MisconceptionCandidate = z.infer<typeof misconceptionCandidate>
+
+/** The generated learning-prompt set (retrieval prompts + misconceptions). */
+export const LearningPromptSetSchema = z.object({
+  retrievalPrompts: z.array(retrievalPromptCandidate),
+  misconceptions: z.array(misconceptionCandidate),
+})
+
+export type LearningPromptSet = z.infer<typeof LearningPromptSetSchema>
+
+/**
+ * What the LLM returns for the learning-prompt stage (DET-353) — no id/status
+ * (code mints ids and forces the initial status). Source-block id arrays and
+ * concept-candidate id arrays are loosened to allow empties / unknowns so the
+ * service can DROP retrieval prompts that ground in nothing and FILTER invalid
+ * links in code, rather than the model silently omitting them to satisfy the
+ * schema. `promptType` / `difficulty` fall back to safe defaults on benign drift;
+ * `confidence` defaults to 0.5 and is clamped in code.
+ */
+export const LearningPromptSetLlmSchema = z.object({
+  retrievalPrompts: z.array(
+    z.object({
+      question: z.string().min(1),
+      expectedAnswerSourceBlockIds: z.array(z.string()).default([]),
+      relatedConceptCandidateIds: z.array(z.string()).default([]),
+      promptType: retrievalPromptType.catch('definition'),
+      difficulty: promptDifficulty.catch('medium'),
+    }),
+  ),
+  misconceptions: z.array(
+    z.object({
+      misconception: z.string().min(1),
+      correction: z.string().min(1),
+      sourceBlockIds: z.array(z.string()).default([]),
+      relatedConceptCandidateIds: z.array(z.string()).default([]),
+      confidence: z.number().catch(0.5).default(0.5),
+    }),
+  ),
+})
+
 /**
  * Stored learning layer (code-managed ids + validationStatus). `conceptCandidates`
  * is an ADDITIVE optional parallel array (DET-283): old stored rows predate it and
- * still parse. `concepts` / `retrievalPrompts` and their update flow are untouched.
+ * still parse. `retrievalPromptCandidates` / `misconceptions` are the same kind of
+ * additive optional arrays (DET-353) — the richer recall prompts + misconception
+ * candidates produced by the learning-prompt stage. `concepts` / `retrievalPrompts`
+ * and their update flow are untouched.
  */
 export const LearningLayerSchema = z.object({
   concepts: z.array(learningConcept),
   retrievalPrompts: z.array(retrievalPrompt),
   conceptCandidates: z.array(learningConceptCandidate).optional(),
+  retrievalPromptCandidates: z.array(retrievalPromptCandidate).optional(),
+  misconceptions: z.array(misconceptionCandidate).optional(),
 })
 
 export type LearningLayer = z.infer<typeof LearningLayerSchema>

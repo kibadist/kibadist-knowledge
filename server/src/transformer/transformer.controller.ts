@@ -241,6 +241,22 @@ export class TransformerController {
   }
 
   /**
+   * Generate AI-suggested retrieval prompts + misconception candidates (DET-353).
+   * AI-throttled like generateLearningLayer. Every prompt is grounded in the
+   * article's source blocks and starts `ai_suggested`; nothing is scheduled as a
+   * permanent review card here. Ownership is resolved via the source's userId in
+   * the service, identical to the other article endpoints.
+   */
+  @Throttle(AI_THROTTLE)
+  @Post('articles/:id/learning-prompts')
+  generateLearningPrompts(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.transformer.generateLearningPrompts(user.userId, id)
+  }
+
+  /**
    * Extract concept CANDIDATES for one section of an article (DET-283).
    * AI-throttled like generateLearningLayer. Candidates are proposals — never
    * library Concept rows; the service enforces grounding + the replace-pending
