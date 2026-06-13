@@ -624,6 +624,19 @@ const illustrationSuggestion = z.object({
   fidelityRisk,
   reason: z.string().min(1),
   sourceBlockIds,
+  // The article section ids this suggestion is anchored to (DET-360), derived in
+  // CODE from the sections whose blocks the suggestion cites — never trusted from
+  // the LLM. A source_based_diagram MUST resolve to at least one section (a
+  // diagram spec references both source blocks and article sections); the
+  // planner drops a diagram that grounds in no section. Omitted when empty.
+  sectionIds: z.array(z.string().min(1)).optional(),
+  // Quality gate (DET-360). `eligible` is code-managed: false means the article
+  // did not pass its structure/quality gates, so the suggestion is a DRAFT that
+  // must not be rendered. Old stored plans predate this field, so it defaults to
+  // true on re-read. `qualityWarning` carries the human-readable reason when a
+  // suggestion is ineligible.
+  eligible: z.boolean().default(true),
+  qualityWarning: z.string().min(1).optional(),
   approval,
   // Rendered-image metadata (DET-261). Absent/null until the approved suggestion
   // is rendered; never set by the LLM (the LLM schema below has no `image`). The

@@ -21,6 +21,7 @@ import { ArticlePipelineService } from './article-pipeline.service'
 import { placeCallouts } from './callout-placement.util'
 import type { CreateTextSourceDto } from './dto/create-text-source.dto'
 import type { CreateUrlSourceDto } from './dto/create-url-source.dto'
+import { isBlockedArticleStatus } from './illustration-gate.util'
 import { ARTICLE_IN_FLIGHT, PipelineService } from './pipeline.service'
 import { buildReadingAids } from './reading-aids.util'
 import type {
@@ -463,11 +464,15 @@ export class TransformerService {
     if (!article.articleJson) {
       throw new ConflictException('Article has not been generated yet')
     }
+    // DET-360: a BLOCKED article still gets draft suggestions, but they are
+    // marked ineligible (quality not ready) so they can never be rendered.
+    const qualityReady = article.status === TransformedArticleStatus.FINAL
     return this.articlePipeline.generateIllustrations(
       article.id,
       article.articleJson as unknown as SourcePreservingArticle,
       article.sourceId,
       article.blocksVersion,
+      qualityReady,
     )
   }
 
@@ -550,12 +555,25 @@ export class TransformerService {
     confirmHighRisk: boolean,
   ): Promise<IllustrationPlan> {
     const article = await this.findOwnedArticle(userId, articleId)
+    // DET-360: never render polished visuals for a BLOCKED (low-coverage, lost-
+    // information, unsupported-additions) article — gate before any other check.
+    if (isBlockedArticleStatus(article.status)) {
+      throw new ConflictException(
+        'Illustrations cannot be rendered while the article is blocked for quality',
+      )
+    }
     const plan = article.illustrationPlan as IllustrationPlan | null
     if (!plan) throw new NotFoundException('No illustration plan')
     const suggestion = plan.suggestions.find((s) => s.id === suggestionId)
     if (!suggestion) throw new NotFoundException('Suggestion not found')
     if (suggestion.approval !== 'approved') {
       throw new ConflictException('Only approved suggestions can be rendered')
+    }
+    // DET-360: a draft suggestion produced for a not-ready article is ineligible.
+    if (suggestion.eligible === false) {
+      throw new ConflictException(
+        'Ineligible suggestions cannot be rendered until article quality passes',
+      )
     }
     if (suggestion.fidelityRisk === 'high' && !confirmHighRisk) {
       throw new ConflictException(
