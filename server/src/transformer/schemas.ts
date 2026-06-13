@@ -95,6 +95,65 @@ export const SourceStructureModelSchema = z.object({
 
 export type SourceStructureModel = z.infer<typeof SourceStructureModelSchema>
 
+// --- Conceptual segmentation (DET-347) -------------------------------------
+
+/** A segment's teaching role — what it does FOR THE LEARNER, not its block type. */
+const segmentRole = z.enum([
+  'orientation',
+  'definition',
+  'mechanism',
+  'distinction',
+  'example',
+  'analogy',
+  'history',
+  'application',
+  'caveat',
+  'summary',
+])
+
+const segmentImportance = z.enum(['high', 'medium', 'low'])
+const segmentArticlePlacement = z.enum(['main_body', 'callout', 'source_notes'])
+
+/**
+ * What the SEGMENTATION LLM returns (DET-347) — the segment MINUS its `id`, which
+ * is code-minted (`seg-N`) after the segments are ordered, never prompt-trusted
+ * (the house rule: ids the downstream relies on are owned by code). Every segment
+ * still cites a non-empty `sourceBlockIds`; the `repair` hook prunes invented ids
+ * before validation and the service re-checks every surviving id in code.
+ * `mustPreserveClaims` are quotes of what the source already says (defaults to []).
+ */
+const llmSegment = z.object({
+  title: z.string().min(1),
+  role: segmentRole,
+  sourceBlockIds,
+  importance: segmentImportance,
+  summary: z.string().min(1),
+  mustPreserveClaims: z.array(z.string().min(1)).default([]),
+  suggestedArticlePlacement: segmentArticlePlacement,
+})
+
+/**
+ * The segmentation wire shape (DET-347). `segments.min(1)` so a result that groups
+ * nothing is a loud failure (the pipeline degrades to no-segmentation around it).
+ * `unsegmentedBlocks` records blocks the model deliberately left out of every
+ * segment, each with a reason; the coverage guard in code fills in any
+ * high-importance block the model forgot, so the persisted artifact always has a
+ * reason for every uncovered block.
+ */
+export const SegmentationLlmSchema = z.object({
+  segments: z.array(llmSegment).min(1),
+  unsegmentedBlocks: z
+    .array(
+      z.object({
+        blockId: z.string().min(1),
+        reason: z.string().min(1),
+      }),
+    )
+    .default([]),
+})
+
+export type SegmentationLlm = z.infer<typeof SegmentationLlmSchema>
+
 // --- Reshaping plan (step 7) -----------------------------------------------
 
 const allowedTransformation = z.enum([
