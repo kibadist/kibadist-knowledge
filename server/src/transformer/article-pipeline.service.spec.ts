@@ -9,6 +9,7 @@ import { ClaimExtractorService } from './claim-extractor.service'
 import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
+import { FidelityReviewService } from './fidelity-review.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
 import { LearningOutlineService } from './learning-outline.service'
@@ -205,10 +206,21 @@ function makeServices(overrides: {
   const editorialLayout = {
     build: jest.fn(async () => ({})),
   } as unknown as EditorialLayoutService
-  const learning = {} as LearningLayerService
+  // Learning extraction now runs inline in the pipeline (DET-354) so the fidelity
+  // review can grade concept/retrieval readiness; stub an empty grounded layer.
+  const learning = {
+    build: jest.fn(async () => ({ concepts: [], retrievalPrompts: [] })),
+    // DET-351 whole-article concept extraction is a best-effort inline lane; stub
+    // it so the pipeline's candidate-folding path (into learningLayer) is exercised.
+    extractArticleConcepts: jest.fn(async () => []),
+  } as unknown as LearningLayerService
   const learningPrompts = {
     build: jest.fn(async () => ({ retrievalPrompts: [], misconceptions: [] })),
   } as unknown as LearningPromptsService
+  // The fidelity review is a pure deterministic synthesiser — use the REAL service
+  // so the pipeline test also covers the quality-report rollup + its FINAL/BLOCKED
+  // gate end to end.
+  const fidelityReview = new FidelityReviewService()
   const claims = {
     extract: jest.fn(async () => []),
   } as unknown as ClaimExtractorService
@@ -243,6 +255,7 @@ function makeServices(overrides: {
     editorialLayout,
     learning,
     learningPrompts,
+    fidelityReview,
     claims,
     diagnosis,
     ai,
@@ -270,6 +283,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.fidelityReview,
       s.claims,
       s.ai,
       s.pipelineV3,
@@ -346,6 +360,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.fidelityReview,
       s.claims,
       s.ai,
       s.pipelineV3,
@@ -391,6 +406,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.fidelityReview,
       s.claims,
       s.ai,
       s.pipelineV3,
@@ -428,6 +444,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.fidelityReview,
       s.claims,
       s.ai,
       s.pipelineV3,
@@ -464,6 +481,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.fidelityReview,
       s.claims,
       s.ai,
       s.pipelineV3,
@@ -520,6 +538,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.fidelityReview,
       s.claims,
       s.ai,
       pipelineV3,

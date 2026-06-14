@@ -13,6 +13,7 @@ import { ClaimExtractorService } from './claim-extractor.service'
 import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
+import { FidelityReviewService } from './fidelity-review.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
 import { LearningOutlineService } from './learning-outline.service'
@@ -55,6 +56,7 @@ import { V3GeneratorService } from './v3/v3-generator.service'
     CalloutGeneratorService,
     TableGeneratorService,
     FidelityCheckerService,
+    FidelityReviewService,
     IllustrationPlannerService,
     ArticleEnrichmentService,
     EditorialLayoutService,
