@@ -123,4 +123,11 @@ export interface ArticleRoutingDecision {
   diagnosis: SourceDiagnosis
   /** One-line, human-readable explanation of the routing choice (logged). */
   reason: string
+  /**
+   * Whether a FAILED v3 job may be re-run on v2 (DET-362). Carried from the
+   * `ARTICLE_GENERATION_V3_FALLBACK_TO_V2` flag so the pipeline knows the failure
+   * policy without re-reading config. Off by default — a v3 failure stays FAILED
+   * unless this is explicitly enabled.
+   */
+  fallbackToV2OnFailure: boolean
 }

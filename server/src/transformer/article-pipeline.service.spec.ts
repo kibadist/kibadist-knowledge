@@ -676,4 +676,121 @@ describe('ArticlePipelineService.run', () => {
     expect(s.structure.build).not.toHaveBeenCalled()
     expect(s.generate.generate).not.toHaveBeenCalled()
   })
+
+  it('falls back to the v2 pipeline when a v3 job throws and fallbackToV2OnFailure is set (DET-362)', async () => {
+    const { prisma, statusLog, article } = makeStubPrisma()
+    const s = makeServices({})
+    // Router picks v3 AND opts into the v2 failure fallback.
+    const diagnosis = {
+      route: () => ({
+        pipeline: 'v3',
+        diagnosis: {
+          sourceKind: 'transcript_lesson',
+          articleShape: 'lesson_article',
+        },
+        reason: 'forced v3 (test)',
+        fallbackToV2OnFailure: true,
+      }),
+    } as unknown as (typeof s)['diagnosis']
+    // The v3 generator blows up (e.g. an LLM/infra failure mid-run).
+    const runV3 = jest.fn(async () => {
+      throw new Error('v3 generator exploded')
+    })
+    const pipelineV3 = { run: runV3 } as unknown as (typeof s)['pipelineV3']
+
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.learningOutline,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
+      s.ai,
+      pipelineV3,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // v3 was attempted, then the FROZEN v2 pipeline ran the full MODELING →
+    // GENERATING → CHECKING arc to a v2 terminal state instead of failing the
+    // article. (The forced transcript_lesson kind is concept-rich, so the v2
+    // missing-concepts gate ends it BLOCKED with the stub's 0 concepts — a valid
+    // v2 outcome; the criterion under test is that it produced a v2 article
+    // rather than staying FAILED.)
+    expect(runV3).toHaveBeenCalledTimes(1)
+    expect(s.structure.build).toHaveBeenCalledTimes(1)
+    expect(s.generate.generate).toHaveBeenCalledTimes(1)
+    expect(statusLog).toContain(TransformedArticleStatus.CHECKING)
+    expect(statusLog).not.toContain(TransformedArticleStatus.FAILED)
+    const stored = article.articleJson as ArticleJsonV2
+    expect(stored.schemaVersion).toBe('v2')
+    expect(stored.mode).toBe('source_preserving_article')
+  })
+
+  it('marks a failed v3 job FAILED (no v2 fallback) when fallbackToV2OnFailure is off (DET-362)', async () => {
+    const { prisma, statusLog, article } = makeStubPrisma()
+    const s = makeServices({})
+    // Router picks v3 but does NOT opt into the v2 failure fallback.
+    const diagnosis = {
+      route: () => ({
+        pipeline: 'v3',
+        diagnosis: {
+          sourceKind: 'transcript_lesson',
+          articleShape: 'lesson_article',
+        },
+        reason: 'forced v3 (test)',
+        fallbackToV2OnFailure: false,
+      }),
+    } as unknown as (typeof s)['diagnosis']
+    const runV3 = jest.fn(async () => {
+      throw new Error('v3 generator exploded')
+    })
+    const pipelineV3 = { run: runV3 } as unknown as (typeof s)['pipelineV3']
+
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.learningOutline,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
+      s.ai,
+      pipelineV3,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // v3 was attempted and failed; with no fallback configured the article is
+    // FAILED and the v2 stages never run.
+    expect(runV3).toHaveBeenCalledTimes(1)
+    expect(s.structure.build).not.toHaveBeenCalled()
+    expect(s.generate.generate).not.toHaveBeenCalled()
+    expect(statusLog).toContain(TransformedArticleStatus.FAILED)
+    expect(statusLog).not.toContain(TransformedArticleStatus.FINAL)
+    expect(String(article.error)).toMatch(/v3 generator exploded/i)
+  })
 })
