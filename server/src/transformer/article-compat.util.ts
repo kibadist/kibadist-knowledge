@@ -1,5 +1,6 @@
 import {
   ARTICLE_SCHEMA_VERSION,
+  ARTICLE_SCHEMA_VERSION_V3,
   type ArticleJsonV2,
   type ArticleParagraphBlock,
   type ArticleSectionV2,
@@ -33,13 +34,16 @@ function toHeadingSourceV2(source: HeadingSource): HeadingSourceV2 {
   }
 }
 
-/** True if the value is already a v2 article (discriminated on schemaVersion). */
+/**
+ * True if the value is already a STRUCTURED article (v2 or the v3 superset,
+ * discriminated on schemaVersion). v3 is assignable to `ArticleJsonV2` (its extra
+ * fields are optional there), so it passes through `toArticleV2` unchanged.
+ */
 export function isArticleV2(
   json: SourcePreservingArticle | ArticleJsonV2,
 ): json is ArticleJsonV2 {
-  return (
-    (json as Partial<ArticleJsonV2>).schemaVersion === ARTICLE_SCHEMA_VERSION
-  )
+  const v = (json as Partial<ArticleJsonV2>).schemaVersion
+  return v === ARTICLE_SCHEMA_VERSION || v === ARTICLE_SCHEMA_VERSION_V3
 }
 
 /**
@@ -95,6 +99,20 @@ export function toArticleV2(
 }
 
 /**
+ * Every section id in an article — top-level sections plus one level of
+ * subsections (the only nesting v2 allows). Shared by the DET-350 generators to
+ * clamp `relatedSectionIds` to sections that actually exist.
+ */
+export function collectSectionIds(sections: ArticleSectionV2[]): Set<string> {
+  const ids = new Set<string>()
+  for (const s of sections) {
+    ids.add(s.id)
+    for (const sub of s.subsections ?? []) ids.add(sub.id)
+  }
+  return ids
+}
+
+/**
  * Collect EVERY source block id cited anywhere in an article — across all v2
  * block types, nested subsections, subtitle, keyTerms, sourceExamples, caveats,
  * readingAids highlights — adapting v1 first so the walk is uniform.
@@ -130,6 +148,9 @@ export function collectArticleSourceBlockIds(
   for (const c of article.caveats) add(c.sourceBlockIds)
 
   for (const h of article.readingAids?.highlights ?? []) add(h.sourceBlockIds)
+
+  // Key claims (DET-352) carry their own grounding ids — audit them too.
+  for (const c of article.keyClaims ?? []) add(c.sourceBlockIds)
 
   return ids
 }

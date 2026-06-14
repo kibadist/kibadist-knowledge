@@ -22,9 +22,13 @@ import { WorkspaceId } from '../workspaces/workspace-id.decorator'
 import { WorkspacesService } from '../workspaces/workspaces.service'
 import { CreateTextSourceDto } from './dto/create-text-source.dto'
 import { CreateUrlSourceDto } from './dto/create-url-source.dto'
+import { EditLearningItemDto } from './dto/edit-learning-item.dto'
 import { RenderIllustrationDto } from './dto/render-illustration.dto'
 import { UpdateIllustrationDto } from './dto/update-illustration.dto'
 import { UpdateLearningItemDto } from './dto/update-learning-item.dto'
+import { UpdateRetrievalPromptDto } from './dto/update-retrieval-prompt.dto'
+import { UpdateV3ConceptReviewDto } from './dto/update-v3-concept-review.dto'
+import { UpdateV3PromptReviewDto } from './dto/update-v3-prompt-review.dto'
 import { TransformerService } from './transformer.service'
 
 /**
@@ -270,5 +274,92 @@ export class TransformerController {
       itemId,
       dto.validationStatus,
     )
+  }
+
+  /**
+   * Edit a learning item's content in place (DET-359). Content-only — it never
+   * carries a validation status, so it can't internalize a concept. Mirrors the
+   * other learning-layer mutations' user/workspace scoping (resolved in service).
+   */
+  @Patch('articles/:id/learning-layer/items/:itemId/edit')
+  editLearningItem(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: EditLearningItemDto,
+  ) {
+    return this.transformer.editLearningItem(user.userId, id, itemId, {
+      label: dto.label,
+      definition: dto.definition,
+      importance: dto.importance,
+    })
+  }
+
+  /**
+   * Update a retrieval prompt's review state (DET-359): suggested/saved/answered/
+   * rejected, the reader's own-words answer, and in-place prompt edits. It can
+   * never schedule a permanent review card (no "scheduled" status exists here),
+   * so a prompt never becomes a review card without the explicit downstream
+   * action that scheduling requires.
+   */
+  @Patch('articles/:id/learning-layer/retrieval-prompts/:promptId')
+  updateRetrievalPrompt(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('promptId') promptId: string,
+    @Body() dto: UpdateRetrievalPromptDto,
+  ) {
+    return this.transformer.updateRetrievalPromptReview(
+      user.userId,
+      id,
+      promptId,
+      {
+        reviewStatus: dto.reviewStatus,
+        userAnswer: dto.userAnswer,
+        prompt: dto.prompt,
+      },
+    )
+  }
+
+  /**
+   * Record the v3 reader's review decision for a concept candidate (DET-359),
+   * keyed by the Article JSON v3 `keyConcepts[].id`. `accepted` is a user-review
+   * state only — it never internalizes a concept (no concept row is created), so
+   * this can't be a back door to permanent knowledge. User/workspace scoping is
+   * resolved in the service (ownership via the source's userId).
+   */
+  @Patch('articles/:id/v3-review/concepts/:conceptId')
+  setV3ConceptReview(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('conceptId') conceptId: string,
+    @Body() dto: UpdateV3ConceptReviewDto,
+  ) {
+    return this.transformer.setV3ConceptReview(user.userId, id, conceptId, {
+      status: dto.status,
+      label: dto.label,
+      definition: dto.definition,
+      importance: dto.importance,
+    })
+  }
+
+  /**
+   * Record the v3 reader's review decision for a retrieval prompt (DET-359),
+   * keyed by the Article JSON v3 `retrievalPrompts[].id`. There is no "scheduled"
+   * status here, so this endpoint can never make a prompt a permanent review
+   * card; the service requires a non-empty answer to mark a prompt `answered`.
+   */
+  @Patch('articles/:id/v3-review/prompts/:promptId')
+  setV3PromptReview(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('promptId') promptId: string,
+    @Body() dto: UpdateV3PromptReviewDto,
+  ) {
+    return this.transformer.setV3PromptReview(user.userId, id, promptId, {
+      status: dto.status,
+      userAnswer: dto.userAnswer,
+      prompt: dto.prompt,
+    })
   }
 }

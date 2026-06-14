@@ -1475,6 +1475,74 @@
 }
 
 /* ============================================================================
+   Active-recall prompts + misconceptions (DET-353) — AI-suggested study aids in
+   the learning panel; every item is plainly AI-suggested and grounded to the
+   source blocks that answer/correct it.
+   ============================================================================ */
+
+.kbapp .tf-prompt-q {
+  display: block;
+}
+.kbapp .tf-prompt-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.kbapp .tf-misconceptions {
+  margin-top: 22px;
+  border-top: 1px solid var(--rule-soft);
+  padding-top: 18px;
+}
+.kbapp .tf-misconception-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.kbapp .tf-misconception {
+  padding-left: 16px;
+  border-left: 2px solid var(--rule-soft);
+}
+.kbapp .tf-misconception-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.kbapp .tf-misconception-wrong {
+  font-family: var(--font-body), serif;
+  font-size: 15.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  text-decoration: line-through;
+  text-decoration-color: var(--rule-soft);
+}
+.kbapp .tf-misconception-fix {
+  margin: 6px 0 8px;
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.kbapp .tf-misconception-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--indigo);
+}
+.kbapp .tf-misconception-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ============================================================================
    Concept-extraction candidates (DET-283) — a per-section "Extract concepts"
    affordance + AI-assisted, unvalidated proposals in the learning panel.
    ============================================================================ */
@@ -2189,4 +2257,172 @@
   .kbapp .tf-pullquote-text {
     font-size: 23px;
   }
+}
+
+/* ============================================================================
+   v3 learning review panels (DET-359) — concept candidates + retrieval prompts
+   the reader vets before any of it becomes permanent knowledge. Reuses the
+   .tf-ai-panel shell; light-only editorial tokens, no dark mode.
+   ============================================================================ */
+
+.kbapp .tf-review-surface {
+  margin-top: 28px;
+}
+.kbapp .tf-review {
+  margin-top: 22px;
+}
+.kbapp .tf-review:first-of-type {
+  margin-top: 8px;
+}
+.kbapp .tf-review-note,
+.kbapp .tf-review-empty {
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-muted);
+  margin: 4px 0 16px;
+  line-height: 1.45;
+}
+.kbapp .tf-review-group {
+  margin-bottom: 18px;
+}
+.kbapp .tf-review-group-h {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  margin: 0 0 10px;
+}
+.kbapp .tf-importance--high {
+  color: var(--accent);
+}
+.kbapp .tf-review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.kbapp .tf-review-card {
+  border: 1px solid var(--rule-soft);
+  background: var(--paper-hi);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kbapp .tf-review-card.is-dismissed {
+  opacity: 0.55;
+}
+.kbapp .tf-review-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-review-card-label {
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--ink);
+}
+.kbapp .tf-review-card-prompt {
+  font-family: var(--font-body), serif;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  flex: 1 1 240px;
+}
+.kbapp .tf-review-card-def {
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin: 0;
+}
+.kbapp .tf-review-span {
+  font-family: var(--font-body), serif;
+  font-style: italic;
+  font-size: 13.5px;
+  color: var(--ink-muted);
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--rule);
+  line-height: 1.45;
+}
+.kbapp .tf-review-linked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-review-linked-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+}
+.kbapp .tf-review-ready {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+}
+.kbapp .tf-review-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kbapp .tf-review-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.kbapp .tf-review-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kbapp .tf-review-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kbapp .tf-review-edit-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+}
+.kbapp .tf-review-edit-input,
+.kbapp .tf-review-edit-textarea {
+  font-family: var(--font-body), serif;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  padding: 8px 10px;
+  width: 100%;
+  resize: vertical;
+}
+.kbapp .tf-review-edit-input:focus,
+.kbapp .tf-review-edit-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.kbapp .tf-review-inbox-link {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--indigo);
+}
+.kbapp .tf-review-inbox-link:hover {
+  color: var(--accent);
 }

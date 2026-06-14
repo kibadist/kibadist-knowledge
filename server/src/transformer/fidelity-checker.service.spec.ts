@@ -3,6 +3,7 @@ import { knownBlockIds } from './__fixtures__/index'
 import { mergeDeterministicChecks } from './fidelity-checker.service'
 import { FidelityReportSchema } from './schemas'
 import type {
+  ArticleJsonV2,
   FidelityReport,
   SourcePreservingArticle,
 } from './transformer.types'
@@ -250,6 +251,114 @@ describe('mergeDeterministicChecks (fidelity blocking rules)', () => {
     expect(out.approved).toBe(false)
   })
 
+  // --- DET-352 key-claim traceability --------------------------------------
+
+  function v2WithClaims(keyClaims: ArticleJsonV2['keyClaims']): ArticleJsonV2 {
+    return {
+      schemaVersion: 'v2',
+      mode: 'source_preserving_article',
+      title: { text: 'T', source: 'original' },
+      abstract: [
+        {
+          id: 'p1',
+          text: 'x',
+          sourceBlockIds: ['b1'],
+          transformationType: 'verbatim',
+          fidelityRisk: 'low',
+        },
+      ],
+      sections: [
+        {
+          id: 's1',
+          heading: 'S',
+          headingSource: 'original',
+          sourceBlockIds: ['b1'],
+          blocks: [
+            {
+              id: 'sb1',
+              type: 'paragraph',
+              text: 'x',
+              sourceBlockIds: ['b1'],
+              transformationType: 'verbatim',
+              fidelityRisk: 'low',
+            },
+          ],
+        },
+      ],
+      keyTerms: [],
+      sourceExamples: [],
+      caveats: [],
+      originalStructure: [],
+      keyClaims,
+    }
+  }
+
+  it('approves: a fully traceable key claim', () => {
+    const out = mergeDeterministicChecks(
+      emptyReport(99),
+      v2WithClaims([
+        {
+          id: 'k1',
+          text: 'a claim',
+          sourceBlockIds: ['b1'],
+          articleSectionIds: ['s1'],
+          claimType: 'definition',
+          confidence: 0.9,
+        },
+      ]),
+      known,
+    )
+    expect(out.approved).toBe(true)
+  })
+
+  it('blocks: a key claim citing an unknown source block', () => {
+    const out = mergeDeterministicChecks(
+      emptyReport(99),
+      v2WithClaims([
+        {
+          id: 'k1',
+          text: 'a claim',
+          sourceBlockIds: ['ghost'],
+          articleSectionIds: ['s1'],
+          claimType: 'mechanism',
+          confidence: 0.9,
+        },
+      ]),
+      known,
+    )
+    expect(out.approved).toBe(false)
+    expect(
+      out.structuralFindings.some(
+        (f) => f.severity === 'high' && /Key claim/.test(f.description),
+      ),
+    ).toBe(true)
+  })
+
+  it('blocks: a key claim referencing an unknown article section', () => {
+    const out = mergeDeterministicChecks(
+      emptyReport(99),
+      v2WithClaims([
+        {
+          id: 'k1',
+          text: 'a claim',
+          sourceBlockIds: ['b1'],
+          articleSectionIds: ['sGhost'],
+          claimType: 'caveat',
+          confidence: 0.9,
+        },
+      ]),
+      known,
+    )
+    expect(out.approved).toBe(false)
+    expect(
+      out.structuralFindings.some(
+        (f) =>
+          f.severity === 'high' &&
+          /unknown article section/.test(f.description),
+      ),
+    ).toBe(true)
+  })
+
   it('old stored report shape (no emphasis/structural fields) still parses via schema defaults', () => {
     // An old stored fidelityReport JSON predates DET-281 — it has none of the
     // two new groups. The schema `.default([])` must fill them in on re-read.
@@ -266,5 +375,50 @@ describe('mergeDeterministicChecks (fidelity blocking rules)', () => {
     const parsed = FidelityReportSchema.parse(stored)
     expect(parsed.emphasisChanges).toEqual([])
     expect(parsed.structuralFindings).toEqual([])
+  })
+
+  it('blocks: an unsupported generated table is rejected by fidelity review (DET-350)', () => {
+    const v3Article: ArticleJsonV2 = {
+      schemaVersion: 'v3',
+      mode: 'source_preserving_article',
+      title: { text: 'T', source: 'original' },
+      abstract: [
+        {
+          id: 'p1',
+          text: 'x',
+          sourceBlockIds: ['b1'],
+          transformationType: 'verbatim',
+          fidelityRisk: 'low',
+        },
+      ],
+      sections: [],
+      keyTerms: [],
+      sourceExamples: [],
+      caveats: [],
+      originalStructure: [],
+      tables: [
+        {
+          id: 'gtbl-0',
+          title: 'External facts',
+          columns: ['A', 'B'],
+          rows: [
+            { cells: [{ text: 'a' }, { text: 'b' }], sourceBlockIds: ['b1'] },
+            // Row grounded only in a block the source does not contain.
+            {
+              cells: [{ text: 'c' }, { text: 'd' }],
+              sourceBlockIds: ['ghost'],
+            },
+          ],
+          sourceBlockIds: ['b1', 'ghost'],
+          relatedSectionIds: [],
+          fidelityRisk: 'low',
+        },
+      ],
+    }
+    const out = mergeDeterministicChecks(emptyReport(99), v3Article, known)
+    expect(out.approved).toBe(false)
+    expect(
+      out.structuralFindings.some((f) => f.articleRef === 'gtbl-0-row-1'),
+    ).toBe(true)
   })
 })

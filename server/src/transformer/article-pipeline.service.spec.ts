@@ -4,13 +4,23 @@ import { AiService } from '../ai/ai.service'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
+import { ArticleRegenerationService } from './article-regeneration.service'
+import { CalloutGeneratorService } from './callout-generator.service'
+import { ClaimExtractorService } from './claim-extractor.service'
+import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
+import { FidelityReviewService } from './fidelity-review.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningOutlineService } from './learning-outline.service'
+import { LearningPromptsService } from './learning-prompts.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
+import { SourceDiagnosisService } from './source-diagnosis.service'
 import { StructureModelService } from './structure-model.service'
+import { TableGeneratorService } from './table-generator.service'
 import type { ArticleJsonV2, FidelityReport } from './transformer.types'
+import { ArticlePipelineV3Service } from './v3/article-pipeline-v3.service'
 
 /** Prisma stub: one article row + one block row; records every status set. */
 function makeStubPrisma() {
@@ -36,7 +46,20 @@ function makeStubPrisma() {
   const transformerSourceBlock = {
     findMany: jest.fn(async () => blockRows),
   }
-  const prisma = { transformedArticle, transformerSourceBlock }
+  // loadSourceMeta (DET-345) reads the source row for detection metadata.
+  const transformerSource = {
+    findUnique: jest.fn(async () => ({
+      type: 'TEXT',
+      url: null,
+      fileName: null,
+      metadata: null,
+    })),
+  }
+  const prisma = {
+    transformedArticle,
+    transformerSourceBlock,
+    transformerSource,
+  }
   return { prisma, article, statusLog }
 }
 
@@ -96,9 +119,12 @@ const okReport: FidelityReport = {
 
 function makeServices(overrides: {
   structure?: Partial<StructureModelService>
+  segmentation?: Partial<ConceptualSegmentationService>
   plan?: Partial<ReshapingPlanService>
+  learningOutline?: Partial<LearningOutlineService>
   generate?: Partial<ArticleGeneratorService>
   fidelity?: Partial<FidelityCheckerService>
+  regeneration?: Partial<ArticleRegenerationService>
 }) {
   const structure = {
     // A minimal valid structure model: one preserved claim grounded in b1, which
@@ -118,14 +144,57 @@ function makeServices(overrides: {
     })),
     ...overrides.structure,
   } as unknown as StructureModelService
+  const segmentation = {
+    // A minimal segmentation: one high-importance segment over b1, no orphans.
+    segment: jest.fn(async () => ({
+      segments: [
+        {
+          id: 'seg-0',
+          title: 'A claim',
+          role: 'orientation',
+          sourceBlockIds: ['b1'],
+          importance: 'high',
+          summary: 'A claim',
+          mustPreserveClaims: [],
+          suggestedArticlePlacement: 'main_body',
+        },
+      ],
+      unsegmentedBlocks: [],
+      warnings: [],
+    })),
+    ...overrides.segmentation,
+  } as unknown as ConceptualSegmentationService
   const plan = {
     build: jest.fn(async () => ({ removedBlocks: [] })),
     ...overrides.plan,
   } as unknown as ReshapingPlanService
+  const learningOutline = {
+    // A minimal valid LearningOutline (DET-348); the pipeline persists it and
+    // hands it to the generator stub (which ignores it).
+    build: jest.fn(async () => ({
+      sourceKind: 'article',
+      articleShape: 'general',
+      title: { text: 'T', source: 'inferred' },
+      learningPath: [],
+      sections: [],
+      sourceNotesPlan: { notes: [] },
+      calloutPlan: [],
+      tablePlan: [],
+      reorderings: [],
+      warnings: [],
+    })),
+    ...overrides.learningOutline,
+  } as unknown as LearningOutlineService
   const generate = {
     generate: jest.fn(async () => sampleArticle),
     ...overrides.generate,
   } as unknown as ArticleGeneratorService
+  const callouts = {
+    generate: jest.fn(async () => []),
+  } as unknown as CalloutGeneratorService
+  const tables = {
+    generate: jest.fn(async () => []),
+  } as unknown as TableGeneratorService
   const fidelity = {
     check: jest.fn(async () => okReport),
     ...overrides.fidelity,
@@ -139,7 +208,54 @@ function makeServices(overrides: {
   const editorialLayout = {
     build: jest.fn(async () => ({})),
   } as unknown as EditorialLayoutService
-  const learning = {} as LearningLayerService
+  // Learning extraction now runs inline in the pipeline (DET-354) so the fidelity
+  // review can grade concept/retrieval readiness; stub an empty grounded layer.
+  const learning = {
+    build: jest.fn(async () => ({ concepts: [], retrievalPrompts: [] })),
+    // DET-351 whole-article concept extraction is a best-effort inline lane; stub
+    // it so the pipeline's candidate-folding path (into learningLayer) is exercised.
+    extractArticleConcepts: jest.fn(async () => []),
+  } as unknown as LearningLayerService
+  const learningPrompts = {
+    build: jest.fn(async () => ({ retrievalPrompts: [], misconceptions: [] })),
+  } as unknown as LearningPromptsService
+  // Default regeneration stub: a no-op repair that leaves the article BLOCKED (the
+  // gate verdict is unchanged), so the BLOCKED-path test still asserts BLOCKED.
+  // The DET-356 wiring (repair is invoked only on a rejected gate, its result is
+  // adopted) is exercised by its own tests below.
+  const regeneration = {
+    repair: jest.fn(
+      async (inp: Parameters<ArticleRegenerationService['repair']>[0]) => ({
+        report: {
+          attempted: true,
+          outcome: 'still_blocked' as const,
+          blockersBefore: [],
+          blockersAfter: [],
+          actions: [],
+          preservedSectionIds: [],
+          explanation: 'stub: still blocked',
+        },
+        article: inp.article,
+        fidelity: inp.fidelity,
+        coverage: inp.coverage,
+        conceptCandidates: inp.conceptCandidates,
+        plan: inp.plan,
+        segmentation: inp.segmentation,
+      }),
+    ),
+    ...overrides.regeneration,
+  } as unknown as ArticleRegenerationService
+  // The fidelity review is a pure deterministic synthesiser — use the REAL service
+  // so the pipeline test also covers the quality-report rollup + its FINAL/BLOCKED
+  // gate end to end.
+  const fidelityReview = new FidelityReviewService()
+  const claims = {
+    extract: jest.fn(async () => []),
+  } as unknown as ClaimExtractorService
+  // Real diagnosis service over a stub ConfigService (v3 flag off ⇒ always v2).
+  const diagnosis = new SourceDiagnosisService({
+    get: () => undefined,
+  } as never)
   const ai = {
     image: jest.fn(async () => ({
       base64: '',
@@ -150,16 +266,29 @@ function makeServices(overrides: {
     })),
     providerName: 'stub',
   } as unknown as AiService
+  // v3 is off in these tests (diagnosis flag off ⇒ always v2), so the orchestrator
+  // is never invoked — a bare stub satisfies the constructor.
+  const pipelineV3 = {} as unknown as ArticlePipelineV3Service
   return {
     structure,
+    segmentation,
     plan,
+    learningOutline,
     generate,
+    callouts,
+    tables,
     fidelity,
     illustrations,
     enrichment,
     editorialLayout,
     learning,
+    learningPrompts,
+    regeneration,
+    fidelityReview,
+    claims,
+    diagnosis,
     ai,
+    pipelineV3,
   }
 }
 
@@ -169,15 +298,25 @@ describe('ArticlePipelineService.run', () => {
     const s = makeServices({})
     const pipeline = new ArticlePipelineService(
       prisma as never,
+      s.diagnosis,
       s.structure,
+      s.segmentation,
       s.plan,
+      s.learningOutline,
       s.generate,
+      s.callouts,
+      s.tables,
       s.fidelity,
       s.illustrations,
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
       s.ai,
+      s.pipelineV3,
     )
 
     await pipeline.run('a1', 'src1', 1)
@@ -193,9 +332,16 @@ describe('ArticlePipelineService.run', () => {
     expect(article.articleJson).toBeTruthy()
     expect(article.coverageReport).toBeTruthy()
 
+    // The enriched v2 article stays schemaVersion 'v2' / mode
+    // 'source_preserving_article' (DET-343): 'v3' is reserved for the learning-first
+    // Source-Grounded Learning Article, so the reader's `isArticleJsonV3` dispatch
+    // never mis-routes a v2 article into the v3 learning reader.
+    const stored = article.articleJson as ArticleJsonV2
+    expect(stored.schemaVersion).toBe('v2')
+    expect(stored.mode).toBe('source_preserving_article')
+
     // The pipeline attaches deterministic inline callout placements (DET-272) to
     // the stored articleJson — computed in code, not by the generator stub.
-    const stored = article.articleJson as ArticleJsonV2
     expect(stored.calloutPlacements).toBeDefined()
     expect(stored.calloutPlacements?.bySection.s1).toHaveLength(1)
     expect(stored.calloutPlacements?.bySection.s1[0]).toMatchObject({
@@ -225,6 +371,89 @@ describe('ArticlePipelineService.run', () => {
     expect(checkArg.calloutPlacements).toBeDefined()
   })
 
+  it('persists the conceptual segmentation and feeds it to the outline (DET-347)', async () => {
+    const { prisma, article } = makeStubPrisma()
+    const s = makeServices({})
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.learningOutline,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
+      s.ai,
+      s.pipelineV3,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // Segmentation ran and its artifact was persisted onto `segments`.
+    expect(
+      s.segmentation.segment as unknown as jest.Mock,
+    ).toHaveBeenCalledTimes(1)
+    expect(article.segments).toBeTruthy()
+
+    // The reshaping plan (outline) consumed the segmentation as its 3rd argument.
+    const planMock = s.plan.build as unknown as jest.Mock
+    const segmentationArg = planMock.mock.calls[0][2]
+    expect(segmentationArg).toBeTruthy()
+    expect(segmentationArg.segments[0].id).toBe('seg-0')
+  })
+
+  it('degrades to no-segmentation (outline still runs) when segmentation throws', async () => {
+    const { prisma, statusLog, article } = makeStubPrisma()
+    const s = makeServices({
+      segmentation: {
+        segment: jest.fn(async () => {
+          throw new Error('segmentation blew up')
+        }),
+      },
+    })
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.learningOutline,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
+      s.ai,
+      s.pipelineV3,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // A segmentation failure must NOT fail the article — it still reaches FINAL,
+    // and the outline was called with a null segmentation (degraded path).
+    expect(statusLog).toContain(TransformedArticleStatus.FINAL)
+    expect(article.segments).toBeFalsy()
+    const planMock = s.plan.build as unknown as jest.Mock
+    expect(planMock.mock.calls[0][2]).toBeNull()
+  })
+
   it('ends BLOCKED when the fidelity gate rejects', async () => {
     const { prisma, statusLog } = makeStubPrisma()
     const blockedReport: FidelityReport = { ...okReport, approved: false }
@@ -233,21 +462,112 @@ describe('ArticlePipelineService.run', () => {
     })
     const pipeline = new ArticlePipelineService(
       prisma as never,
+      s.diagnosis,
       s.structure,
+      s.segmentation,
       s.plan,
+      s.learningOutline,
       s.generate,
+      s.callouts,
+      s.tables,
       s.fidelity,
       s.illustrations,
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
       s.ai,
+      s.pipelineV3,
     )
 
     await pipeline.run('a1', 'src1', 1)
 
     expect(statusLog).toContain(TransformedArticleStatus.BLOCKED)
     expect(statusLog).not.toContain(TransformedArticleStatus.FINAL)
+  })
+
+  it('attaches the v3 status + quality report to the article JSON when gates pass (DET-355)', async () => {
+    const { prisma, article } = makeStubPrisma()
+    const s = makeServices({})
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.learningOutline,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
+      s.ai,
+      s.pipelineV3,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // The persisted article JSON carries the gate-passed v3 status + a complete
+    // quality report (the v3 reader reads these straight from the JSON).
+    const stored = article.articleJson as ArticleJsonV2 & {
+      status: string
+      qualityReport: { blockerReasons: unknown[]; regenerationHints: unknown[] }
+    }
+    expect(stored.status).toBe('READY_FOR_REVIEW')
+    expect(stored.qualityReport).toBeDefined()
+    expect(stored.qualityReport.blockerReasons).toEqual([])
+    expect(stored.qualityReport.regenerationHints).toEqual([])
+  })
+
+  it('records a fidelity blocker reason on the JSON when fidelity rejects (DET-355)', async () => {
+    const { prisma, article } = makeStubPrisma()
+    const blockedReport: FidelityReport = { ...okReport, approved: false }
+    const s = makeServices({
+      fidelity: { check: jest.fn(async () => blockedReport) },
+    })
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.learningOutline,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
+      s.ai,
+      s.pipelineV3,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    const stored = article.articleJson as ArticleJsonV2 & {
+      status: string
+      qualityReport: { blockerReasons: { code: string }[] }
+    }
+    expect(stored.status).toBe('BLOCKED_FIDELITY')
+    expect(stored.qualityReport.blockerReasons.map((r) => r.code)).toContain(
+      'fidelity',
+    )
   })
 
   it('ends FAILED when a step throws (e.g. traceability violation after retry)', async () => {
@@ -261,15 +581,25 @@ describe('ArticlePipelineService.run', () => {
     })
     const pipeline = new ArticlePipelineService(
       prisma as never,
+      s.diagnosis,
       s.structure,
+      s.segmentation,
       s.plan,
+      s.learningOutline,
       s.generate,
+      s.callouts,
+      s.tables,
       s.fidelity,
       s.illustrations,
       s.enrichment,
       s.editorialLayout,
       s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
       s.ai,
+      s.pipelineV3,
     )
 
     await pipeline.run('a1', 'src1', 1)
@@ -277,5 +607,190 @@ describe('ArticlePipelineService.run', () => {
     expect(statusLog).toContain(TransformedArticleStatus.FAILED)
     expect(statusLog).not.toContain(TransformedArticleStatus.FINAL)
     expect(String(article.error)).toMatch(/unknown block ids/i)
+  })
+
+  it('routes a v3-target source to the v3 pipeline and persists the learning-first article (DET-343)', async () => {
+    const { prisma, statusLog, article } = makeStubPrisma()
+    const s = makeServices({})
+    const v3Article = {
+      schemaVersion: 'v3',
+      mode: 'source_grounded_learning_article',
+      status: 'READY_FOR_REVIEW',
+      qualityReport: {
+        importantSourceCoverageScore: 90,
+        conceptCandidateCount: 2,
+      },
+    }
+    // Force the router to pick v3 (the flag/kind gate is tested in
+    // source-diagnosis.service.spec); here we assert the WIRING runs v3 instead of
+    // the v2 stages and persists the learning-first article.
+    const diagnosis = {
+      route: () => ({
+        pipeline: 'v3',
+        diagnosis: {
+          sourceKind: 'transcript_lesson',
+          articleShape: 'lesson_article',
+        },
+        reason: 'forced v3 (test)',
+      }),
+    } as unknown as (typeof s)['diagnosis']
+    const runV3 = jest.fn(async () => v3Article)
+    const pipelineV3 = { run: runV3 } as unknown as (typeof s)['pipelineV3']
+
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.learningOutline,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
+      s.ai,
+      pipelineV3,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    expect(runV3).toHaveBeenCalledTimes(1)
+    const stored = article.articleJson as {
+      schemaVersion: string
+      mode: string
+      generatedAt?: string
+    }
+    expect(stored.schemaVersion).toBe('v3')
+    expect(stored.mode).toBe('source_grounded_learning_article')
+    expect(stored.generatedAt).toBeTruthy()
+    expect(statusLog).toContain(TransformedArticleStatus.FINAL)
+    // The v2 stages are bypassed entirely on the v3 path.
+    expect(s.structure.build).not.toHaveBeenCalled()
+    expect(s.generate.generate).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the v2 pipeline when a v3 job throws and fallbackToV2OnFailure is set (DET-362)', async () => {
+    const { prisma, statusLog, article } = makeStubPrisma()
+    const s = makeServices({})
+    // Router picks v3 AND opts into the v2 failure fallback.
+    const diagnosis = {
+      route: () => ({
+        pipeline: 'v3',
+        diagnosis: {
+          sourceKind: 'transcript_lesson',
+          articleShape: 'lesson_article',
+        },
+        reason: 'forced v3 (test)',
+        fallbackToV2OnFailure: true,
+      }),
+    } as unknown as (typeof s)['diagnosis']
+    // The v3 generator blows up (e.g. an LLM/infra failure mid-run).
+    const runV3 = jest.fn(async () => {
+      throw new Error('v3 generator exploded')
+    })
+    const pipelineV3 = { run: runV3 } as unknown as (typeof s)['pipelineV3']
+
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.learningOutline,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
+      s.ai,
+      pipelineV3,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // v3 was attempted, then the FROZEN v2 pipeline ran the full MODELING →
+    // GENERATING → CHECKING arc to a v2 terminal state instead of failing the
+    // article. (The forced transcript_lesson kind is concept-rich, so the v2
+    // missing-concepts gate ends it BLOCKED with the stub's 0 concepts — a valid
+    // v2 outcome; the criterion under test is that it produced a v2 article
+    // rather than staying FAILED.)
+    expect(runV3).toHaveBeenCalledTimes(1)
+    expect(s.structure.build).toHaveBeenCalledTimes(1)
+    expect(s.generate.generate).toHaveBeenCalledTimes(1)
+    expect(statusLog).toContain(TransformedArticleStatus.CHECKING)
+    expect(statusLog).not.toContain(TransformedArticleStatus.FAILED)
+    const stored = article.articleJson as ArticleJsonV2
+    expect(stored.schemaVersion).toBe('v2')
+    expect(stored.mode).toBe('source_preserving_article')
+  })
+
+  it('marks a failed v3 job FAILED (no v2 fallback) when fallbackToV2OnFailure is off (DET-362)', async () => {
+    const { prisma, statusLog, article } = makeStubPrisma()
+    const s = makeServices({})
+    // Router picks v3 but does NOT opt into the v2 failure fallback.
+    const diagnosis = {
+      route: () => ({
+        pipeline: 'v3',
+        diagnosis: {
+          sourceKind: 'transcript_lesson',
+          articleShape: 'lesson_article',
+        },
+        reason: 'forced v3 (test)',
+        fallbackToV2OnFailure: false,
+      }),
+    } as unknown as (typeof s)['diagnosis']
+    const runV3 = jest.fn(async () => {
+      throw new Error('v3 generator exploded')
+    })
+    const pipelineV3 = { run: runV3 } as unknown as (typeof s)['pipelineV3']
+
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.learningOutline,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.regeneration,
+      s.fidelityReview,
+      s.claims,
+      s.ai,
+      pipelineV3,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // v3 was attempted and failed; with no fallback configured the article is
+    // FAILED and the v2 stages never run.
+    expect(runV3).toHaveBeenCalledTimes(1)
+    expect(s.structure.build).not.toHaveBeenCalled()
+    expect(s.generate.generate).not.toHaveBeenCalled()
+    expect(statusLog).toContain(TransformedArticleStatus.FAILED)
+    expect(statusLog).not.toContain(TransformedArticleStatus.FINAL)
+    expect(String(article.error)).toMatch(/v3 generator exploded/i)
   })
 })

@@ -114,6 +114,97 @@ export interface CoverageReport {
 }
 
 /* ===========================================================================
+ * Targeted regeneration of blocked articles (DET-356).
+ * ===========================================================================
+ *
+ * A BLOCKED article (the fidelity/coverage gate rejected it) is repaired by
+ * RE-RUNNING ONLY the pipeline stages implicated by WHY it failed, instead of
+ * retrying the whole pipeline blindly. The gate findings are first distilled into
+ * a small set of `ArticleBlocker`s (the WHY); each blocker maps to a regeneration
+ * strategy (the WHICH STAGE + the WHY-WE-RERAN-IT); the repaired article keeps
+ * every prior section the blockers did not implicate.
+ */
+
+/** The four repairable reasons a generated article gets BLOCKED (DET-356).
+ *  Distinct from the DET-354 `ArticleBlockerReason` (the fidelity-review blocker
+ *  object) — this is the keyed reason a targeted repair strategy is looked up by. */
+export type ArticleRepairReason =
+  | 'low_coverage'
+  | 'unsupported_claims'
+  | 'missing_concepts'
+  | 'poor_transcript_coherence'
+
+/**
+ * One distilled reason a generation was blocked. Derived deterministically from
+ * the fidelity + coverage reports (plus concept/segmentation context), never from
+ * an LLM — it is the audit of WHY the gate rejected, keyed so a repair strategy
+ * can be looked up.
+ */
+export interface ArticleBlocker {
+  reason: ArticleRepairReason
+  /** Worst severity of the underlying findings behind this blocker. */
+  severity: Severity
+  /** Human-readable explanation (shown when a repair fails to clear it). */
+  explanation: string
+  /** Evidence behind the blocker, for the inspector + targeted repair. */
+  evidence: {
+    /** Source blocks implicated (e.g. high-importance unrepresented blocks). */
+    sourceBlockIds?: string[]
+    /** Article items implicated (e.g. sections carrying unsupported claims). */
+    articleRefs?: string[]
+    /** A raw count behind the blocker (e.g. concept candidates found). */
+    count?: number
+  }
+}
+
+/** A pipeline stage a repair handler can re-run (DET-356). */
+export type RegenerationStage =
+  | 'conceptual_segmentation'
+  | 'reshaping_plan'
+  | 'generation'
+  | 'claim_pruning'
+  | 'learning_extraction'
+  | 'fidelity_recheck'
+
+/** One targeted repair attempt for a single blocker (DET-356). */
+export interface RegenerationAction {
+  blockerReason: ArticleRepairReason
+  /** The stage(s) this handler re-ran. */
+  stagesRerun: RegenerationStage[]
+  /** Why these stages were re-run (recorded for the inspector + analytics). */
+  why: string
+  /** Whether the targeted signal measurably improved after the rerun. */
+  resolved: boolean
+}
+
+/** The terminal outcome of a repair pass (DET-356). */
+export type RegenerationOutcome = 'repaired' | 'still_blocked' | 'no_blockers'
+
+/**
+ * The record of a single targeted-regeneration pass (DET-356). Persisted on the
+ * article so the inspector can see which stage was re-run and why, which sections
+ * were preserved, and — when the repair fails — a clear explanation of what is
+ * still wrong.
+ */
+export interface RegenerationReport {
+  /** Whether a repair pass actually ran (false ⇒ nothing was blocked). */
+  attempted: boolean
+  outcome: RegenerationOutcome
+  /** The blockers detected BEFORE the repair pass. */
+  blockersBefore: ArticleBlocker[]
+  /** The blockers still present AFTER the repair pass. */
+  blockersAfter: ArticleBlocker[]
+  /** One action per blocker handled. */
+  actions: RegenerationAction[]
+  /** Section ids preserved verbatim from the prior (valid) generation. */
+  preservedSectionIds: string[]
+  /** A clear explanation of the outcome (esp. when still blocked). */
+  explanation: string
+  /** ISO-8601 timestamp; stamped in code, never prompt-trusted. */
+  attemptedAt?: string
+}
+
+/* ===========================================================================
  * Article JSON v2 contract (DET-277) — the structured, typed-block evolution.
  * ===========================================================================
  *
@@ -160,7 +251,19 @@ export interface CoverageReport {
 
 /** v2 article schema version discriminator. */
 export const ARTICLE_SCHEMA_VERSION = 'v2' as const
-export type ArticleSchemaVersion = typeof ARTICLE_SCHEMA_VERSION
+/**
+ * v3 article schema version (DET-350). v3 is an ADDITIVE superset of v2: it adds
+ * source-grounded generated callouts (carried inside `calloutPlacements.generated`),
+ * comparison `tables`, and `sourceNotes` (references / bibliography / external links
+ * / removed nav-footer / low-importance material moved out of the article body). A
+ * v3 article is assignable to `ArticleJsonV2` (every new field is optional there),
+ * so the existing services / web contract keep operating on the v2 shape unchanged;
+ * `schemaVersion` simply bumps to `'v3'` once the new fields are attached.
+ */
+export const ARTICLE_SCHEMA_VERSION_V3 = 'v3' as const
+export type ArticleSchemaVersion =
+  | typeof ARTICLE_SCHEMA_VERSION
+  | typeof ARTICLE_SCHEMA_VERSION_V3
 
 /**
  * v2 heading provenance. Distinct from v1 `HeadingSource`: 'cleanedOriginal'
@@ -364,6 +467,124 @@ export interface ArticleCallout {
 export interface ArticleCalloutPlacement {
   bySection: Record<string, ArticleCallout[]>
   unplaced: ArticleCallout[]
+  /**
+   * Source-grounded GENERATED callouts (DET-350). Unlike `bySection`/`unplaced`
+   * (which only RE-PLACE existing end-matter), these are new pedagogical asides
+   * the callout generator distilled from the source — definitions, key ideas,
+   * analogies the source draws, caveats, examples, warnings, "remember" prompts,
+   * and compare cards — each grounded in real source blocks and tied to the
+   * sections it relates to. Present only on v3 articles; the fidelity checker
+   * rejects any whose `sourceBlockIds` are empty or unknown.
+   */
+  generated?: ArticleGeneratedCallout[]
+}
+
+/**
+ * The pedagogical TYPE of a generated callout (DET-350). Every type is distilled
+ * from the source — never from outside knowledge — so a callout can always cite
+ * the blocks it came from:
+ *  - 'definition'      — a term the source defines.
+ *  - 'key_idea'        — a central point the source makes.
+ *  - 'source_analogy'  — an analogy the SOURCE itself draws (e.g. the transformer
+ *                        transcript's audio-mixer / Beatles comparison).
+ *  - 'caveat'          — a qualification/limitation the source states.
+ *  - 'example'         — a concrete example the source gives.
+ *  - 'warning'         — a hazard/pitfall the source calls out.
+ *  - 'remember'        — a fact the source stresses as worth retaining.
+ *  - 'compare'         — a short A-vs-B contrast the source makes (the long-form
+ *                        version becomes an `ArticleComparisonTable`).
+ */
+export type ArticleCalloutType =
+  | 'definition'
+  | 'key_idea'
+  | 'source_analogy'
+  | 'caveat'
+  | 'example'
+  | 'warning'
+  | 'remember'
+  | 'compare'
+
+/**
+ * A source-grounded generated callout (DET-350). It carries new prose (a `title`
+ * + `body`) but NO new information: both must be supportable from `sourceBlockIds`
+ * (non-empty, all known), which the generator enforces in code and the fidelity
+ * checker re-verifies. `relatedSectionIds` ties the callout to the article
+ * section(s) it belongs beside (filtered to real section ids); `fidelityRisk`
+ * flags how much interpretation the wording required.
+ */
+export interface ArticleGeneratedCallout {
+  /** Deterministic id, e.g. `gco-source_analogy-0`. */
+  id: string
+  type: ArticleCalloutType
+  title: string
+  body: string
+  sourceBlockIds: string[]
+  relatedSectionIds: string[]
+  fidelityRisk: FidelityRisk
+}
+
+/**
+ * One comparison-table cell (DET-350). `sourceBlockIds` is OPTIONAL per cell —
+ * "per row/cell where possible": a cell that maps cleanly to specific block(s)
+ * carries them, otherwise it relies on the row-level grounding.
+ */
+export interface ArticleTableCell {
+  text: string
+  sourceBlockIds?: string[]
+}
+
+/** One comparison-table row (DET-350). The row MUST be grounded (non-empty,
+ *  known `sourceBlockIds`); the fidelity checker rejects an ungrounded row. */
+export interface ArticleComparisonTableRow {
+  cells: ArticleTableCell[]
+  sourceBlockIds: string[]
+}
+
+/**
+ * A source-grounded comparison table (DET-350) — e.g. open vs closed vs isolated
+ * systems, or natural vs human-made systems. The table REORGANIZES source content
+ * into rows/columns but adds no external facts: every row cites the source blocks
+ * it came from, and the table-level `sourceBlockIds` is the union of its rows'.
+ * `relatedSectionIds` ties it to the section(s) it belongs beside.
+ */
+export interface ArticleComparisonTable {
+  /** Deterministic id, e.g. `gtbl-0`. */
+  id: string
+  title: string
+  /** Column headers (≥2 — a comparison needs at least two columns). */
+  columns: string[]
+  rows: ArticleComparisonTableRow[]
+  sourceBlockIds: string[]
+  relatedSectionIds: string[]
+  fidelityRisk: FidelityRisk
+}
+
+/**
+ * One source-note item (DET-350): a fragment moved OUT of the article body, kept
+ * traceable to its source block(s). `url` is set for external links / references
+ * that carry one.
+ */
+export interface ArticleSourceNoteItem {
+  text: string
+  sourceBlockIds: string[]
+  url?: string
+}
+
+/**
+ * Source notes (DET-350) — the end-of-article apparatus that should not interrupt
+ * the reading flow. Built deterministically from the source blocks' classification
+ * (no LLM, no hallucination): citations become `references`/`bibliography`,
+ * URL-bearing asides become `externalLinks`, removed NAVIGATION_NOISE/FOOTER blocks
+ * become `removedNavigation`, and other low-value (ad / sidebar / duplicate /
+ * removed) material becomes `lowImportance`. References and bibliography move here
+ * BY DEFAULT rather than living inline in the body.
+ */
+export interface ArticleSourceNotes {
+  references: ArticleSourceNoteItem[]
+  bibliography: ArticleSourceNoteItem[]
+  externalLinks: ArticleSourceNoteItem[]
+  removedNavigation: ArticleSourceNoteItem[]
+  lowImportance: ArticleSourceNoteItem[]
 }
 
 /** Genre/shape of the article (DET-273). */
@@ -459,6 +680,169 @@ export interface EditorialLayout {
   figurePlacements?: EditorialFigurePlacement[]
 }
 
+/* ===========================================================================
+ * Conceptual segmentation (DET-347) — a pre-outline learning lane.
+ * ===========================================================================
+ *
+ * WHY this exists. The earlier pipeline modelled the source as a flat inventory
+ * (structure model) and then let the reshaping plan pick blocks section-by-block.
+ * For TRANSCRIPTS that produced a fragment list — each block became its own tiny
+ * section and the instructor's teaching arc was lost. Conceptual segmentation
+ * sits BETWEEN the structure model and the reshaping plan: it groups the
+ * classified source blocks into a handful of coherent LEARNING SEGMENTS (by
+ * teaching intent, not by sentence) so the outline can build sections from whole
+ * concepts instead of isolated blocks.
+ *
+ * THE INVARIANT (same as every other stage). A segment never adds substance: it
+ * only GROUPS real source blocks. Every segment carries a non-empty
+ * `sourceBlockIds` drawn from the source, and `mustPreserveClaims` are quotes of
+ * what the source already says (the downstream fidelity check must keep them).
+ * The segment→block mapping is persisted so coverage and fidelity reports can
+ * audit that no high-importance block was dropped on the floor.
+ */
+
+/** What a segment is DOING for the learner — its teaching role (DET-347). */
+export type SegmentRole =
+  | 'orientation'
+  | 'definition'
+  | 'mechanism'
+  | 'distinction'
+  | 'example'
+  | 'analogy'
+  | 'history'
+  | 'application'
+  | 'caveat'
+  | 'summary'
+
+/** How load-bearing a segment is for understanding the source (DET-347). */
+export type SegmentImportance = 'high' | 'medium' | 'low'
+
+/** Where a segment should land in the rendered article (DET-347). */
+export type SegmentArticlePlacement = 'main_body' | 'callout' | 'source_notes'
+
+/**
+ * One coherent learning segment — an ordered group of source blocks that teach a
+ * single idea. `id` is code-minted (`seg-N`) so it is stable and reproducible;
+ * `sourceBlockIds` is the segment→block mapping the coverage/fidelity reports
+ * audit. `mustPreserveClaims` are source claims this segment must not lose.
+ */
+export interface SourceSegment {
+  id: string
+  title: string
+  role: SegmentRole
+  sourceBlockIds: string[]
+  importance: SegmentImportance
+  summary: string
+  mustPreserveClaims: string[]
+  suggestedArticlePlacement: SegmentArticlePlacement
+}
+
+/**
+ * The persisted conceptual-segmentation artifact (DET-347). `segments` are in
+ * source-reading order (the service sorts them by their earliest cited block so
+ * the teaching arc is preserved unless a later outline stage records a reorder).
+ * `unsegmentedBlocks` records every non-removable block that no segment covers,
+ * WITH a reason — the coverage guard guarantees no high-importance block is left
+ * unsegmented without one. `warnings` carries any code-appended audit notes.
+ */
+export interface ConceptualSegmentation {
+  segments: SourceSegment[]
+  unsegmentedBlocks: { blockId: string; reason: string }[]
+  warnings: string[]
+}
+
+/* ===========================================================================
+ * Article quality report v3 — fidelity review rollup (DET-354).
+ * ===========================================================================
+ *
+ * The fidelity REVIEW (DET-354) runs after generation + the fidelity check +
+ * coverage + learning extraction. It does NOT re-judge the article with another
+ * LLM call; it SYNTHESISES the artifacts the earlier stages already produced
+ * (the `FidelityReport`, the deterministic `CoverageReport`, the structure model
+ * and the learning layer) into a single, machine-actionable quality rollup.
+ *
+ * It is an ADDITIVE lane like `coverageReport`: it never mutates `articleJson`
+ * and lives in its own `qualityReport` column. Its `blockerReasons` are the
+ * SECOND gate on `FINAL`/`BLOCKED` (the first being `FidelityReport.approved`):
+ * a high-severity blocker holds the article BLOCKED with a specific reason and a
+ * stage-targeted regeneration hint, so a re-run knows exactly what to fix.
+ */
+
+/** The pipeline stage a regeneration hint targets (DET-354). */
+export type ArticleQualityStage =
+  | 'structure-model'
+  | 'reshaping-plan'
+  | 'generator'
+  | 'learning-layer'
+
+/**
+ * One reason an article is held back by the fidelity review (DET-354). A
+ * `high`-severity reason BLOCKS the article; `medium` is advisory (surfaced in
+ * `reviewerWarnings`). Every reason is tied to the evidence that produced it —
+ * `articleRefs` for unsupported ADDITIONS (where in the article), `sourceBlockIds`
+ * for LOST information (which source blocks) — and names the `stage` whose re-run
+ * would fix it, so `regenerationHints` can be derived deterministically.
+ */
+export interface ArticleBlockerReason {
+  /** Stable machine code, e.g. 'unsupported_claims' / 'important_coverage_gap'. */
+  code: string
+  /** The review dimension that produced the reason (human-readable label). */
+  dimension: string
+  severity: Severity
+  /** Specific, source-grounded explanation of what is wrong. */
+  message: string
+  /** Article block/section ids the reason is tied to (unsupported additions). */
+  articleRefs?: string[]
+  /** Source block ids the reason is tied to (lost / under-covered information). */
+  sourceBlockIds?: string[]
+  /** The pipeline stage whose re-run would resolve the reason. */
+  stage: ArticleQualityStage
+}
+
+/**
+ * Article quality report v3 (DET-354) — the fidelity-review rollup. Scores are
+ * 0–100 unless noted; counts are non-negative integers. The report DIFFERENTIATES
+ * raw source coverage (`sourceCoverageScore`, every kept block) from IMPORTANT
+ * source coverage (`importantSourceCoverageScore`, only the blocks the structure
+ * model marked as claims/caveats/definitions/examples or the classifier marked as
+ * a high-value class) — a thin article can score well on the former while having
+ * dropped the source's actual substance.
+ */
+export interface ArticleQualityReportV3 {
+  /** Raw source coverage: represented kept blocks / kept blocks. */
+  sourceCoverageScore: number
+  /** Coverage restricted to IMPORTANT source blocks (claims/definitions/etc.). */
+  importantSourceCoverageScore: number
+  /** Fraction of article body blocks that cite at least one source block. */
+  citationCoverageScore: number
+  /** Unsupported ADDITIONS counted (added information + unsupported examples). */
+  unsupportedClaimCount: number
+  /** High-severity LOST information (dropped core claims + caveats). */
+  highSeverityLostInfoCount: number
+  /** Grounded learning concepts/candidates extracted from the source. */
+  conceptCandidateCount: number
+  /** Key claims the structure model inventoried from the source. */
+  keyClaimCount: number
+  /** Grounded retrieval prompts extracted for the learning loop. */
+  retrievalPromptCount: number
+  /** Tables preserved in the article body. */
+  tableCount: number
+  /** Inline callouts in the article body. */
+  calloutCount: number
+  /** Readiness to build retrieval/exercises from the learning layer (0–100). */
+  exerciseReadinessScore: number
+  /** Structural readability heuristic (0–100). */
+  articleReadabilityScore: number
+  /** Fraction of EVERY traceable fragment with valid provenance (0–100). */
+  provenanceCompletenessScore: number
+  /** Non-blocking advisories (medium issues, low scores). */
+  reviewerWarnings: string[]
+  /** Blocking reasons (high-severity); empty ⇒ the review approves. */
+  blockerReasons: ArticleBlockerReason[]
+  /** Actionable, stage-targeted hints derived from the blockers. */
+  regenerationHints: string[]
+}
+
 /** One audited reading-order move (DET-275). */
 export interface ArticleReorderingAudit {
   sourceBlockId: string
@@ -467,6 +851,54 @@ export interface ArticleReorderingAudit {
   movedWithClusterIds?: string[]
   reason: string
   risk: FidelityRisk
+}
+
+/* ===========================================================================
+ * Key claims — the v3 claims layer (DET-352).
+ * ===========================================================================
+ *
+ * An additive, source-grounded inventory of the important CLAIMS and
+ * DEFINITIONS a generated article makes. It rides on `ArticleJsonV2` as the
+ * optional `keyClaims` field (no schemaVersion bump — the codebase layers every
+ * post-generation artifact additively, exactly as readingAids / calloutPlacements
+ * / shape / reorderings did). It is the "v3" deliverable the article-generation
+ * project asks for: provenance, retrieval-prompt seeds, and later concept cards
+ * all read from here.
+ *
+ * THE INVARIANT (same as every other surface). A claim adds no meaning the source
+ * did not contain: every claim carries non-empty `sourceBlockIds` (the blocks it
+ * is drawn from) AND non-empty `articleSectionIds` (the article sections those
+ * blocks render in). Both are RE-DERIVED / re-checked in code from the article's
+ * own section→block map — the extractor LLM is never trusted for them. Definitions
+ * are extracted explicitly (claimType 'definition'); caveats/uncertainty are a
+ * first-class claimType so they are never silently dropped.
+ */
+
+/** The kind of claim a `KeyClaim` records (DET-352). */
+export type ClaimType =
+  | 'definition'
+  | 'mechanism'
+  | 'distinction'
+  | 'historical_claim'
+  | 'causal_claim'
+  | 'classification'
+  | 'example'
+  | 'caveat'
+
+/**
+ * One extracted key claim / source-backed definition (DET-352). `id` is minted in
+ * code. `text` is the claim faithfully phrased from the source. `sourceBlockIds`
+ * trace it to the blocks it is grounded in (non-empty); `articleSectionIds` are
+ * the article sections those blocks render in (non-empty, derived in code).
+ * `confidence` is the extractor's 0–1 self-rating (clamped in code).
+ */
+export interface KeyClaim {
+  id: string
+  text: string
+  sourceBlockIds: string[]
+  articleSectionIds: string[]
+  claimType: ClaimType
+  confidence: number
 }
 
 /**
@@ -491,4 +923,30 @@ export interface ArticleJsonV2 {
   calloutPlacements?: ArticleCalloutPlacement
   shape?: ArticleShape
   reorderings?: ArticleReorderingAudit[]
+  /**
+   * Source-grounded key claims / definitions (DET-352, the v3 claims layer).
+   * Additive + optional: old rows and the legacy v1→v2 adapter simply omit it.
+   * Every claim is traceable (non-empty sourceBlockIds + articleSectionIds).
+   */
+  keyClaims?: KeyClaim[]
+  /* v3 additive fields (DET-350) — present once the callout/table/source-note
+   * lanes have run; optional here so a v3 article stays assignable to v2. */
+  tables?: ArticleComparisonTable[]
+  sourceNotes?: ArticleSourceNotes
+}
+
+/**
+ * Article JSON v3 (DET-350) — the source-grounded-extras superset of v2.
+ * Discriminated on `schemaVersion: 'v3'`. It REQUIRES the three fields the v3
+ * wave introduces (`calloutPlacements` now also carrying `.generated`, `tables`,
+ * `sourceNotes`); everything else is inherited verbatim from v2. Because each of
+ * those fields is optional on `ArticleJsonV2`, a v3 article is assignable to v2 —
+ * the pipeline and web keep operating on the v2 shape and simply see the richer
+ * fields when present.
+ */
+export interface ArticleJsonV3 extends ArticleJsonV2 {
+  schemaVersion: typeof ARTICLE_SCHEMA_VERSION_V3
+  calloutPlacements: ArticleCalloutPlacement
+  tables: ArticleComparisonTable[]
+  sourceNotes: ArticleSourceNotes
 }

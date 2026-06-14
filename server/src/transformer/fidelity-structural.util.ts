@@ -211,6 +211,70 @@ export function checkEndMatterTraceability(
   return { structuralFindings: findings, traceabilityViolation: violation }
 }
 
+/**
+ * Source-grounded EXTRAS traceability (DET-350): the v3 generated callouts
+ * (`calloutPlacements.generated`) and comparison `tables`. Each must be grounded
+ * in non-empty, KNOWN source block ids — a callout or a table row that references
+ * an unknown id (or none) is an unsupported, externally-sourced artifact and is
+ * REJECTED by fidelity review: high `structuralFindings` + a traceability
+ * violation (which blocks approval ⇒ the article is BLOCKED). A callout/table
+ * generated faithfully is grounded by construction (the generators drop ungrounded
+ * items), so this only fires on something the generators missed or a hand-authored
+ * artifact — exactly the gate the acceptance criteria require.
+ */
+export function checkSourceGroundedExtras(
+  input: SourcePreservingArticle | ArticleJsonV2,
+  known: ReadonlySet<string>,
+): StructuralCheckResult {
+  const article = toArticleV2(input)
+  const findings: FidelityFinding[] = []
+  let violation = false
+
+  const checkIds = (ids: string[], where: string, ref: string) => {
+    if (ids.length === 0) {
+      violation = true
+      findings.push({
+        severity: 'high',
+        description: `${where} has no sourceBlockIds — unsupported, not grounded in the source.`,
+        articleRef: ref,
+      })
+      return
+    }
+    const unknown = ids.filter((id) => !known.has(id))
+    if (unknown.length > 0) {
+      violation = true
+      findings.push({
+        severity: 'high',
+        description: `${where} references unknown block ids: ${unknown.join(
+          ', ',
+        )}.`,
+        articleRef: ref,
+        sourceBlockIds: unknown,
+      })
+    }
+  }
+
+  for (const c of article.calloutPlacements?.generated ?? [])
+    checkIds(
+      c.sourceBlockIds,
+      `Generated callout "${c.title}" (${c.type})`,
+      c.id,
+    )
+
+  for (const t of article.tables ?? []) {
+    checkIds(t.sourceBlockIds, `Table "${t.title}"`, t.id)
+    t.rows.forEach((r, i) =>
+      checkIds(
+        r.sourceBlockIds,
+        `Table "${t.title}" row ${i}`,
+        `${t.id}-row-${i}`,
+      ),
+    )
+  }
+
+  return { structuralFindings: findings, traceabilityViolation: violation }
+}
+
 // A trailing dash attribution: em-dash / en-dash / horizontal-bar / "--" / "- "
 // followed by a Capitalized name at the END of the text. Conservative on purpose.
 const DASH_ATTRIBUTION_RE =

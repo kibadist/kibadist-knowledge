@@ -9,6 +9,7 @@ import {
   checkEndMatterTraceability,
   checkProcedureListPreservation,
   checkQuoteAttribution,
+  checkSourceGroundedExtras,
   checkUnsupportedHighlights,
 } from './fidelity-structural.util'
 import { completeJson } from './llm-json.util'
@@ -165,6 +166,39 @@ export function mergeDeterministicChecks(
   for (const p of article.abstract) checkFragment(p, 'abstract')
   for (const s of article.sections) checkSection(s)
 
+  // --- DET-352 key-claim traceability ---------------------------------------
+  // Every extracted key claim must trace to real source blocks AND to real
+  // article sections; an untraceable claim is a high structuralFinding + a
+  // traceability violation (it would add un-grounded meaning to provenance).
+  if (article.keyClaims && article.keyClaims.length > 0) {
+    const sectionIds = collectSectionIds(article.sections)
+    for (const claim of article.keyClaims) {
+      const unknownBlocks = claim.sourceBlockIds.filter((id) => !known.has(id))
+      if (claim.sourceBlockIds.length === 0 || unknownBlocks.length > 0) {
+        traceabilityViolation = true
+        structuralFindings.push({
+          severity: 'high',
+          description: `Key claim ${claim.id} references missing/unknown source block ids: ${unknownBlocks.join(', ') || '(none cited)'}.`,
+          articleRef: claim.id,
+          ...(unknownBlocks.length > 0
+            ? { sourceBlockIds: unknownBlocks }
+            : {}),
+        })
+      }
+      const unknownSections = claim.articleSectionIds.filter(
+        (id) => !sectionIds.has(id),
+      )
+      if (claim.articleSectionIds.length === 0 || unknownSections.length > 0) {
+        traceabilityViolation = true
+        structuralFindings.push({
+          severity: 'high',
+          description: `Key claim ${claim.id} references unknown article section ids: ${unknownSections.join(', ') || '(none cited)'}.`,
+          articleRef: claim.id,
+        })
+      }
+    }
+  }
+
   // --- DET-281 structural checks --------------------------------------------
   // End-matter + reading-aid traceability beyond the abstract/blocks/headings
   // already checked above (subtitle, keyTerms, sourceExamples, caveats,
@@ -179,6 +213,12 @@ export function mergeDeterministicChecks(
 
   // Unsupported reading-aid highlights (high, blocking).
   structuralFindings.push(...checkUnsupportedHighlights(article, known))
+
+  // Source-grounded EXTRAS (DET-350): generated callouts + comparison tables must
+  // be traceable — an ungrounded/unknown-id one is rejected (high, blocking).
+  const extras = checkSourceGroundedExtras(article, known)
+  structuralFindings.push(...extras.structuralFindings)
+  if (extras.traceabilityViolation) traceabilityViolation = true
 
   // Duplicate full rendering (medium; high for a duplicated caveat).
   const dup = checkDuplicateRendering(article)
@@ -258,4 +298,15 @@ export function mergeDeterministicChecks(
     emphasisChanges,
     structuralFindings,
   }
+}
+
+/** Every section id in the article, descending into subsections (DET-352). */
+function collectSectionIds(sections: ArticleSectionV2[]): Set<string> {
+  const ids = new Set<string>()
+  const walk = (s: ArticleSectionV2) => {
+    ids.add(s.id)
+    for (const sub of s.subsections ?? []) walk(sub)
+  }
+  for (const s of sections) walk(s)
+  return ids
 }
