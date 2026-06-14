@@ -390,6 +390,77 @@ describe('ArticlePipelineService.run', () => {
     expect(statusLog).not.toContain(TransformedArticleStatus.FINAL)
   })
 
+  it('attaches the v3 status + quality report to the article JSON when gates pass (DET-355)', async () => {
+    const { prisma, article } = makeStubPrisma()
+    const s = makeServices({})
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.ai,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    // The persisted article JSON carries the gate-passed v3 status + a complete
+    // quality report (the v3 reader reads these straight from the JSON).
+    const stored = article.articleJson as ArticleJsonV2 & {
+      status: string
+      qualityReport: { blockerReasons: unknown[]; regenerationHints: unknown[] }
+    }
+    expect(stored.status).toBe('READY_FOR_REVIEW')
+    expect(stored.qualityReport).toBeDefined()
+    expect(stored.qualityReport.blockerReasons).toEqual([])
+    expect(stored.qualityReport.regenerationHints).toEqual([])
+  })
+
+  it('records a fidelity blocker reason on the JSON when fidelity rejects (DET-355)', async () => {
+    const { prisma, article } = makeStubPrisma()
+    const blockedReport: FidelityReport = { ...okReport, approved: false }
+    const s = makeServices({
+      fidelity: { check: jest.fn(async () => blockedReport) },
+    })
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      s.diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.ai,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    const stored = article.articleJson as ArticleJsonV2 & {
+      status: string
+      qualityReport: { blockerReasons: { code: string }[] }
+    }
+    expect(stored.status).toBe('BLOCKED_FIDELITY')
+    expect(stored.qualityReport.blockerReasons.map((r) => r.code)).toContain(
+      'fidelity',
+    )
+  })
+
   it('ends FAILED when a step throws (e.g. traceability violation after retry)', async () => {
     const { prisma, statusLog, article } = makeStubPrisma()
     const s = makeServices({

@@ -1,5 +1,6 @@
 import {
   type Prisma,
+  SourceBlockImportance,
   SourceBlockPlacement,
   TransformedArticleStatus,
   TransformerBlockClass,
@@ -10,6 +11,13 @@ import { PrismaService } from '../prisma/prisma.service'
 import { toArticleV2 } from './article-compat.util'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
+import {
+  type ArticleGateResult,
+  buildArticleQualityReport,
+  evaluateQualityGates,
+  importantCoverageScore,
+  isBlockedStatus,
+} from './article-quality-gate'
 import { CalloutGeneratorService } from './callout-generator.service'
 import { placeCallouts } from './callout-placement.util'
 import { ConceptualSegmentationService } from './conceptual-segmentation.service'
@@ -34,7 +42,10 @@ import type {
   SourceStructureModel,
 } from './schemas'
 import { SourceDiagnosisService } from './source-diagnosis.service'
-import type { SourceDiagnosisMetadata } from './source-diagnosis.types'
+import type {
+  SourceDiagnosisMetadata,
+  SourceKind,
+} from './source-diagnosis.types'
 import { buildSourceNotes } from './source-notes.util'
 import type { ClassifiedBlockInput } from './structure-model.service'
 import { StructureModelService } from './structure-model.service'
@@ -48,12 +59,18 @@ import {
   type ConceptualSegmentation,
   type CoverageReport,
   type EditorialLayout,
+  type FidelityFinding,
   type FidelityReport,
   type SourcePreservingArticle,
 } from './transformer.types'
 
-/** A loaded source block with everything the M2/M3 services need. */
-type LoadedBlock = ClassifiedBlockInput & { uncertain: boolean }
+/** A loaded source block with everything the M2/M3 services need. `important`
+ *  flags a HIGH-importance block (DET-346 role classifier) for the DET-355
+ *  important-source-coverage gate. */
+type LoadedBlock = ClassifiedBlockInput & {
+  uncertain: boolean
+  important: boolean
+}
 
 /** Cap auto-rendered illustrations per article to bound gpt-image-1 cost/latency
  *  (DET-319). High-fidelity-risk suggestions are never auto-rendered. */
@@ -282,7 +299,56 @@ export class ArticlePipelineService {
       blocks,
     )
 
+    // --- 11. Quality gates + blocker status (DET-355) -----------------------
+    // Grade the fidelity + coverage + concept signals against the quality
+    // thresholds to decide the v3 ArticleStatus (READY_FOR_REVIEW vs a BLOCKED_*
+    // held-back state) with explainable blocker reasons. The status + full quality
+    // report are folded INTO the persisted article JSON, where the v3 reader's
+    // status banner reads them directly. Never throws — a failure degrades to the
+    // fidelity-only decision so a good article is never lost to FAILED.
+    const gate = this.evaluateGate(
+      articleId,
+      report,
+      coverage,
+      blocks,
+      structureModel,
+      articleConceptCandidates,
+      routing?.diagnosis.sourceKind ?? 'unknown',
+    )
+    const qualityReport = buildArticleQualityReport(
+      {
+        sourceCoverageScore: coverage.coveragePercent / 100,
+        importantSourceCoverageScore: importantCoverageScore(
+          blocks,
+          coverage.representedBlockIds,
+        ),
+        citationCoverageScore: citationCoverage(coverage),
+        unsupportedClaimCount: highSeverityCount(report.addedInformation),
+        highSeverityLostInfoCount: highSeverityCount(report.lostInformation),
+        conceptCandidateCount: articleConceptCandidates?.length ?? 0,
+        keyClaimCount: structureModel.claims?.length ?? 0,
+        retrievalPromptCount: 0,
+        tableCount: generatedTables.length,
+        calloutCount: generatedCallouts.length,
+        // Coarse provenance proxy (source coverage stands in until a dedicated
+        // provenance-completeness measure lands); readability is not yet scored.
+        provenanceCompletenessScore: coverage.coveragePercent / 100,
+        articleReadabilityScore: 1,
+      },
+      gate,
+    )
+    // The v3 status + quality report live in the article JSON (the v3 reader reads
+    // them straight from there). The DB `status` enum keeps its coarse FINAL/BLOCKED
+    // semantics so existing v2 consumers render unchanged (DET-355 criterion 6):
+    // a gate-passed article is FINAL, any held-back gate is BLOCKED.
+    const finalArticle = {
+      ...article,
+      status: gate.status,
+      qualityReport,
+    }
+
     await this.persist(articleId, {
+      articleJson: finalArticle as unknown as Prisma.InputJsonValue,
       fidelityReport: report as unknown as Prisma.InputJsonValue,
       fidelityScore: Math.round(report.fidelityScore),
       coverageReport: coverage as unknown as Prisma.InputJsonValue,
@@ -307,9 +373,9 @@ export class ArticlePipelineService {
             } as unknown as Prisma.InputJsonValue,
           }
         : {}),
-      status: report.approved
-        ? TransformedArticleStatus.FINAL
-        : TransformedArticleStatus.BLOCKED,
+      status: isBlockedStatus(gate.status)
+        ? TransformedArticleStatus.BLOCKED
+        : TransformedArticleStatus.FINAL,
     })
 
     // Fire-and-forget: the article is already terminal and the poll has stopped.
@@ -714,6 +780,48 @@ export class ArticlePipelineService {
   }
 
   /**
+   * Evaluate the DET-355 quality gates over the post-fidelity signals. Never
+   * throws — any failure degrades to the fidelity-only decision (READY_FOR_REVIEW
+   * when fidelity approved, BLOCKED_FIDELITY otherwise) so a good article is never
+   * lost to FAILED by a gate bug.
+   */
+  private evaluateGate(
+    articleId: string,
+    report: FidelityReport,
+    coverage: CoverageReport,
+    blocks: LoadedBlock[],
+    structureModel: SourceStructureModel,
+    candidates: ArticleConceptCandidate[] | null,
+    sourceKind: SourceKind,
+  ): ArticleGateResult {
+    try {
+      return evaluateQualityGates({
+        sourceKind,
+        conceptRich: isConceptRichKind(sourceKind),
+        fidelityApproved: report.approved,
+        importantSourceCoverageScore: importantCoverageScore(
+          blocks,
+          coverage.representedBlockIds,
+        ),
+        unsupportedClaimCount: highSeverityCount(report.addedInformation),
+        conceptCandidateCount: candidates?.length ?? 0,
+        highSeverityLostInfoCount: highSeverityCount(report.lostInformation),
+      })
+    } catch (error) {
+      this.logger.warn(
+        `Quality gate evaluation failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return {
+        status: report.approved ? 'READY_FOR_REVIEW' : 'BLOCKED_FIDELITY',
+        blockerReasons: [],
+        regenerationHints: [],
+      }
+    }
+  }
+
+  /**
    * Run the source diagnosis + routing decision; never throws. A failure logs and
    * yields null so the article still runs the v2 pipeline (the conservative path).
    */
@@ -774,6 +882,7 @@ export class ArticlePipelineService {
         classification: true,
         removable: true,
         placement: true,
+        importance: true,
       },
     })
     return rows.map((r) => ({
@@ -782,6 +891,9 @@ export class ArticlePipelineService {
       classification: r.classification ?? TransformerBlockClass.UNCERTAIN,
       text: r.text,
       headingLevel: r.headingLevel,
+      // HIGH-importance blocks anchor the DET-355 important-source-coverage gate;
+      // null/MEDIUM/LOW (and un-role-classified rows) are not "important".
+      important: r.importance === SourceBlockImportance.HIGH,
       // Main-body generation ignores filler/navigation/reference clutter by
       // default (DET-346): a block is excluded from the body when the noise
       // classifier marked it removable OR the role classifier recommends it be
@@ -841,5 +953,37 @@ function excludedFromMainBody(placement: SourceBlockPlacement | null): boolean {
   return (
     placement === SourceBlockPlacement.DISCARD ||
     placement === SourceBlockPlacement.SOURCE_NOTES
+  )
+}
+
+/** Count the high-severity findings in a fidelity finding list (DET-355). */
+function highSeverityCount(findings: FidelityFinding[]): number {
+  return findings.filter((f) => f.severity === 'high').length
+}
+
+/**
+ * Fraction of mapped article paragraphs/blocks that cite at least one source
+ * block (DET-355 `citationCoverageScore`). 1 when the article has no mapped body
+ * (nothing to cite). Derived from the deterministic coverage report's paragraphMap.
+ */
+function citationCoverage(coverage: CoverageReport): number {
+  const mapped = coverage.paragraphMap
+  if (mapped.length === 0) return 1
+  const cited = mapped.filter((p) => p.sourceBlockIds.length > 0).length
+  return cited / mapped.length
+}
+
+/**
+ * Whether a source kind is "concept-rich" — i.e. the missing-concepts gate
+ * applies (DET-355 acceptance criterion 4). Teachable kinds (lessons, structured
+ * articles, papers, docs) are concept-rich; raw notes / unknown sources are not,
+ * so a thin source is never blocked for having too few concepts.
+ */
+function isConceptRichKind(sourceKind: SourceKind): boolean {
+  return (
+    sourceKind === 'transcript_lesson' ||
+    sourceKind === 'structured_web_article' ||
+    sourceKind === 'research_paper' ||
+    sourceKind === 'documentation'
   )
 }
