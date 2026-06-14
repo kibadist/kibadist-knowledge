@@ -28,7 +28,11 @@ import {
   type RetrievalPrompt,
 } from './schemas'
 import type { ClassifiedBlockInput } from './structure-model.service'
-import type { ArticleJsonV2, ArticleSectionV2 } from './transformer.types'
+import type {
+  ArticleJsonV2,
+  ArticleSectionV2,
+  KeyClaim,
+} from './transformer.types'
 
 /**
  * Learning-layer service (DET-258, step 11, on demand only). LLM via
@@ -46,7 +50,17 @@ import type { ArticleJsonV2, ArticleSectionV2 } from './transformer.types'
 export class LearningLayerService {
   constructor(private readonly ai: AiService) {}
 
-  async build(blocks: ClassifiedBlockInput[]): Promise<LearningLayer> {
+  /**
+   * Build the learning layer (concepts + retrieval prompts). `keyClaims` (DET-352)
+   * are optional retrieval-prompt SEEDS: the article's important claims, passed as
+   * advisory hints so the generated self-test prompts target them. They never widen
+   * grounding — every prompt/concept is still code-dropped unless it cites a real
+   * source block.
+   */
+  async build(
+    blocks: ClassifiedBlockInput[],
+    keyClaims: KeyClaim[] = [],
+  ): Promise<LearningLayer> {
     const known = new Set(blocks.map((b) => b.id))
     const content = blocks
       .filter((b) => !b.removable)
@@ -57,7 +71,7 @@ export class LearningLayerService {
         text: b.text,
       }))
 
-    const { system, prompt } = buildLearningLayerPrompt(content)
+    const { system, prompt } = buildLearningLayerPrompt(content, keyClaims)
     const raw = await completeJson(this.ai, {
       system,
       prompt,

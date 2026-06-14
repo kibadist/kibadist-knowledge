@@ -660,6 +660,98 @@ export interface ConceptualSegmentation {
   warnings: string[]
 }
 
+/* ===========================================================================
+ * Article quality report v3 — fidelity review rollup (DET-354).
+ * ===========================================================================
+ *
+ * The fidelity REVIEW (DET-354) runs after generation + the fidelity check +
+ * coverage + learning extraction. It does NOT re-judge the article with another
+ * LLM call; it SYNTHESISES the artifacts the earlier stages already produced
+ * (the `FidelityReport`, the deterministic `CoverageReport`, the structure model
+ * and the learning layer) into a single, machine-actionable quality rollup.
+ *
+ * It is an ADDITIVE lane like `coverageReport`: it never mutates `articleJson`
+ * and lives in its own `qualityReport` column. Its `blockerReasons` are the
+ * SECOND gate on `FINAL`/`BLOCKED` (the first being `FidelityReport.approved`):
+ * a high-severity blocker holds the article BLOCKED with a specific reason and a
+ * stage-targeted regeneration hint, so a re-run knows exactly what to fix.
+ */
+
+/** The pipeline stage a regeneration hint targets (DET-354). */
+export type ArticleQualityStage =
+  | 'structure-model'
+  | 'reshaping-plan'
+  | 'generator'
+  | 'learning-layer'
+
+/**
+ * One reason an article is held back by the fidelity review (DET-354). A
+ * `high`-severity reason BLOCKS the article; `medium` is advisory (surfaced in
+ * `reviewerWarnings`). Every reason is tied to the evidence that produced it —
+ * `articleRefs` for unsupported ADDITIONS (where in the article), `sourceBlockIds`
+ * for LOST information (which source blocks) — and names the `stage` whose re-run
+ * would fix it, so `regenerationHints` can be derived deterministically.
+ */
+export interface ArticleBlockerReason {
+  /** Stable machine code, e.g. 'unsupported_claims' / 'important_coverage_gap'. */
+  code: string
+  /** The review dimension that produced the reason (human-readable label). */
+  dimension: string
+  severity: Severity
+  /** Specific, source-grounded explanation of what is wrong. */
+  message: string
+  /** Article block/section ids the reason is tied to (unsupported additions). */
+  articleRefs?: string[]
+  /** Source block ids the reason is tied to (lost / under-covered information). */
+  sourceBlockIds?: string[]
+  /** The pipeline stage whose re-run would resolve the reason. */
+  stage: ArticleQualityStage
+}
+
+/**
+ * Article quality report v3 (DET-354) — the fidelity-review rollup. Scores are
+ * 0–100 unless noted; counts are non-negative integers. The report DIFFERENTIATES
+ * raw source coverage (`sourceCoverageScore`, every kept block) from IMPORTANT
+ * source coverage (`importantSourceCoverageScore`, only the blocks the structure
+ * model marked as claims/caveats/definitions/examples or the classifier marked as
+ * a high-value class) — a thin article can score well on the former while having
+ * dropped the source's actual substance.
+ */
+export interface ArticleQualityReportV3 {
+  /** Raw source coverage: represented kept blocks / kept blocks. */
+  sourceCoverageScore: number
+  /** Coverage restricted to IMPORTANT source blocks (claims/definitions/etc.). */
+  importantSourceCoverageScore: number
+  /** Fraction of article body blocks that cite at least one source block. */
+  citationCoverageScore: number
+  /** Unsupported ADDITIONS counted (added information + unsupported examples). */
+  unsupportedClaimCount: number
+  /** High-severity LOST information (dropped core claims + caveats). */
+  highSeverityLostInfoCount: number
+  /** Grounded learning concepts/candidates extracted from the source. */
+  conceptCandidateCount: number
+  /** Key claims the structure model inventoried from the source. */
+  keyClaimCount: number
+  /** Grounded retrieval prompts extracted for the learning loop. */
+  retrievalPromptCount: number
+  /** Tables preserved in the article body. */
+  tableCount: number
+  /** Inline callouts in the article body. */
+  calloutCount: number
+  /** Readiness to build retrieval/exercises from the learning layer (0–100). */
+  exerciseReadinessScore: number
+  /** Structural readability heuristic (0–100). */
+  articleReadabilityScore: number
+  /** Fraction of EVERY traceable fragment with valid provenance (0–100). */
+  provenanceCompletenessScore: number
+  /** Non-blocking advisories (medium issues, low scores). */
+  reviewerWarnings: string[]
+  /** Blocking reasons (high-severity); empty ⇒ the review approves. */
+  blockerReasons: ArticleBlockerReason[]
+  /** Actionable, stage-targeted hints derived from the blockers. */
+  regenerationHints: string[]
+}
+
 /** One audited reading-order move (DET-275). */
 export interface ArticleReorderingAudit {
   sourceBlockId: string
@@ -668,6 +760,54 @@ export interface ArticleReorderingAudit {
   movedWithClusterIds?: string[]
   reason: string
   risk: FidelityRisk
+}
+
+/* ===========================================================================
+ * Key claims — the v3 claims layer (DET-352).
+ * ===========================================================================
+ *
+ * An additive, source-grounded inventory of the important CLAIMS and
+ * DEFINITIONS a generated article makes. It rides on `ArticleJsonV2` as the
+ * optional `keyClaims` field (no schemaVersion bump — the codebase layers every
+ * post-generation artifact additively, exactly as readingAids / calloutPlacements
+ * / shape / reorderings did). It is the "v3" deliverable the article-generation
+ * project asks for: provenance, retrieval-prompt seeds, and later concept cards
+ * all read from here.
+ *
+ * THE INVARIANT (same as every other surface). A claim adds no meaning the source
+ * did not contain: every claim carries non-empty `sourceBlockIds` (the blocks it
+ * is drawn from) AND non-empty `articleSectionIds` (the article sections those
+ * blocks render in). Both are RE-DERIVED / re-checked in code from the article's
+ * own section→block map — the extractor LLM is never trusted for them. Definitions
+ * are extracted explicitly (claimType 'definition'); caveats/uncertainty are a
+ * first-class claimType so they are never silently dropped.
+ */
+
+/** The kind of claim a `KeyClaim` records (DET-352). */
+export type ClaimType =
+  | 'definition'
+  | 'mechanism'
+  | 'distinction'
+  | 'historical_claim'
+  | 'causal_claim'
+  | 'classification'
+  | 'example'
+  | 'caveat'
+
+/**
+ * One extracted key claim / source-backed definition (DET-352). `id` is minted in
+ * code. `text` is the claim faithfully phrased from the source. `sourceBlockIds`
+ * trace it to the blocks it is grounded in (non-empty); `articleSectionIds` are
+ * the article sections those blocks render in (non-empty, derived in code).
+ * `confidence` is the extractor's 0–1 self-rating (clamped in code).
+ */
+export interface KeyClaim {
+  id: string
+  text: string
+  sourceBlockIds: string[]
+  articleSectionIds: string[]
+  claimType: ClaimType
+  confidence: number
 }
 
 /**
@@ -692,6 +832,12 @@ export interface ArticleJsonV2 {
   calloutPlacements?: ArticleCalloutPlacement
   shape?: ArticleShape
   reorderings?: ArticleReorderingAudit[]
+  /**
+   * Source-grounded key claims / definitions (DET-352, the v3 claims layer).
+   * Additive + optional: old rows and the legacy v1→v2 adapter simply omit it.
+   * Every claim is traceable (non-empty sourceBlockIds + articleSectionIds).
+   */
+  keyClaims?: KeyClaim[]
   /* v3 additive fields (DET-350) — present once the callout/table/source-note
    * lanes have run; optional here so a v3 article stays assignable to v2. */
   tables?: ArticleComparisonTable[]

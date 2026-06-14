@@ -17,7 +17,7 @@ import { AiService } from '../ai/ai.service'
 import { ConceptStateService } from '../concept-state/concept-state.service'
 import { fetchReadable } from '../inbox/url-fetch.util'
 import { PrismaService } from '../prisma/prisma.service'
-import { toArticleV2 } from './article-compat.util'
+import { isArticleV2, toArticleV2 } from './article-compat.util'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { isArticleV3 } from './article-v3.schema'
 import type { ArticleJsonV3 } from './article-v3.types'
@@ -39,6 +39,7 @@ import type {
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import type {
   ArticleJsonV2,
+  ArticleQualityReportV3,
   CoverageReport,
   EditorialLayout,
   FidelityReport,
@@ -124,6 +125,8 @@ export interface TransformerArticleDetail {
   fidelityReport: FidelityReport | null
   fidelityScore: number | null
   coverageReport: CoverageReport | null
+  /** Fidelity-review rollup (DET-354); null on rows generated before the review. */
+  qualityReport: ArticleQualityReportV3 | null
   illustrationPlan: IllustrationPlan | null
   learningLayer: LearningLayer | null
   /** AI-added encyclopedia metadata (DET-319) — NOT source-grounded; UI labels it. */
@@ -441,6 +444,7 @@ export class TransformerService {
         fidelityReport: article.fidelityReport as FidelityReport | null,
         fidelityScore: article.fidelityScore,
         coverageReport: article.coverageReport as CoverageReport | null,
+        qualityReport: article.qualityReport as ArticleQualityReportV3 | null,
         illustrationPlan: article.illustrationPlan as IllustrationPlan | null,
         learningLayer: article.learningLayer as LearningLayer | null,
         enrichment: article.enrichment as ArticleEnrichment | null,
@@ -478,6 +482,7 @@ export class TransformerService {
       fidelityReport: article.fidelityReport as FidelityReport | null,
       fidelityScore: article.fidelityScore,
       coverageReport: article.coverageReport as CoverageReport | null,
+      qualityReport: article.qualityReport as ArticleQualityReportV3 | null,
       illustrationPlan: article.illustrationPlan as IllustrationPlan | null,
       learningLayer: article.learningLayer as LearningLayer | null,
       enrichment: article.enrichment as ArticleEnrichment | null,
@@ -700,10 +705,18 @@ export class TransformerService {
     articleId: string,
   ): Promise<LearningLayer> {
     const article = await this.findOwnedArticle(userId, articleId)
+    // Pass the article's extracted key claims (DET-352) as retrieval-prompt seeds.
+    const stored = article.articleJson as
+      | SourcePreservingArticle
+      | ArticleJsonV2
+      | null
+    const keyClaims =
+      stored && isArticleV2(stored) ? (stored.keyClaims ?? []) : []
     return this.articlePipeline.generateLearningLayer(
       article.id,
       article.sourceId,
       article.blocksVersion,
+      keyClaims,
     )
   }
 
