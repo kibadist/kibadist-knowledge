@@ -334,12 +334,20 @@ export const ArticleJsonV3Schema: z.ZodType<ArticleJsonV3> = z.object({
   qualityReport,
 })
 
-/** True when a stored article JSON is v3 (discriminated on `schemaVersion`). */
+/**
+ * True when a stored article JSON is a v3 LEARNING article — discriminated on
+ * `schemaVersion: 'v3'` AND `mode: 'source_grounded_learning_article'`. The mode
+ * check is load-bearing: an enriched v2 article carries optional v3-era fields but
+ * stays `mode: 'source_preserving_article'`, so the mode guard keeps it on the v2
+ * read/render path and only the learning-first article reaches the v3 reader
+ * (DET-343 — fixes the schemaVersion-only mis-route).
+ */
 export function isArticleV3(json: unknown): json is ArticleJsonV3 {
   return (
     typeof json === 'object' &&
     json !== null &&
-    (json as { schemaVersion?: unknown }).schemaVersion === 'v3'
+    (json as { schemaVersion?: unknown }).schemaVersion === 'v3' &&
+    (json as { mode?: unknown }).mode === 'source_grounded_learning_article'
   )
 }
 
