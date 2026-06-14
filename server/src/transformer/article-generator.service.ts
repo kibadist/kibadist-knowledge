@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common'
 import { AiService } from '../ai/ai.service'
 import { buildArticlePrompt } from './article-generator.prompt'
 import { repairArticleLlmV2 } from './article-llm-repair.util'
+import type { LearningOutline } from './learning-outline.types'
 import { completeJson } from './llm-json.util'
 import type { ArticleLlmV2, ReshapingPlan } from './schemas'
 import { ArticleLlmV2Schema } from './schemas'
@@ -52,6 +53,14 @@ export class ArticleGeneratorService {
   async generate(
     plan: ReshapingPlan,
     blocks: ClassifiedBlockInput[],
+    /**
+     * Optional learning-first outline (DET-348). When supplied it is passed to the
+     * prompt as the TARGET teaching structure (section grouping/order + source-notes
+     * demotion); it never relaxes the traceability/substance guards below. Omitted
+     * by the legacy plan-only callers (and the golden-fixture specs), so their
+     * behavior is unchanged.
+     */
+    outline?: LearningOutline,
   ): Promise<ArticleJsonV2> {
     const known = new Set(blocks.map((b) => b.id))
     const content = blocks
@@ -63,7 +72,11 @@ export class ArticleGeneratorService {
         text: b.text,
       }))
 
-    const { system, prompt } = buildArticlePrompt(JSON.stringify(plan), content)
+    const { system, prompt } = buildArticlePrompt(
+      JSON.stringify(plan),
+      content,
+      outline ? JSON.stringify(outline) : undefined,
+    )
     const llm = await completeJson(this.ai, {
       system,
       prompt,

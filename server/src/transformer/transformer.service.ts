@@ -6,6 +6,7 @@ import {
   TransformerSourceType,
 } from '@kibadist/prisma'
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -18,6 +19,8 @@ import { fetchReadable } from '../inbox/url-fetch.util'
 import { PrismaService } from '../prisma/prisma.service'
 import { isArticleV2, toArticleV2 } from './article-compat.util'
 import { ArticlePipelineService } from './article-pipeline.service'
+import { isArticleV3 } from './article-v3.schema'
+import type { ArticleJsonV3 } from './article-v3.types'
 import { placeCallouts } from './callout-placement.util'
 import type { CreateTextSourceDto } from './dto/create-text-source.dto'
 import type { CreateUrlSourceDto } from './dto/create-url-source.dto'
@@ -30,6 +33,7 @@ import type {
   LearningConcept,
   LearningConceptCandidate,
   LearningLayer,
+  RetrievalPrompt,
   SourceStructureModel,
 } from './schemas'
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
@@ -109,10 +113,14 @@ export interface TransformerArticleDetail {
   status: TransformedArticleStatus
   blocksVersion: number
   /**
-   * Always v2 to the client: the server is the single adaptation boundary
-   * (DET-277). Stored JSON may be legacy v1; `getArticle` adapts it read-time.
+   * v2 OR v3 to the client. The server is the single adaptation boundary
+   * (DET-277): legacy v1 is adapted to v2 read-time, native v2 passes through.
+   * Article JSON v3 (DET-344) is a parallel contract with its own learning-first
+   * reader (DET-357) + review surface (DET-359), so it passes through verbatim —
+   * the client dispatches on `schemaVersion`. v3 is never run through the v2
+   * adapter (which would mis-parse it as v1).
    */
-  articleJson: ArticleJsonV2 | null
+  articleJson: ArticleJsonV2 | ArticleJsonV3 | null
   fidelityReport: FidelityReport | null
   fidelityScore: number | null
   coverageReport: CoverageReport | null
@@ -416,6 +424,32 @@ export class TransformerService {
       | SourcePreservingArticle
       | ArticleJsonV2
       | null
+    // Article JSON v3 (DET-344) is a PARALLEL contract with its own learning-first
+    // reader (DET-357) and concept/retrieval review surface (DET-359). It must
+    // NEVER be run through the v2 adapter below (which would mis-parse it as a
+    // legacy v1 doc), so we return it verbatim and let the client dispatch on
+    // `schemaVersion`. The reader can only render v3 once it can load it, so this
+    // pass-through is what makes the v3 reader (and its review panels) reachable
+    // end-to-end — without it the only article-read path 409s every v3 record.
+    if (isArticleV3(stored)) {
+      return {
+        id: article.id,
+        sourceId: article.sourceId,
+        status: article.status,
+        blocksVersion: article.blocksVersion,
+        articleJson: stored,
+        fidelityReport: article.fidelityReport as FidelityReport | null,
+        fidelityScore: article.fidelityScore,
+        coverageReport: article.coverageReport as CoverageReport | null,
+        illustrationPlan: article.illustrationPlan as IllustrationPlan | null,
+        learningLayer: article.learningLayer as LearningLayer | null,
+        enrichment: article.enrichment as ArticleEnrichment | null,
+        editorialLayout: article.editorialLayout as EditorialLayout | null,
+        error: article.error,
+        createdAt: article.createdAt,
+        updatedAt: article.updatedAt,
+      }
+    }
     // Inline callout placement (DET-272) is deterministic and cheap, so compute
     // it here for any article that lacks it — legacy v1 articles and v2 articles
     // generated before this wave. The adapter stays representation-only on
@@ -818,6 +852,231 @@ export class TransformerService {
             : c,
         ),
       }
+    })
+  }
+
+  /**
+   * Edit a learning item's CONTENT in place (DET-359): the v3 review panel lets
+   * the reader fix a concept's label/definition (or importance) before deciding
+   * on it. This is content-only — it NEVER changes validationStatus and NEVER
+   * creates a Concept row, so editing can't be a back door to internalizing
+   * knowledge. The item id is looked up across `concepts` and `conceptCandidates`
+   * (retrieval prompts have their own endpoint). At least one field must be set.
+   */
+  async editLearningItem(
+    userId: string,
+    articleId: string,
+    itemId: string,
+    edit: {
+      label?: string
+      definition?: string
+      importance?: 'high' | 'medium' | 'low'
+    },
+  ): Promise<LearningLayer> {
+    if (
+      edit.label === undefined &&
+      edit.definition === undefined &&
+      edit.importance === undefined
+    ) {
+      throw new BadRequestException('Nothing to edit')
+    }
+    const article = await this.findOwnedArticle(userId, articleId)
+    const current = article.learningLayer as LearningLayer | null
+    if (!current) throw new NotFoundException('No learning layer')
+    const inConcepts = current.concepts.some((c) => c.id === itemId)
+    const inCandidates = (current.conceptCandidates ?? []).some(
+      (c) => c.id === itemId,
+    )
+    if (!inConcepts && !inCandidates) {
+      throw new NotFoundException('Learning item not found')
+    }
+    // Only the fields actually provided are overwritten; `importance` applies to
+    // candidates only (concepts have no importance field in the schema).
+    const applyConcept = (c: LearningConcept): LearningConcept => ({
+      ...c,
+      ...(edit.label !== undefined ? { label: edit.label } : {}),
+      ...(edit.definition !== undefined ? { definition: edit.definition } : {}),
+    })
+    const applyCandidate = (
+      c: LearningConceptCandidate,
+    ): LearningConceptCandidate => ({
+      ...c,
+      ...(edit.label !== undefined ? { label: edit.label } : {}),
+      ...(edit.definition !== undefined ? { definition: edit.definition } : {}),
+      ...(edit.importance !== undefined ? { importance: edit.importance } : {}),
+    })
+    return this.withLockedLearningLayer(article.id, (layer) => ({
+      ...layer,
+      concepts: layer.concepts.map((c) =>
+        c.id === itemId ? applyConcept(c) : c,
+      ),
+      conceptCandidates: layer.conceptCandidates?.map((c) =>
+        c.id === itemId ? applyCandidate(c) : c,
+      ),
+    }))
+  }
+
+  /**
+   * Update a retrieval prompt's review state (DET-359). Persists the
+   * suggested/saved/answered/rejected status, the reader's own-words answer, and
+   * in-place prompt edits. It deliberately CANNOT schedule a permanent review
+   * card — there is no "scheduled" status here — so a prompt never becomes a
+   * review card without the explicit, separately-gated downstream action. An
+   * `answered` status requires a non-empty `userAnswer` (the scheduling gate is
+   * a user-authored answer, not a bare status flip). Runs under the per-article
+   * row lock like the other learning-layer mutations.
+   */
+  async updateRetrievalPromptReview(
+    userId: string,
+    articleId: string,
+    promptId: string,
+    patch: {
+      reviewStatus?: 'suggested' | 'saved' | 'answered' | 'rejected'
+      userAnswer?: string
+      prompt?: string
+    },
+  ): Promise<LearningLayer> {
+    if (
+      patch.reviewStatus === undefined &&
+      patch.userAnswer === undefined &&
+      patch.prompt === undefined
+    ) {
+      throw new BadRequestException('Nothing to update')
+    }
+    if (patch.prompt !== undefined && patch.prompt.trim().length === 0) {
+      throw new BadRequestException('Prompt text cannot be empty')
+    }
+    const article = await this.findOwnedArticle(userId, articleId)
+    const current = article.learningLayer as LearningLayer | null
+    if (!current) throw new NotFoundException('No learning layer')
+    const target = current.retrievalPrompts.find((p) => p.id === promptId)
+    if (!target) throw new NotFoundException('Retrieval prompt not found')
+    // The answer is the scheduling gate: marking a prompt 'answered' is only
+    // meaningful with a non-empty answer (either supplied now or already stored).
+    const nextAnswer = patch.userAnswer ?? target.userAnswer
+    if (
+      patch.reviewStatus === 'answered' &&
+      (nextAnswer === undefined || nextAnswer.trim().length === 0)
+    ) {
+      throw new BadRequestException('An answer is required to mark answered')
+    }
+    return this.withLockedLearningLayer(article.id, (layer) => ({
+      ...layer,
+      retrievalPrompts: layer.retrievalPrompts.map(
+        (p): RetrievalPrompt =>
+          p.id === promptId
+            ? {
+                ...p,
+                ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
+                ...(patch.reviewStatus !== undefined
+                  ? { reviewStatus: patch.reviewStatus }
+                  : {}),
+                ...(patch.userAnswer !== undefined
+                  ? { userAnswer: patch.userAnswer }
+                  : {}),
+              }
+            : p,
+      ),
+    }))
+  }
+
+  /**
+   * Record the v3 reader's review decision for one CONCEPT CANDIDATE (DET-359),
+   * keyed by the Article JSON v3 `keyConcepts[].id`. This is an id-agnostic
+   * OVERLAY write: the article body owns the suggestion, this stores only the
+   * reader's decision (accept / reject / defer / in-place edit). Crucially,
+   * `accepted` is a user-review status ONLY — it has NO concept-row side effect,
+   * so accepting can never internalize a concept into permanent knowledge (the
+   * DET-359 invariant). Runs under the per-article row lock like the other
+   * learning-layer mutations. An all-empty patch is rejected.
+   */
+  async setV3ConceptReview(
+    userId: string,
+    articleId: string,
+    conceptId: string,
+    patch: {
+      status?: 'pending' | 'accepted' | 'rejected' | 'deferred'
+      label?: string
+      definition?: string
+      importance?: 'high' | 'medium' | 'low'
+    },
+  ): Promise<LearningLayer> {
+    if (
+      patch.status === undefined &&
+      patch.label === undefined &&
+      patch.definition === undefined &&
+      patch.importance === undefined
+    ) {
+      throw new BadRequestException('Nothing to update')
+    }
+    await this.findOwnedArticle(userId, articleId)
+    return this.withLockedLearningLayer(articleId, (layer) => {
+      const concepts = { ...(layer.v3Review?.concepts ?? {}) }
+      const prev = concepts[conceptId] ?? { status: 'pending' as const }
+      concepts[conceptId] = {
+        ...prev,
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.label !== undefined ? { label: patch.label } : {}),
+        ...(patch.definition !== undefined
+          ? { definition: patch.definition }
+          : {}),
+        ...(patch.importance !== undefined
+          ? { importance: patch.importance }
+          : {}),
+      }
+      return { ...layer, v3Review: { ...(layer.v3Review ?? {}), concepts } }
+    })
+  }
+
+  /**
+   * Record the v3 reader's review decision for one RETRIEVAL PROMPT (DET-359),
+   * keyed by the Article JSON v3 `retrievalPrompts[].id`. Like the concept
+   * overlay this is an id-agnostic write. It can NEVER schedule a permanent
+   * review card (no "scheduled" status exists), so a prompt never becomes a
+   * review card without the explicit, separately-gated downstream action. An
+   * `answered` status requires a non-empty answer (supplied now or already
+   * stored) — the scheduling gate is a user-authored answer, not a bare flip.
+   */
+  async setV3PromptReview(
+    userId: string,
+    articleId: string,
+    promptId: string,
+    patch: {
+      status?: 'suggested' | 'saved' | 'answered' | 'rejected'
+      userAnswer?: string
+      prompt?: string
+    },
+  ): Promise<LearningLayer> {
+    if (
+      patch.status === undefined &&
+      patch.userAnswer === undefined &&
+      patch.prompt === undefined
+    ) {
+      throw new BadRequestException('Nothing to update')
+    }
+    if (patch.prompt !== undefined && patch.prompt.trim().length === 0) {
+      throw new BadRequestException('Prompt text cannot be empty')
+    }
+    await this.findOwnedArticle(userId, articleId)
+    return this.withLockedLearningLayer(articleId, (layer) => {
+      const prompts = { ...(layer.v3Review?.prompts ?? {}) }
+      const prev = prompts[promptId] ?? { status: 'suggested' as const }
+      const nextAnswer = patch.userAnswer ?? prev.userAnswer
+      if (
+        patch.status === 'answered' &&
+        (nextAnswer === undefined || nextAnswer.trim().length === 0)
+      ) {
+        throw new BadRequestException('An answer is required to mark answered')
+      }
+      prompts[promptId] = {
+        ...prev,
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.userAnswer !== undefined
+          ? { userAnswer: patch.userAnswer }
+          : {}),
+        ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
+      }
+      return { ...layer, v3Review: { ...(layer.v3Review ?? {}), prompts } }
     })
   }
 

@@ -4,12 +4,23 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 
 import { AiService } from '../ai/ai.service'
 import {
+  buildBlockToSectionIndex,
+  dedupeArticleConceptCandidates,
+  normalizeConceptName,
+  sectionIdsForBlocks,
+  toRelationshipType,
+} from './concept-candidate.util'
+import { buildArticleConceptExtractionPrompt } from './learning-extraction.prompt'
+import {
   buildConceptCandidatesPrompt,
   buildLearningLayerPrompt,
 } from './learning-layer.prompt'
 import { completeJson } from './llm-json.util'
 import {
+  type ArticleConceptCandidate,
+  ArticleConceptExtractionLlmSchema,
   ConceptCandidatesLlmSchema,
+  type ConceptRelationshipCandidate,
   type LearningConcept,
   type LearningConceptCandidate,
   type LearningLayer,
@@ -200,6 +211,131 @@ export class LearningLayerService {
     }
     return candidates
   }
+
+  /**
+   * Extract WHOLE-ARTICLE concept candidates (DET-351). One LLM pass over the
+   * article's real (non-removable) source blocks returns rich candidates +
+   * terminology + relationships; the heavy lifting is the CODE guards afterwards,
+   * which the model is never trusted to have applied:
+   *  - GROUNDING: a candidate whose `sourceBlockIds` contain no real block id is
+   *    dropped (the traceability invariant);
+   *  - SECTION IDS: `articleSectionIds` are resolved from the candidate's grounded
+   *    blocks against the article's section index — never trusted from the model;
+   *  - NORMALIZE + DEDUP: `normalizedName` is computed in code and candidates that
+   *    share one are merged (provenance/relationships unioned, importance maxed);
+   *  - ELIGIBILITY: high-importance candidates are flagged for Concept Library
+   *    review (`eligibleForLibraryReview`);
+   *  - RELATIONSHIPS: each edge's `type` is mapped to the known enum and its target
+   *    resolved to another candidate's normalized name — dangling/self/unknown
+   *    edges are dropped;
+   *  - NO PROMOTION: `aiAssisted` is forced true and `validationStatus` 'pending';
+   *    nothing here creates a Concept row. Promotion stays an explicit user action.
+   *
+   * Returns the deduped candidate list (possibly empty); never throws beyond the
+   * underlying LLM-JSON failure, which the pipeline turns into a best-effort skip.
+   */
+  async extractArticleConcepts(
+    article: ArticleJsonV2,
+    blocks: ClassifiedBlockInput[],
+  ): Promise<ArticleConceptCandidate[]> {
+    const known = new Set(blocks.map((b) => b.id))
+    const content = blocks
+      .filter((b) => !b.removable)
+      .map((b) => ({
+        id: b.id,
+        type: b.type,
+        classification: b.classification,
+        text: b.text,
+      }))
+    if (content.length === 0) return []
+
+    const { system, prompt } = buildArticleConceptExtractionPrompt(content, {
+      title: article.title.text,
+    })
+    const raw = await completeJson(this.ai, {
+      system,
+      prompt,
+      schema: ArticleConceptExtractionLlmSchema,
+      maxTokens: 4000,
+    })
+
+    const sectionIndex = buildBlockToSectionIndex(article)
+
+    // First pass: ground each candidate, compute the code-owned fields, and carry
+    // the relationships with their target name normalized (resolution needs the
+    // full candidate set, so it happens after dedup).
+    const guarded: ArticleConceptCandidate[] = []
+    for (const c of raw.candidates) {
+      const validIds = c.sourceBlockIds.filter((id) => known.has(id))
+      if (validIds.length === 0) continue // grounding required
+      const normalizedName = normalizeConceptName(c.name)
+      if (!normalizedName) continue
+      guarded.push({
+        id: randomUUID(),
+        name: c.name,
+        normalizedName,
+        domain: c.domain,
+        type: c.type,
+        shortDefinition: c.shortDefinition,
+        sourceBlockIds: validIds,
+        articleSectionIds: sectionIdsForBlocks(sectionIndex, validIds),
+        importance: c.importance,
+        suggestedCognitiveState: c.suggestedCognitiveState,
+        eligibleForLibraryReview: c.importance === 'high',
+        aiAssisted: true,
+        validationStatus: 'pending',
+        relationshipCandidates: mapRelationshipCandidates(c.relationships),
+      })
+    }
+
+    const deduped = dedupeArticleConceptCandidates(guarded)
+    return resolveRelationshipTargets(deduped)
+  }
+}
+
+/**
+ * Map untrusted LLM relationship edges to typed candidates: drop any whose `type`
+ * is not a known relationship kind, and normalize the target name (resolution to a
+ * real candidate happens later, once the full set is known).
+ */
+function mapRelationshipCandidates(
+  edges: { type: string; targetName: string; rationale?: string }[],
+): ConceptRelationshipCandidate[] | undefined {
+  const mapped: ConceptRelationshipCandidate[] = []
+  for (const e of edges) {
+    const type = toRelationshipType(e.type)
+    if (!type) continue
+    const targetNormalizedName = normalizeConceptName(e.targetName)
+    if (!targetNormalizedName) continue
+    mapped.push({
+      type,
+      targetNormalizedName,
+      ...(e.rationale ? { rationale: e.rationale } : {}),
+    })
+  }
+  return mapped.length > 0 ? mapped : undefined
+}
+
+/**
+ * Drop relationship edges that don't resolve to another candidate (no dangling
+ * targets, no self-edges). Runs after dedup so targets resolve against the final,
+ * merged candidate set.
+ */
+function resolveRelationshipTargets(
+  candidates: ArticleConceptCandidate[],
+): ArticleConceptCandidate[] {
+  const names = new Set(candidates.map((c) => c.normalizedName))
+  return candidates.map((c) => {
+    const edges = (c.relationshipCandidates ?? []).filter(
+      (r) =>
+        r.targetNormalizedName !== c.normalizedName &&
+        names.has(r.targetNormalizedName),
+    )
+    return {
+      ...c,
+      relationshipCandidates: edges.length > 0 ? edges : undefined,
+    }
+  })
 }
 
 /** Depth-first lookup of a section by id, descending into subsections. */

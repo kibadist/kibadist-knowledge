@@ -15,6 +15,8 @@ import {
 } from '@/components/deep-reading'
 import { MagazineArticle } from '@/components/magazine/magazine-article'
 import { ArticleReader } from '@/components/reader/article-reader'
+import { ArticleV3View } from '@/components/reader/v3/article-v3-view'
+import { ArticleReviewPanels } from '@/components/transformer/review/article-review-panels'
 import { SourceInspector } from '@/components/transformer/source-inspector'
 import {
   ApiError,
@@ -29,6 +31,7 @@ import {
   useArticleLearningState,
 } from '@/lib/article-learning-events'
 import type { ArticleV2 } from '@/lib/article-v2'
+import { isArticleJsonV3 } from '@/lib/article-v3'
 import {
   ARTICLE_STEPS,
   articleStatusLabel,
@@ -404,7 +407,12 @@ function ArticleView({
   // The single adaptation boundary (lib/transformer-to-article-v2): section and
   // block ids carry through so learning events anchor to the persisted ids.
   const learningArticle = useMemo(() => {
-    if (!article?.articleJson) return null
+    // v3 articles are NOT adapted through the v2 boundary — they render through
+    // the dedicated learning-first reader (DET-357). Only legacy v2 articles
+    // feed the Deep Reading / active-recall surfaces.
+    if (!article?.articleJson || isArticleJsonV3(article.articleJson)) {
+      return null
+    }
     return transformerArticleToV2(article.articleJson, {
       articleId: article.id,
       sourceId: article.sourceId,
@@ -427,6 +435,7 @@ function ArticleView({
     queryFn: () => api.listArticleLearningEvents(articleId),
     enabled: Boolean(
       article?.articleJson &&
+        !isArticleJsonV3(article.articleJson) &&
         (article.status === 'FINAL' || article.status === 'BLOCKED'),
     ),
   })
@@ -536,6 +545,31 @@ function ArticleView({
   // away and remains readable.
   if (!showBody) return <ArticleProgress status={article.status} />
 
+  // v3 articles render through the dedicated learning-first reader (DET-357). It
+  // carries its own status banner, provenance byline, and learning panels, so it
+  // bypasses the v2 fidelity notice + learning-event hydration below entirely.
+  // The DET-359 review surface is wired in as the reader's `reviewSlot`: it
+  // replaces the read-only key-concepts + retrieval-prompts panels with the
+  // interactive review of the SAME suggestions (accept/reject/edit; answer/save/
+  // reject/edit), persisted via the v3-review endpoints. Nothing here becomes
+  // permanent knowledge or a scheduled review without an explicit action.
+  if (isArticleJsonV3(article.articleJson)) {
+    const v3Article = article.articleJson
+    return (
+      <ArticleV3View
+        article={v3Article}
+        reviewSlot={
+          <ArticleReviewPanels
+            articleId={articleId}
+            article={v3Article}
+            v3Review={article.learningLayer?.v3Review}
+            state={article.status === 'BLOCKED' ? 'blocked' : 'ready'}
+          />
+        }
+      />
+    )
+  }
+
   if (!learningArticle) return null
 
   if (!eventsReady) return <p className='notice'>Loading your progress…</p>
@@ -567,8 +601,9 @@ function ArticleView({
       {surface === 'article' ? (
         // The Article tab is the finished, readable Compendium render (DET-318) —
         // a magazine/encyclopedia presentation of the same Article JSON v2, with
-        // any rendered illustrations placed as plates. The active-recall modes
-        // stay on the Exercise tab.
+        // any rendered illustrations placed as plates. This is the LEGACY v2
+        // render; v3 articles return earlier and carry the DET-359 review surface
+        // in the v3 reader. The active-recall modes stay on the Exercise tab.
         <MagazineArticle
           article={learningArticle}
           articleId={articleId}

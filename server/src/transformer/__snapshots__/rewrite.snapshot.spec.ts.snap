@@ -1,0 +1,163 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`rewrite snapshot — known failing examples encyclopedia: learning flow kept, source analogy callout grounded, invented one dropped 1`] = `
+[
+  {
+    "callouts": [
+      {
+        "calloutType": "source_analogy",
+        "fidelityRisk": "low",
+        "id": "s0-c0",
+        "sourceBlockIds": [
+          "s2",
+        ],
+        "text": "A system is like an orchestra: many parts coordinating toward one performance.",
+        "title": "Think of an orchestra",
+      },
+    ],
+    "heading": "What is a system?",
+    "headingSource": "inferred",
+    "id": "s0",
+    "paragraphs": [
+      {
+        "id": "s0-p0",
+        "text": "A system is a set of interrelated components that work together toward a shared purpose.",
+        "trace": {
+          "confidence": 0.95,
+          "fidelityRisk": "low",
+          "sourceBlockIds": [
+            "s1",
+          ],
+          "transformationType": "grammar_cleanup",
+        },
+      },
+    ],
+    "sourceBlockIds": [
+      "s1",
+      "s2",
+    ],
+  },
+  {
+    "heading": "Open and closed systems",
+    "headingSource": "inferred",
+    "id": "s1",
+    "paragraphs": [
+      {
+        "id": "s1-p0",
+        "text": "Systems are classified by how they interact with their environment: an open system exchanges matter and energy with it, while a closed system does not.",
+        "trace": {
+          "confidence": 0.9,
+          "fidelityRisk": "low",
+          "sourceBlockIds": [
+            "s3",
+          ],
+          "transformationType": "source_grounded_rewrite",
+        },
+      },
+    ],
+    "sourceBlockIds": [
+      "s3",
+      "s4",
+    ],
+    "tables": [
+      {
+        "caption": "Open vs closed systems",
+        "fidelityRisk": "low",
+        "header": [
+          "Type",
+          "Example",
+        ],
+        "id": "s1-t0",
+        "rows": [
+          [
+            "Open",
+            "A living cell",
+          ],
+          [
+            "Closed",
+            "A sealed calorimeter",
+          ],
+        ],
+        "sourceBlockIds": [
+          "s4",
+        ],
+      },
+    ],
+  },
+]
+`;
+
+exports[`rewrite snapshot — known failing examples transcript: reads as an article, drops filler and unsupported claims 1`] = `
+[
+  {
+    "heading": "Transformers process tokens in parallel",
+    "headingSource": "inferred",
+    "id": "s0",
+    "paragraphs": [
+      {
+        "id": "s0-p0",
+        "text": "A transformer reads every token in a sequence at once rather than one at a time, processing them in parallel.",
+        "trace": {
+          "confidence": 0.92,
+          "fidelityRisk": "low",
+          "sourceBlockIds": [
+            "t2",
+          ],
+          "transformationType": "speech_cleanup",
+        },
+      },
+      {
+        "id": "s0-p1",
+        "text": "Self-attention is what makes this possible: each token can look at every other token to decide which ones matter for its meaning.",
+        "trace": {
+          "confidence": 0.88,
+          "fidelityRisk": "low",
+          "sourceBlockIds": [
+            "t3",
+          ],
+          "transformationType": "source_grounded_rewrite",
+        },
+      },
+    ],
+    "sourceBlockIds": [
+      "t2",
+      "t3",
+    ],
+  },
+  {
+    "heading": "Query, key, and value",
+    "headingSource": "inferred",
+    "id": "s1",
+    "paragraphs": [
+      {
+        "id": "s1-p0",
+        "text": "Attention works by projecting each token into three vectors: a query, a key, and a value.",
+        "trace": {
+          "confidence": 0.9,
+          "fidelityRisk": "low",
+          "sourceBlockIds": [
+            "t4",
+          ],
+          "transformationType": "source_grounded_rewrite",
+        },
+      },
+      {
+        "id": "s1-p1",
+        "text": "A token's query is compared against every token's key to score how relevant each one is.",
+        "trace": {
+          "confidence": 0.85,
+          "fidelityRisk": "low",
+          "sourceBlockIds": [
+            "t5",
+          ],
+          "transformationType": "source_grounded_rewrite",
+        },
+      },
+    ],
+    "sourceBlockIds": [
+      "t4",
+      "t5",
+    ],
+  },
+]
+`;

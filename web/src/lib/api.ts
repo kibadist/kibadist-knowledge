@@ -5,6 +5,11 @@ import type {
   ArticleLearningEvent,
   ArticleLearningEventDraft,
 } from './article-learning-events'
+// The v3 source-grounded learning-article contract (DET-344). The dependency
+// runs one way — `article-v3.ts` imports nothing from here — so a generated
+// article's `articleJson` can carry either the legacy v2 or the new v3 shape,
+// and the reader dispatches on `schemaVersion` (DET-357).
+import type { ArticleJsonV3 } from './article-v3'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
@@ -1075,12 +1080,13 @@ export interface CoverageReport {
 }
 
 // --- Article JSON v2 contract (DET-277) ---
-// MIRROR of the v2 contract in server/src/transformer/transformer.types.ts — the
-// SERVER is the single adaptation boundary (`getArticle` adapts legacy v1 → v2),
-// so the web ONLY ever receives v2. These types are byte-for-byte the same shape
-// as that file — do NOT diverge.
+// MIRROR of the v2/v3 contract in server/src/transformer/transformer.types.ts —
+// the SERVER is the single adaptation boundary (`getArticle` adapts legacy v1 →
+// v2), so the web ONLY ever receives a structured article. v3 (DET-350) is an
+// additive superset of v2 (generated callouts, comparison tables, source notes),
+// so a v3 article is shape-compatible with these types. Do NOT diverge.
 
-export type ArticleSchemaVersion = 'v2'
+export type ArticleSchemaVersion = 'v2' | 'v3'
 
 export type HeadingSourceV2 = 'original' | 'cleanedOriginal' | 'inferred'
 
@@ -1211,6 +1217,63 @@ export interface ArticleCallout {
 export interface ArticleCalloutPlacement {
   bySection: Record<string, ArticleCallout[]>
   unplaced: ArticleCallout[]
+  // v3 (DET-350): source-grounded generated callouts.
+  generated?: ArticleGeneratedCallout[]
+}
+
+// --- v3 source-grounded extras (DET-350) ---
+export type ArticleCalloutType =
+  | 'definition'
+  | 'key_idea'
+  | 'source_analogy'
+  | 'caveat'
+  | 'example'
+  | 'warning'
+  | 'remember'
+  | 'compare'
+
+export interface ArticleGeneratedCallout {
+  id: string
+  type: ArticleCalloutType
+  title: string
+  body: string
+  sourceBlockIds: string[]
+  relatedSectionIds: string[]
+  fidelityRisk: FidelityRisk
+}
+
+export interface ArticleTableCell {
+  text: string
+  sourceBlockIds?: string[]
+}
+
+export interface ArticleComparisonTableRow {
+  cells: ArticleTableCell[]
+  sourceBlockIds: string[]
+}
+
+export interface ArticleComparisonTable {
+  id: string
+  title: string
+  columns: string[]
+  rows: ArticleComparisonTableRow[]
+  sourceBlockIds: string[]
+  relatedSectionIds: string[]
+  fidelityRisk: FidelityRisk
+}
+
+export interface ArticleSourceNoteItem {
+  text: string
+  sourceBlockIds: string[]
+  url?: string
+}
+
+export interface ArticleSourceNotes {
+  references: ArticleSourceNoteItem[]
+  bibliography: ArticleSourceNoteItem[]
+  externalLinks: ArticleSourceNoteItem[]
+  removedNavigation: ArticleSourceNoteItem[]
+  lowImportance: ArticleSourceNoteItem[]
 }
 
 export type ArticleShape =
@@ -1269,6 +1332,9 @@ export interface ArticleJsonV2 {
   reorderings?: ArticleReorderingAudit[]
   /** Source-grounded key claims / definitions (DET-352, the v3 claims layer). */
   keyClaims?: KeyClaim[]
+  // v3 additive fields (DET-350).
+  tables?: ArticleComparisonTable[]
+  sourceNotes?: ArticleSourceNotes
 }
 
 // --- Source DTOs (mirror transformer.service.ts) ---
@@ -1442,6 +1508,18 @@ export interface LearningRetrievalPrompt {
   id: string
   prompt: string
   sourceBlockIds: string[]
+  // Additive (DET-359): the v3 review fields. Old learning-layer rows predate
+  // them and omit them; the v3 adapter defaults each gracefully.
+  /** The kind of recall the prompt exercises (grouping key). */
+  promptType?: string
+  /** Concept-candidate ids this prompt exercises. */
+  linkedConceptIds?: string[]
+  /** Source blocks that hold the expected answer. */
+  expectedAnswerBlockIds?: string[]
+  /** Review lifecycle: suggested | saved | answered | rejected. */
+  reviewStatus?: 'suggested' | 'saved' | 'answered' | 'rejected'
+  /** The reader's own-words answer, stored verbatim (gates scheduling). */
+  userAnswer?: string
 }
 
 // A per-section concept-extraction CANDIDATE (DET-283). A PROPOSAL — never an
@@ -1463,6 +1541,70 @@ export interface LearningConceptCandidate {
   /** The INBOX "to learn" Concept created when the user validated this
    *  candidate (DET-283). Present ⇒ validation already promoted it. */
   conceptId?: string
+  // Additive (DET-359): v3 review fields. Old rows omit them; the v3 adapter
+  // defaults importance to 'medium' when absent.
+  /** Generator-assigned importance: high | medium | low. */
+  importance?: 'high' | 'medium' | 'low'
+  /** A short preview of the source span backing the candidate. */
+  sourceSpanPreview?: string
+}
+
+// The pedagogical category of a retrieval prompt (DET-353). Mirrors the server
+// RetrievalPromptType enum byte-for-byte.
+export type RetrievalPromptType =
+  | 'definition'
+  | 'mechanism'
+  | 'distinction'
+  | 'sequence'
+  | 'analogy'
+  | 'misconception_repair'
+  | 'transfer'
+
+// A richer active-recall prompt CANDIDATE (DET-353). Distinct from the DET-258
+// LearningRetrievalPrompt above: it carries the expected-answer source blocks, a
+// pedagogical type + difficulty, links to concept candidates, and a lifecycle
+// status. AI-suggested at generation; nothing is scheduled as a permanent review
+// card until the learner validates/answers it (status flips downstream).
+export interface RetrievalPromptCandidate {
+  id: string
+  question: string
+  expectedAnswerSourceBlockIds: string[]
+  relatedConceptCandidateIds: string[]
+  promptType: RetrievalPromptType
+  difficulty: 'easy' | 'medium' | 'hard'
+  status: 'ai_suggested' | 'user_validated' | 'rejected'
+}
+
+// A misconception candidate (DET-353): a likely wrong belief + a source-faithful
+// correction. sourceBlockIds MAY be empty — an ungrounded one is kept but stays
+// clearly AI-suggested. confidence is in [0,1].
+export interface MisconceptionCandidate {
+  id: string
+  misconception: string
+  correction: string
+  sourceBlockIds: string[]
+  relatedConceptCandidateIds: string[]
+  confidence: number
+  status: 'ai_suggested' | 'validated' | 'rejected'
+}
+
+// The v3 reader's review overlay (DET-359), keyed by Article JSON v3 item ids.
+// The article body holds the suggestions; this holds only the reader's decision
+// per item, so the SAME concepts/prompts shown in the v3 reader are reviewable.
+export interface LearningLayerV3ConceptReview {
+  status: 'pending' | 'accepted' | 'rejected' | 'deferred'
+  label?: string
+  definition?: string
+  importance?: 'high' | 'medium' | 'low'
+}
+export interface LearningLayerV3PromptReview {
+  status: 'suggested' | 'saved' | 'answered' | 'rejected'
+  userAnswer?: string
+  prompt?: string
+}
+export interface LearningLayerV3Review {
+  concepts?: Record<string, LearningLayerV3ConceptReview>
+  prompts?: Record<string, LearningLayerV3PromptReview>
 }
 
 export interface LearningLayer {
@@ -1470,6 +1612,12 @@ export interface LearningLayer {
   retrievalPrompts: LearningRetrievalPrompt[]
   // Additive (DET-283): old learning-layer rows predate this and omit it.
   conceptCandidates?: LearningConceptCandidate[]
+  // Additive (DET-353): AI-suggested active-recall prompts + misconception
+  // candidates. Old learning-layer rows predate these and omit them.
+  retrievalPromptCandidates?: RetrievalPromptCandidate[]
+  misconceptions?: MisconceptionCandidate[]
+  // Additive (DET-359): the v3 reader's review overlay keyed by v3 item ids.
+  v3Review?: LearningLayerV3Review
 }
 
 // GET /transformer/articles/:id — the article + fidelity + coverage + status.
@@ -1477,8 +1625,11 @@ export interface TransformedArticle {
   id: string
   sourceId: string
   status: TransformedArticleStatus
-  // Always v2 — the server adapts legacy v1 at the read boundary (DET-277).
-  articleJson: ArticleJsonV2 | null
+  // The legacy source-preserving v2 shape (server adapts v1 → v2 at the read
+  // boundary, DET-277) OR the new source-grounded learning v3 shape (DET-344).
+  // The reader dispatches on `schemaVersion`; v2 renders through the Compendium,
+  // v3 through the learning-first reader (DET-357).
+  articleJson: ArticleJsonV2 | ArticleJsonV3 | null
   fidelityReport: FidelityReport | null
   fidelityScore: number | null
   coverageReport: CoverageReport | null
@@ -2079,6 +2230,75 @@ export const api = {
     request<LearningLayer>(
       `/transformer/articles/${articleId}/sections/${sectionId}/concepts`,
       { method: 'POST' },
+    ),
+  // v3 review panels (DET-359): edit a concept/candidate's text in place. Edits
+  // are content-only — they never touch validation status or create knowledge.
+  editLearningItem: (
+    articleId: string,
+    itemId: string,
+    edit: {
+      label?: string
+      definition?: string
+      importance?: 'high' | 'medium' | 'low'
+    },
+  ) =>
+    request<LearningLayer>(
+      `/transformer/articles/${articleId}/learning-layer/items/${itemId}/edit`,
+      { method: 'PATCH', body: JSON.stringify(edit) },
+    ),
+  // v3 review panels (DET-359): update a retrieval prompt's review state. This
+  // endpoint never schedules a permanent review card — it only persists the
+  // suggested/saved/answered/rejected status, the user-authored answer, and
+  // in-place prompt edits. Scheduling stays gated on the answer downstream.
+  setRetrievalPromptReview: (
+    articleId: string,
+    promptId: string,
+    patch: {
+      reviewStatus?: 'suggested' | 'saved' | 'answered' | 'rejected'
+      userAnswer?: string
+      prompt?: string
+    },
+  ) =>
+    request<LearningLayer>(
+      `/transformer/articles/${articleId}/learning-layer/retrieval-prompts/${promptId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+    ),
+
+  // v3 reader review (DET-359): persist the reader's decision for an Article
+  // JSON v3 concept candidate, keyed by `keyConcepts[].id`. Accepting moves it to
+  // a user-review state — it NEVER internalizes the concept (no knowledge row is
+  // created server-side), so nothing becomes permanent without a later, explicit
+  // "create Living Concept" step.
+  setV3ConceptReview: (
+    articleId: string,
+    conceptId: string,
+    patch: {
+      status?: 'pending' | 'accepted' | 'rejected' | 'deferred'
+      label?: string
+      definition?: string
+      importance?: 'high' | 'medium' | 'low'
+    },
+  ) =>
+    request<LearningLayer>(
+      `/transformer/articles/${articleId}/v3-review/concepts/${conceptId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+    ),
+  // v3 reader review (DET-359): persist the reader's decision for an Article JSON
+  // v3 retrieval prompt, keyed by `retrievalPrompts[].id`. This endpoint can
+  // never schedule a permanent review card — scheduling stays gated downstream on
+  // a user-authored answer (an `answered` status requires a non-empty answer).
+  setV3PromptReview: (
+    articleId: string,
+    promptId: string,
+    patch: {
+      status?: 'suggested' | 'saved' | 'answered' | 'rejected'
+      userAnswer?: string
+      prompt?: string
+    },
+  ) =>
+    request<LearningLayer>(
+      `/transformer/articles/${articleId}/v3-review/prompts/${promptId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
     ),
 
   // --- Concept Library (DET-187) ---

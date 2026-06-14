@@ -376,4 +376,49 @@ describe('mergeDeterministicChecks (fidelity blocking rules)', () => {
     expect(parsed.emphasisChanges).toEqual([])
     expect(parsed.structuralFindings).toEqual([])
   })
+
+  it('blocks: an unsupported generated table is rejected by fidelity review (DET-350)', () => {
+    const v3Article: ArticleJsonV2 = {
+      schemaVersion: 'v3',
+      mode: 'source_preserving_article',
+      title: { text: 'T', source: 'original' },
+      abstract: [
+        {
+          id: 'p1',
+          text: 'x',
+          sourceBlockIds: ['b1'],
+          transformationType: 'verbatim',
+          fidelityRisk: 'low',
+        },
+      ],
+      sections: [],
+      keyTerms: [],
+      sourceExamples: [],
+      caveats: [],
+      originalStructure: [],
+      tables: [
+        {
+          id: 'gtbl-0',
+          title: 'External facts',
+          columns: ['A', 'B'],
+          rows: [
+            { cells: [{ text: 'a' }, { text: 'b' }], sourceBlockIds: ['b1'] },
+            // Row grounded only in a block the source does not contain.
+            {
+              cells: [{ text: 'c' }, { text: 'd' }],
+              sourceBlockIds: ['ghost'],
+            },
+          ],
+          sourceBlockIds: ['b1', 'ghost'],
+          relatedSectionIds: [],
+          fidelityRisk: 'low',
+        },
+      ],
+    }
+    const out = mergeDeterministicChecks(emptyReport(99), v3Article, known)
+    expect(out.approved).toBe(false)
+    expect(
+      out.structuralFindings.some((f) => f.articleRef === 'gtbl-0-row-1'),
+    ).toBe(true)
+  })
 })

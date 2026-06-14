@@ -9,6 +9,7 @@ import {
   checkEndMatterTraceability,
   checkProcedureListPreservation,
   checkQuoteAttribution,
+  checkSourceGroundedExtras,
   checkUnsupportedHighlights,
 } from './fidelity-structural.util'
 import { completeJson } from './llm-json.util'
@@ -212,6 +213,12 @@ export function mergeDeterministicChecks(
 
   // Unsupported reading-aid highlights (high, blocking).
   structuralFindings.push(...checkUnsupportedHighlights(article, known))
+
+  // Source-grounded EXTRAS (DET-350): generated callouts + comparison tables must
+  // be traceable — an ungrounded/unknown-id one is rejected (high, blocking).
+  const extras = checkSourceGroundedExtras(article, known)
+  structuralFindings.push(...extras.structuralFindings)
+  if (extras.traceabilityViolation) traceabilityViolation = true
 
   // Duplicate full rendering (medium; high for a duplicated caveat).
   const dup = checkDuplicateRendering(article)
