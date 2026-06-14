@@ -42,9 +42,12 @@ describe('v3 quality gate (DET-343 acceptance criteria)', () => {
     const { status, qualityReport } = evaluateQualityGateV3(article, blocks)
     expect(status).toBe('BLOCKED_LOW_COVERAGE')
     expect(qualityReport.importantSourceCoverageScore).toBe(33)
-    expect(
-      qualityReport.blockerReasons.some((b) => b.code === 'low_coverage'),
-    ).toBe(true)
+    const lowCoverage = qualityReport.blockerReasons.find(
+      (b) => b.code === 'low_coverage',
+    )
+    expect(lowCoverage).toBeDefined()
+    // AC5: each blocker points at the quality-report entry that justifies it.
+    expect(lowCoverage?.qualityReportRef).toBe('importantSourceCoverageScore')
     expect(qualityReport.regenerationHints.length).toBeGreaterThan(0)
   })
 
@@ -106,6 +109,49 @@ describe('v3 quality gate (DET-343 acceptance criteria)', () => {
     ).toBe(true)
   })
 
+  it('BLOCKS a concept-rich source with fewer than 3 concept candidates (minConceptCandidateCount)', () => {
+    // Two concepts on a concept-rich (DEFINITION) source ⇒ below the floor of 3.
+    const article = makeV3Article({
+      keyConcepts: [
+        {
+          id: 'concept-0',
+          name: 'A',
+          normalizedName: 'a',
+          type: 'core_concept',
+          sourceBlockIds: ['b1'],
+          articleSectionIds: ['sec-0'],
+          importance: 'high',
+          suggestedCognitiveState: 'Parsed',
+        },
+        {
+          id: 'concept-1',
+          name: 'B',
+          normalizedName: 'b',
+          type: 'core_concept',
+          sourceBlockIds: ['b1'],
+          articleSectionIds: ['sec-0'],
+          importance: 'medium',
+          suggestedCognitiveState: 'Parsed',
+        },
+      ],
+    })
+    const { status, qualityReport } = evaluateQualityGateV3(
+      article,
+      makeBlocks(),
+    )
+    expect(status).toBe('BLOCKED_MISSING_CONCEPTS')
+    expect(qualityReport.conceptCandidateCount).toBe(2)
+    expect(
+      qualityReport.blockerReasons.some((b) => b.code === 'missing_concepts'),
+    ).toBe(true)
+  })
+
+  it('PASSES a concept-rich source once it surfaces 3 concept candidates', () => {
+    // The shared fixture default ships exactly 3 concepts ⇒ clears the floor.
+    const { status } = evaluateQualityGateV3(makeV3Article(), makeBlocks())
+    expect(status).toBe('READY_FOR_REVIEW')
+  })
+
   it('does NOT require concepts from a source with no definition/example substance', () => {
     const blocks: CoverageBlockV3[] = [
       { id: 'b1', classification: 'METHOD', removable: false },
@@ -134,6 +180,8 @@ describe('v3 quality gate (DET-343 acceptance criteria)', () => {
   })
 
   it('holds back an article with no retrieval prompts (a learning artifact must ship them)', () => {
+    // 3 concepts so the missing_concepts gate stays silent and the retrieval-prompt
+    // blocker (NEEDS_REGENERATION) is the only one that fires.
     const article = makeV3Article({
       keyConcepts: [
         {
@@ -144,6 +192,26 @@ describe('v3 quality gate (DET-343 acceptance criteria)', () => {
           sourceBlockIds: ['b1'],
           articleSectionIds: ['sec-0'],
           importance: 'high',
+          suggestedCognitiveState: 'Parsed',
+        },
+        {
+          id: 'concept-1',
+          name: 'Y',
+          normalizedName: 'y',
+          type: 'core_concept',
+          sourceBlockIds: ['b1'],
+          articleSectionIds: ['sec-0'],
+          importance: 'medium',
+          suggestedCognitiveState: 'Parsed',
+        },
+        {
+          id: 'concept-2',
+          name: 'Z',
+          normalizedName: 'z',
+          type: 'core_concept',
+          sourceBlockIds: ['b1'],
+          articleSectionIds: ['sec-0'],
+          importance: 'medium',
           suggestedCognitiveState: 'Parsed',
         },
       ],

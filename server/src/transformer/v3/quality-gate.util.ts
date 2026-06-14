@@ -24,8 +24,9 @@ import {
  *  - transcript lessons need ≥80% important source coverage; structured/other need
  *    ≥70% (TRANSCRIPT_COVERAGE_FLOOR / DEFAULT_COVERAGE_FLOOR).
  *  - unsupported claim count MUST be 0 for READY_FOR_REVIEW.
- *  - concept-rich sources must produce concept candidates (a source WITH important
- *    definition/example substance that yields zero key concepts is blocked).
+ *  - concept-rich sources must produce at least MIN_CONCEPT_CANDIDATE_COUNT (3)
+ *    concept candidates (a source WITH important definition/example substance that
+ *    yields fewer than 3 key concepts is blocked — DET-355 minConceptCandidateCount).
  *  - articles must ship retrieval prompts (a learning artifact, not just prose).
  *
  * A HARD blocker keeps the article out of READY_FOR_REVIEW and maps to a specific
@@ -49,14 +50,22 @@ export function coverageThresholdFor(kind: SourceKind): number {
 /**
  * A source is "concept-rich" when it carries important DEFINITION/EXAMPLE substance
  * — exactly the material a learner is meant to extract concepts from. Such a source
- * yielding zero key concepts is the PRD's "0 concept candidates" failure, so the
- * gate blocks it. A source with no such substance (e.g. a pure procedure) is NOT
- * required to produce concepts.
+ * yielding fewer than MIN_CONCEPT_CANDIDATE_COUNT key concepts is the PRD's
+ * "too few concept candidates" failure, so the gate blocks it. A source with no
+ * such substance (e.g. a pure procedure) is NOT required to produce concepts.
  */
 const CONCEPT_BEARING_CLASSES: ReadonlySet<string> = new Set([
   'DEFINITION',
   'EXAMPLE',
 ])
+
+/**
+ * The minimum number of concept candidates a concept-rich source must surface
+ * (DET-355 `minConceptCandidateCount`). Below this floor the article is held back
+ * with BLOCKED_MISSING_CONCEPTS — a concept-rich source that yields only one or two
+ * concepts is still too thin to drive the learning loop.
+ */
+export const MIN_CONCEPT_CANDIDATE_COUNT = 3
 
 export function isConceptRich(blocks: CoverageBlockV3[]): boolean {
   return blocks.some(
@@ -134,6 +143,20 @@ export interface QualityGateResultV3 {
   hardBlockerCodes: ArticleBlockerCode[]
 }
 
+/**
+ * The `ArticleQualityReportV3` field each blocker code is grounded in. Stored on
+ * the reason as `qualityReportRef` so the reader can point a blocker straight at the
+ * report entry that justifies it (DET-355: "pointers to quality report entries").
+ */
+const QUALITY_REPORT_REF_FOR_CODE: Record<ArticleBlockerCode, string> = {
+  low_coverage: 'importantSourceCoverageScore',
+  unsupported_claims: 'unsupportedClaimCount',
+  missing_concepts: 'conceptCandidateCount',
+  fidelity: 'highSeverityLostInfoCount',
+  lost_information: 'highSeverityLostInfoCount',
+  weak_exercise_readiness: 'exerciseReadinessScore',
+}
+
 /** A regeneration hint per addressable blocker code. */
 function regenerationHintFor(code: ArticleBlockerCode): string {
   switch (code) {
@@ -207,7 +230,12 @@ export function evaluateQualityGateV3(
     message: string,
     sourceBlockIds?: string[],
   ) => {
-    blockerReasons.push({ code, message, sourceBlockIds })
+    blockerReasons.push({
+      code,
+      message,
+      qualityReportRef: QUALITY_REPORT_REF_FOR_CODE[code],
+      sourceBlockIds,
+    })
     hardBlockerCodes.push(code)
     regenerationHints.push(regenerationHintFor(code))
   }
@@ -227,11 +255,15 @@ export function evaluateQualityGateV3(
       `${unsupportedClaimCount} claim(s) are not supported by any source block.`,
     )
   }
-  // 3. Concept-rich source with zero concepts — the PRD's "0 concept candidates".
-  if (isConceptRich(blocks) && conceptCandidateCount === 0) {
+  // 3. Concept-rich source with too few concepts — the PRD's "<3 concept
+  //    candidates" failure (DET-355 minConceptCandidateCount).
+  if (
+    isConceptRich(blocks) &&
+    conceptCandidateCount < MIN_CONCEPT_CANDIDATE_COUNT
+  ) {
     hard(
       'missing_concepts',
-      'The source carries definition/example substance but no key concepts were extracted.',
+      `The source carries definition/example substance but only ${conceptCandidateCount} key concept(s) were extracted (need ${MIN_CONCEPT_CANDIDATE_COUNT}).`,
     )
   }
   // 4. No retrieval prompts — an article without retrieval practice is not a

@@ -66,6 +66,8 @@ const LEARNING_JSON = JSON.stringify({
   learningPath: [
     { label: 'Understand embeddings', sectionHeading: 'Definition' },
   ],
+  // Three grounded concepts ⇒ clears the minConceptCandidateCount (3) gate for a
+  // concept-rich (DEFINITION + EXAMPLE) source.
   keyConcepts: [
     {
       name: 'Embedding',
@@ -73,6 +75,20 @@ const LEARNING_JSON = JSON.stringify({
       shortDefinition: 'A dense vector.',
       importance: 'high',
       sourceBlockIds: ['b1'],
+    },
+    {
+      name: 'Dense vector',
+      type: 'core_concept',
+      shortDefinition: 'A vector with mostly non-zero values.',
+      importance: 'medium',
+      sourceBlockIds: ['b1'],
+    },
+    {
+      name: 'word2vec',
+      type: 'supporting_concept',
+      shortDefinition: 'A model that maps words to vectors.',
+      importance: 'medium',
+      sourceBlockIds: ['b2'],
     },
   ],
   keyClaims: [

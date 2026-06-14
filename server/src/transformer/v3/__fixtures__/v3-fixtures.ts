@@ -38,6 +38,8 @@ export function makeV3Article(
         ],
       },
     ],
+    // Three concepts so the default article clears the DET-355
+    // minConceptCandidateCount (3) gate; all cite b1 so coverage is unchanged.
     keyConcepts: [
       {
         id: 'concept-0',
@@ -48,6 +50,28 @@ export function makeV3Article(
         sourceBlockIds: ['b1'],
         articleSectionIds: ['sec-0'],
         importance: 'high',
+        suggestedCognitiveState: 'Parsed',
+      },
+      {
+        id: 'concept-1',
+        name: 'Concept Two',
+        normalizedName: 'concept two',
+        type: 'core_concept',
+        shortDefinition: 'A second concept.',
+        sourceBlockIds: ['b1'],
+        articleSectionIds: ['sec-0'],
+        importance: 'medium',
+        suggestedCognitiveState: 'Parsed',
+      },
+      {
+        id: 'concept-2',
+        name: 'Concept Three',
+        normalizedName: 'concept three',
+        type: 'core_concept',
+        shortDefinition: 'A third concept.',
+        sourceBlockIds: ['b1'],
+        articleSectionIds: ['sec-0'],
+        importance: 'medium',
         suggestedCognitiveState: 'Parsed',
       },
     ],
