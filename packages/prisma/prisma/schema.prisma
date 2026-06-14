@@ -1490,6 +1490,13 @@ model TransformedArticle {
   coverageReport  Json?
   illustrationPlan Json?
   learningLayer   Json?
+  // Fidelity-review rollup (DET-354): the v3 ArticleQualityReportV3 — a
+  // deterministic synthesis of the fidelity report, coverage, structure model and
+  // learning layer (raw vs important source coverage, unsupported-addition and
+  // lost-info counts, blocker reasons + stage-targeted regeneration hints). Its
+  // high-severity blockers are the second gate on FINAL/BLOCKED. Additive lane;
+  // never folded into articleJson. Old rows stay NULL.
+  qualityReport   Json?
   // AI-added encyclopedia metadata (DET-319) — non-source-grounded, its own lane,
   // never folded into articleJson; the UI labels it "AI · not from your source".
   enrichment      Json?
