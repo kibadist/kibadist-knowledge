@@ -23,6 +23,8 @@ import { StructureModelService } from './structure-model.service'
 import { TableGeneratorService } from './table-generator.service'
 import { TransformerController } from './transformer.controller'
 import { TransformerService } from './transformer.service'
+import { ArticlePipelineV3Service } from './v3/article-pipeline-v3.service'
+import { V3GeneratorService } from './v3/v3-generator.service'
 
 /**
  * The Source-Preserving Article Transformer (DET-247…259), M1 backend.
@@ -55,6 +57,8 @@ import { TransformerService } from './transformer.service'
     EditorialLayoutService,
     LearningLayerService,
     LearningPromptsService,
+    V3GeneratorService,
+    ArticlePipelineV3Service,
     ArticlePipelineService,
   ],
   exports: [TransformerService, PipelineService],

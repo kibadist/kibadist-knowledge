@@ -1,30 +1,43 @@
 /**
- * Article JSON v3 — the client-side contract for source-grounded learning
- * articles (DET-344, the "Source-Grounded Learning Article Engine" epic
- * DET-343).
+ * Article JSON v3 — the SERVER-side contract for source-grounded learning
+ * articles (the "Source-Grounded Learning Article Engine" epic DET-343).
  *
- * v3 is a PARALLEL shape to the legacy `source_preserving_article` v2 contract
- * (see `api.ts` `ArticleJsonV2`), not a replacement: the strangler-pattern
- * migration (DET-362) keeps v2 as a stable fallback while v3 generation rolls
- * out behind a feature flag. The reader dispatches on `schemaVersion` —
- * v2 articles keep rendering through the Compendium/MagazineArticle path, v3
- * articles render through the learning-first reader (DET-357).
+ * THIS FILE IS A VERBATIM MIRROR of the client contract in
+ * `web/src/lib/article-v3.ts`. The web reader (`ArticleV3View`, DET-357) renders
+ * exactly this shape, so the v3 generation pipeline MUST emit it byte-compatibly:
+ * the persisted `articleJson` is handed to the client untouched at the read
+ * boundary (`transformer.service.ts`) and the client casts it to its own
+ * `ArticleJsonV3`. Keep the two files in lock-step — a divergence here renders as
+ * a blank/`undefined` field in the reader.
  *
- * This file MIRRORS the server-side v3 contract being built in the transformer
- * (DET-344). It is intentionally self-contained — it imports nothing from
- * `api.ts` so the dependency runs one way (`api.ts` re-exports `ArticleJsonV3`
- * from here), and every field tolerates the additive evolution of the pipeline:
- * panels and sections are guarded so an article generated before a given stage
- * shipped simply omits that affordance rather than crashing the renderer.
+ * WHY a fresh contract (and not the older `article-v3.types.ts`). DET-344 drafted
+ * a server v3 contract built around a `SourceTrace` primitive; DET-357 then shipped
+ * the *reader* against a flatter, learning-first shape (`paragraphs` not typed
+ * blocks; flat `sourceBlockIds` + `aiAssisted`; a top-level `status`; a
+ * blocker/regeneration-aware `qualityReport`). The reader is the side that must be
+ * satisfied, and its `qualityReport`/`status` map 1:1 onto the epic's acceptance
+ * criteria (important coverage %, unsupported-claim count, concept candidates,
+ * retrieval prompts, blocker reasons, regeneration hints). So the reader's contract
+ * is canonical and this file mirrors it; `article-v3.types.ts` is left as a legacy
+ * draft (only its lightweight `isArticleV3` guard is still used).
  *
- * Source-trace invariant (DET-344): every paragraph, section, claim, concept,
- * callout, table, and prompt carries source-block ids so the reader can ground
- * each rendered fragment back in the original material. AI-assisted scaffolding
- * (a fragment with no source blocks, or `aiAssisted: true`) is rendered visually
- * distinct from source-grounded claims — never silently mixed in.
+ * STRANGLER PATTERN (DET-343). v3 is a PARALLEL pipeline beside the frozen v2
+ * (`ArticleJsonV2`), gated by a feature flag + source-kind routing (default off).
+ * v3 reuses the existing `articleJson` column and is discriminated on
+ * `schemaVersion: 'v3'` + `mode: 'source_grounded_learning_article'` — v2 keeps
+ * `'v2'` / `'source_preserving_article'` and renders through the Compendium
+ * unchanged. No new column, no migration.
+ *
+ * SOURCE-TRACE INVARIANT. Every paragraph, section, claim, concept, callout,
+ * table, and prompt carries source-block ids so the reader can ground each rendered
+ * fragment back in the original material. AI scaffolding (a fragment with no source
+ * blocks, or `aiAssisted: true`) is rendered visually distinct from source-grounded
+ * claims — never silently mixed in. Grounding/provenance is decided in CODE
+ * (assembly), never trusted from the model.
  */
 
 export const ARTICLE_JSON_V3 = 'v3' as const
+export const ARTICLE_V3_MODE = 'source_grounded_learning_article' as const
 
 // --- Source diagnosis (DET-345) ---------------------------------------------
 
@@ -48,11 +61,6 @@ export type ArticleShapeV3 =
 
 // --- Quality gates + blocker status (DET-355) -------------------------------
 
-/**
- * The article lifecycle status. Anything `BLOCKED_*` (or `NEEDS_REGENERATION`)
- * is a held-back state the reader renders with its blocker reasons +
- * regeneration hints; `READY_FOR_REVIEW`/`FINAL` are the readable, passed states.
- */
 export type ArticleStatusV3 =
   | 'DRAFT'
   | 'GENERATING'
@@ -64,7 +72,6 @@ export type ArticleStatusV3 =
   | 'READY_FOR_REVIEW'
   | 'FINAL'
 
-/** Machine-readable blocker codes that map onto the quality-gate failures. */
 export type ArticleBlockerCode =
   | 'low_coverage'
   | 'unsupported_claims'
@@ -73,11 +80,9 @@ export type ArticleBlockerCode =
   | 'lost_information'
   | 'weak_exercise_readiness'
 
-/** A single reason an article is held back, with a pointer to its report entry. */
 export interface ArticleBlockerReason {
   code: ArticleBlockerCode
   message: string
-  /** Points at a quality-report field/warning (DET-355) so the reader can link. */
   qualityReportRef?: string
   sourceBlockIds?: string[]
 }
@@ -97,7 +102,6 @@ export type TransformationTypeV3 =
   | 'paragraph_merge'
   | 'heading_inference'
 
-/** Provenance for the article as a whole (DET-344 `ArticleProvenance`). */
 export interface ArticleProvenanceV3 {
   sourceId?: string
   sourceUrl?: string | null
@@ -106,7 +110,6 @@ export interface ArticleProvenanceV3 {
   capturedAt?: string
   totalSourceBlocks?: number
   representedSourceBlocks?: number
-  /** Whether the original source spans are still available behind this article. */
   sourceAvailable?: boolean
 }
 
@@ -114,15 +117,9 @@ export interface ArticleProvenanceV3 {
 
 export interface ArticleTitleV3 {
   text: string
-  /** Where the title came from — an inferred title is AI scaffolding, not source. */
   source?: 'original' | 'cleanedOriginal' | 'inferred'
 }
 
-/**
- * A body paragraph. `sourceBlockIds` ground it in the source; an empty array
- * (or `aiAssisted: true`) marks it as AI scaffolding the reader renders as
- * visually distinct from source-grounded prose.
- */
 export interface ArticleParagraphV3 {
   id: string
   text: string
@@ -132,7 +129,6 @@ export interface ArticleParagraphV3 {
   aiAssisted?: boolean
 }
 
-/** Source-grounded section role (DET-348 outline). Drives the small-caps label. */
 export type SectionRoleV3 =
   | 'introduction'
   | 'definition'
@@ -155,9 +151,7 @@ export interface ArticleSectionV3 {
   id: string
   heading: string
   sectionRole?: SectionRoleV3
-  /** Concept names this section is built around (DET-348). */
   conceptFocus?: string[]
-  /** What the reader should be able to do after this section (DET-348). */
   targetReaderOutcome?: string
   sourceBlockIds: string[]
   paragraphs: ArticleParagraphV3[]
@@ -187,12 +181,6 @@ export interface ArticleCalloutV3 {
   aiAssisted?: boolean
 }
 
-/**
- * Where each callout is placed. `bySection` anchors a callout beside the section
- * it belongs to; `unplaced` ones have nowhere inline to live and render in a
- * trailing group. Full callout objects are embedded (mirrors the v2 placement
- * map) so the reader renders straight from the map.
- */
 export interface CalloutPlacementMapV3 {
   bySection: Record<string, ArticleCalloutV3[]>
   unplaced: ArticleCalloutV3[]
@@ -208,11 +196,6 @@ export interface ArticleTableV3 {
   fidelityRisk?: FidelityRiskV3
 }
 
-/**
- * Material moved OUT of the article body by default (DET-348/350): references,
- * bibliography, external links, stripped navigation/footer, and low-importance
- * source matter. Surfaced in the Source notes drawer, never as a body section.
- */
 export type SourceNoteKindV3 =
   | 'reference'
   | 'bibliography'
@@ -268,10 +251,6 @@ export interface ConceptRelationshipCandidateV3 {
   targetName: string
 }
 
-/**
- * An AI-suggested concept (DET-351). It is a PROPOSAL the reader reviews — never
- * auto-promoted to permanent knowledge. `status` defaults to `ai_suggested`.
- */
 export interface ConceptCandidateV3 {
   id: string
   name: string
@@ -322,10 +301,6 @@ export type RetrievalPromptTypeV3 =
   | 'misconception_repair'
   | 'transfer'
 
-/**
- * An AI-suggested active-recall prompt (DET-353). Visible for review but never
- * scheduled permanently until the user validates or answers it.
- */
 export interface RetrievalPromptV3 {
   id: string
   question: string
@@ -346,11 +321,9 @@ export interface MisconceptionCandidateV3 {
   status: 'ai_suggested' | 'validated' | 'rejected'
 }
 
-/** An ordered "what you'll learn" item (DET-348 `LearningPathItem`). */
 export interface LearningPathItemV3 {
   id: string
   label: string
-  /** The section this path item maps to, when known. */
   sectionId?: string
   outcome?: string
 }
@@ -380,7 +353,7 @@ export interface ArticleQualityReportV3 {
 
 export interface ArticleJsonV3 {
   schemaVersion: typeof ARTICLE_JSON_V3
-  mode: 'source_grounded_learning_article'
+  mode: typeof ARTICLE_V3_MODE
   status: ArticleStatusV3
   sourceKind: SourceKind
   shape: ArticleShapeV3
@@ -401,7 +374,6 @@ export interface ArticleJsonV3 {
   references: SourceReferenceV3[]
   provenance: ArticleProvenanceV3
   qualityReport: ArticleQualityReportV3
-  /** Precomputed reading time; the reader falls back to a word-count estimate. */
   readingTimeMinutes?: number
   generatedAt?: string
 }
@@ -409,21 +381,18 @@ export interface ArticleJsonV3 {
 // --- Helpers -----------------------------------------------------------------
 
 /**
- * The reader dispatch boundary: is this article JSON the v3 learning shape? Used
- * to route between the v3 learning-first reader and the legacy v2 Compendium so
- * v2 articles keep rendering unchanged (DET-357 acceptance criterion 1).
+ * The discriminator the read boundary and reader share: a v3 learning article is
+ * `schemaVersion: 'v3'` AND `mode: 'source_grounded_learning_article'`. The mode
+ * check is what keeps an enriched-v2 article (which historically also carried a
+ * `'v3'` stamp) from being mis-routed to the v3 reader.
  */
 export function isArticleJsonV3(
   json: { schemaVersion?: string; mode?: string } | null | undefined,
 ): json is ArticleJsonV3 {
-  // Discriminate on BOTH schemaVersion AND mode: an enriched v2 article can carry
-  // optional v3-era fields but stays `mode: 'source_preserving_article'`, so the
-  // mode guard keeps it on the Compendium path and only the learning-first article
-  // (`mode: 'source_grounded_learning_article'`) reaches this v3 reader (DET-343).
   return (
     !!json &&
     json.schemaVersion === ARTICLE_JSON_V3 &&
-    json.mode === 'source_grounded_learning_article'
+    json.mode === ARTICLE_V3_MODE
   )
 }
 
@@ -437,37 +406,8 @@ export function isReadableStatusV3(status: ArticleStatusV3): boolean {
   return status === 'READY_FOR_REVIEW' || status === 'FINAL'
 }
 
-/** Plain text of a paragraph list, for word-count / a11y label scanning. */
-export function v3PlainText(paragraphs: ArticleParagraphV3[]): string {
-  return paragraphs.map((p) => p.text).join(' ')
-}
-
-const WORDS_PER_MINUTE = 220
-
-/**
- * Reading time in minutes: the precomputed value when present, else a
- * deterministic word-count estimate over the abstract + every section body
- * (never returns 0 — a non-empty article is at least a one-minute read).
- */
-export function v3ReadingMinutes(article: ArticleJsonV3): number {
-  if (article.readingTimeMinutes && article.readingTimeMinutes > 0) {
-    return article.readingTimeMinutes
-  }
-  const collect = (sections: ArticleSectionV3[]): string[] =>
-    sections.flatMap((s) => [
-      v3PlainText(s.paragraphs),
-      ...collect(s.subsections ?? []),
-    ])
-  const text = [v3PlainText(article.abstract), ...collect(article.sections)]
-    .join(' ')
-    .trim()
-  if (!text) return 0
-  const words = text.split(/\s+/).length
-  return Math.max(1, Math.round(words / WORDS_PER_MINUTE))
-}
-
 /** A paragraph/callout is AI scaffolding when flagged or ungrounded in source. */
-export function isAiScaffolding(item: {
+export function isAiScaffoldingV3(item: {
   aiAssisted?: boolean
   sourceBlockIds: string[]
 }): boolean {
