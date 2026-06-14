@@ -16,6 +16,7 @@ import {
 import { MagazineArticle } from '@/components/magazine/magazine-article'
 import { ArticleReader } from '@/components/reader/article-reader'
 import { ArticleV3View } from '@/components/reader/v3/article-v3-view'
+import { ArticleReviewPanels } from '@/components/transformer/review/article-review-panels'
 import { SourceInspector } from '@/components/transformer/source-inspector'
 import {
   ApiError,
@@ -546,10 +547,27 @@ function ArticleView({
 
   // v3 articles render through the dedicated learning-first reader (DET-357). It
   // carries its own status banner, provenance byline, and learning panels, so it
-  // bypasses the v2 fidelity notice + learning-event hydration below entirely
-  // (the v3 active-recall surface is separate, downstream work).
+  // bypasses the v2 fidelity notice + learning-event hydration below entirely.
+  // The DET-359 review surface is wired in as the reader's `reviewSlot`: it
+  // replaces the read-only key-concepts + retrieval-prompts panels with the
+  // interactive review of the SAME suggestions (accept/reject/edit; answer/save/
+  // reject/edit), persisted via the v3-review endpoints. Nothing here becomes
+  // permanent knowledge or a scheduled review without an explicit action.
   if (isArticleJsonV3(article.articleJson)) {
-    return <ArticleV3View article={article.articleJson} />
+    const v3Article = article.articleJson
+    return (
+      <ArticleV3View
+        article={v3Article}
+        reviewSlot={
+          <ArticleReviewPanels
+            articleId={articleId}
+            article={v3Article}
+            v3Review={article.learningLayer?.v3Review}
+            state={article.status === 'BLOCKED' ? 'blocked' : 'ready'}
+          />
+        }
+      />
+    )
   }
 
   if (!learningArticle) return null
@@ -583,8 +601,9 @@ function ArticleView({
       {surface === 'article' ? (
         // The Article tab is the finished, readable Compendium render (DET-318) —
         // a magazine/encyclopedia presentation of the same Article JSON v2, with
-        // any rendered illustrations placed as plates. The active-recall modes
-        // stay on the Exercise tab.
+        // any rendered illustrations placed as plates. This is the LEGACY v2
+        // render; v3 articles return earlier and carry the DET-359 review surface
+        // in the v3 reader. The active-recall modes stay on the Exercise tab.
         <MagazineArticle
           article={learningArticle}
           articleId={articleId}

@@ -954,6 +954,17 @@ const retrievalPrompt = z.object({
   id: z.string().min(1),
   prompt: z.string().min(1),
   sourceBlockIds,
+  // Additive v3 review fields (DET-359). All optional so learning-layer rows
+  // stored before this lane still parse. `reviewStatus` is the lifecycle the v3
+  // panel persists; it never includes a "scheduled" state — permanent review
+  // scheduling stays a downstream, explicitly-gated step.
+  promptType: z.string().min(1).optional(),
+  linkedConceptIds: z.array(z.string()).optional(),
+  expectedAnswerBlockIds: z.array(z.string()).optional(),
+  reviewStatus: z
+    .enum(['suggested', 'saved', 'answered', 'rejected'])
+    .optional(),
+  userAnswer: z.string().optional(),
 })
 
 export type RetrievalPrompt = z.infer<typeof retrievalPrompt>
@@ -983,6 +994,10 @@ const learningConceptCandidate = z.object({
   // Concept that validation created (DET-283). Its presence makes promotion
   // idempotent — re-validating never creates a second Concept row.
   conceptId: z.string().min(1).optional(),
+  // Additive v3 review fields (DET-359). Optional so old rows still parse; the
+  // v3 adapter defaults importance to 'medium' when absent.
+  importance: z.enum(['high', 'medium', 'low']).optional(),
+  sourceSpanPreview: z.string().min(1).optional(),
 })
 
 export type LearningConceptCandidate = z.infer<typeof learningConceptCandidate>
@@ -1215,6 +1230,49 @@ export const LearningPromptSetLlmSchema = z.object({
  * richer recall prompts + misconception candidates produced by the learning-prompt
  * stage. `concepts` / `retrievalPrompts` and their update flow are untouched.
  */
+/**
+ * The v3 reader's review decision for ONE concept candidate (DET-359), keyed by
+ * the Article JSON v3 `keyConcepts[].id`. `accepted` is a USER-REVIEW state, not
+ * internalized knowledge — there is deliberately NO concept-row side effect here
+ * (unlike `conceptCandidates` validation), so accepting can never internalize a
+ * concept. `label` / `definition` / `importance` hold the reader's in-place edit.
+ */
+export const v3ConceptReview = z.object({
+  status: z.enum(['pending', 'accepted', 'rejected', 'deferred']),
+  label: z.string().optional(),
+  definition: z.string().optional(),
+  importance: z.enum(['high', 'medium', 'low']).optional(),
+})
+export type LearningLayerV3ConceptReview = z.infer<typeof v3ConceptReview>
+
+/**
+ * The v3 reader's review decision for ONE retrieval prompt (DET-359), keyed by
+ * the Article JSON v3 `retrievalPrompts[].id`. The statuses exclude any
+ * "scheduled" value: this overlay can never make a prompt a permanent review
+ * card — scheduling stays a separately-gated downstream step. `userAnswer` is
+ * the scheduling gate (a user-authored answer); `prompt` holds an in-place edit.
+ */
+export const v3PromptReview = z.object({
+  status: z.enum(['suggested', 'saved', 'answered', 'rejected']),
+  userAnswer: z.string().optional(),
+  prompt: z.string().optional(),
+})
+export type LearningLayerV3PromptReview = z.infer<typeof v3PromptReview>
+
+/**
+ * The v3 review overlay (DET-359): an id-keyed map of the reader's review state
+ * for the Article JSON v3 concept candidates + retrieval prompts. The article
+ * BODY holds the suggestions; this holds only the per-item decision, so the same
+ * concepts/prompts shown in the v3 reader become reviewable without copying them
+ * into a parallel `conceptCandidates` lane (and without that lane's concept-row
+ * side effects). Additive + optional: rows generated before this lane omit it.
+ */
+export const v3ReviewSchema = z.object({
+  concepts: z.record(z.string(), v3ConceptReview).optional(),
+  prompts: z.record(z.string(), v3PromptReview).optional(),
+})
+export type LearningLayerV3Review = z.infer<typeof v3ReviewSchema>
+
 export const LearningLayerSchema = z.object({
   concepts: z.array(learningConcept),
   retrievalPrompts: z.array(retrievalPrompt),
@@ -1222,6 +1280,8 @@ export const LearningLayerSchema = z.object({
   articleConceptCandidates: z.array(articleConceptCandidate).optional(),
   retrievalPromptCandidates: z.array(retrievalPromptCandidate).optional(),
   misconceptions: z.array(misconceptionCandidate).optional(),
+  // The v3 reader's review overlay (DET-359), keyed by Article JSON v3 item ids.
+  v3Review: v3ReviewSchema.optional(),
 })
 
 export type LearningLayer = z.infer<typeof LearningLayerSchema>
