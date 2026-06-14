@@ -87,7 +87,17 @@ export type StreamItem =
   | { kind: 'figure'; figure: PlannedFigure }
   | { kind: 'statband'; stats: PlannedStat[]; ai: boolean }
   | { kind: 'pullquote'; text: string; attribution?: string; ai: boolean }
-  | { kind: 'marginal'; title: string; text: string; ai: boolean }
+  | {
+      kind: 'marginal'
+      title: string
+      text: string
+      ai: boolean
+      /** Source block id when this marginal is a CONSUMED callout block (DET-358).
+       *  Lets the renderer resolve the callout's source trace and keep it
+       *  inspectable even though the layout routed it away from `MagazineBlock`.
+       *  Absent for server-authored marginal furniture (no traceable source). */
+      blockId?: string
+    }
 
 export interface PlannedSection {
   sectionId: string
@@ -632,6 +642,10 @@ interface ResolvedMarginal {
   title: string
   text: string
   ai: boolean
+  /** The source callout block id this marginal was derived from (DET-358), so
+   *  the renderer can keep the consumed callout inspectable. Absent for server
+   *  marginal furniture, which has no single traceable source block. */
+  blockId?: string
 }
 
 function resolveMarginals(args: {
@@ -670,6 +684,9 @@ function resolveMarginals(args: {
           title: b.content.title ?? b.content.variant ?? 'Note',
           text: blockPlainText(b),
           ai: false,
+          // Carry the callout's block id so the rendered marginal stays
+          // source-trace inspectable (DET-358) — the trace index is keyed by it.
+          blockId: b.block_id,
         })
         break // one per section keeps them spread
       }
@@ -780,6 +797,7 @@ function buildSection(args: {
         title: m.title,
         text: m.text,
         ai: m.ai,
+        blockId: m.blockId,
       })
       plainRun = 0
     }
@@ -890,7 +908,13 @@ function buildSection(args: {
   for (const [count, ms] of marginalByAfter) {
     if (count > paraSeen) {
       for (const m of ms)
-        items.push({ kind: 'marginal', title: m.title, text: m.text, ai: m.ai })
+        items.push({
+          kind: 'marginal',
+          title: m.title,
+          text: m.text,
+          ai: m.ai,
+          blockId: m.blockId,
+        })
     }
   }
 
