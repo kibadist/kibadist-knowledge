@@ -20,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { toArticleV2 } from './article-compat.util'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { isArticleV3 } from './article-v3.schema'
+import type { ArticleJsonV3 } from './article-v3.types'
 import { placeCallouts } from './callout-placement.util'
 import type { CreateTextSourceDto } from './dto/create-text-source.dto'
 import type { CreateUrlSourceDto } from './dto/create-url-source.dto'
@@ -112,10 +113,14 @@ export interface TransformerArticleDetail {
   status: TransformedArticleStatus
   blocksVersion: number
   /**
-   * Always v2 to the client: the server is the single adaptation boundary
-   * (DET-277). Stored JSON may be legacy v1; `getArticle` adapts it read-time.
+   * v2 OR v3 to the client. The server is the single adaptation boundary
+   * (DET-277): legacy v1 is adapted to v2 read-time, native v2 passes through.
+   * Article JSON v3 (DET-344) is a parallel contract with its own learning-first
+   * reader (DET-357) + review surface (DET-359), so it passes through verbatim —
+   * the client dispatches on `schemaVersion`. v3 is never run through the v2
+   * adapter (which would mis-parse it as v1).
    */
-  articleJson: ArticleJsonV2 | null
+  articleJson: ArticleJsonV2 | ArticleJsonV3 | null
   fidelityReport: FidelityReport | null
   fidelityScore: number | null
   coverageReport: CoverageReport | null
@@ -419,15 +424,31 @@ export class TransformerService {
       | SourcePreservingArticle
       | ArticleJsonV2
       | null
-    // Article JSON v3 (DET-344) is a PARALLEL, opt-in contract with its own
-    // (not-yet-wired) read/render path. The v2 read boundary must never mistake a
-    // v3 record for a legacy v1 doc (which would mis-parse it as v1 here), so we
-    // fail loud instead. This branch is unreachable until a v3 record exists
-    // (opt-in flag + the future v3 generator); v1/v2 records are untouched.
+    // Article JSON v3 (DET-344) is a PARALLEL contract with its own learning-first
+    // reader (DET-357) and concept/retrieval review surface (DET-359). It must
+    // NEVER be run through the v2 adapter below (which would mis-parse it as a
+    // legacy v1 doc), so we return it verbatim and let the client dispatch on
+    // `schemaVersion`. The reader can only render v3 once it can load it, so this
+    // pass-through is what makes the v3 reader (and its review panels) reachable
+    // end-to-end — without it the only article-read path 409s every v3 record.
     if (isArticleV3(stored)) {
-      throw new ConflictException(
-        'This article was generated with schema v3, which this endpoint does not yet render.',
-      )
+      return {
+        id: article.id,
+        sourceId: article.sourceId,
+        status: article.status,
+        blocksVersion: article.blocksVersion,
+        articleJson: stored,
+        fidelityReport: article.fidelityReport as FidelityReport | null,
+        fidelityScore: article.fidelityScore,
+        coverageReport: article.coverageReport as CoverageReport | null,
+        illustrationPlan: article.illustrationPlan as IllustrationPlan | null,
+        learningLayer: article.learningLayer as LearningLayer | null,
+        enrichment: article.enrichment as ArticleEnrichment | null,
+        editorialLayout: article.editorialLayout as EditorialLayout | null,
+        error: article.error,
+        createdAt: article.createdAt,
+        updatedAt: article.updatedAt,
+      }
     }
     // Inline callout placement (DET-272) is deterministic and cheap, so compute
     // it here for any article that lacks it — legacy v1 articles and v2 articles

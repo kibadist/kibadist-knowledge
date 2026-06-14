@@ -66,6 +66,49 @@ const emptyLayer = (): LearningLayer => ({
   retrievalPrompts: [],
 })
 
+describe('TransformerService.getArticle — v3 pass-through (DET-359)', () => {
+  // The root blocker the first two attempts missed: the only article-read path
+  // 409'd every v3 record, so the v3 reader (and its review panels) could never
+  // load. getArticle must now return the v3 body verbatim — never throwing, and
+  // never running it through the v2 adapter (which would mis-parse it as v1).
+  it('returns the stored v3 articleJson verbatim instead of 409ing', async () => {
+    const v3Json = {
+      schemaVersion: 'v3' as const,
+      title: 'A v3 lesson',
+      keyConcepts: [{ id: 'kc1' }],
+      retrievalPrompts: [{ id: 'rp1' }],
+    }
+    const { service, prisma } = makeHarness(emptyLayer())
+    prisma.transformedArticle.findFirst = jest.fn(async () => ({
+      id: 'a1',
+      sourceId: 'src1',
+      status: 'FINAL',
+      blocksVersion: 1,
+      articleJson: v3Json,
+      learningLayer: emptyLayer(),
+      structureModel: null,
+      fidelityReport: null,
+      fidelityScore: null,
+      coverageReport: null,
+      illustrationPlan: null,
+      enrichment: null,
+      editorialLayout: null,
+      error: null,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    })) as never
+
+    const detail = await service.getArticle('u1', 'a1')
+
+    // Verbatim — same schemaVersion + ids the reader dispatches on. If the v2
+    // adapter had touched it, schemaVersion would be gone.
+    expect(detail.articleJson).toEqual(v3Json)
+    expect(detail.status).toBe('FINAL')
+    // The learning layer (with its v3Review overlay) rides along for the panels.
+    expect(detail.learningLayer).toEqual(emptyLayer())
+  })
+})
+
 describe('TransformerService.setV3ConceptReview (DET-359)', () => {
   it('accepts a concept as a status flip ONLY — never creating a Concept row', async () => {
     const { service, prisma } = makeHarness(emptyLayer())
