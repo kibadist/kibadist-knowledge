@@ -22,7 +22,10 @@ function makeHarness(learningLayer: LearningLayer | null) {
     sourceId: 'src1',
     workspaceId: 'w1',
     blocksVersion: 1,
-    articleJson: { schemaVersion: 'v3' },
+    articleJson: {
+      schemaVersion: 'v3',
+      mode: 'source_grounded_learning_article',
+    },
     learningLayer,
   }
 
@@ -74,6 +77,7 @@ describe('TransformerService.getArticle — v3 pass-through (DET-359)', () => {
   it('returns the stored v3 articleJson verbatim instead of 409ing', async () => {
     const v3Json = {
       schemaVersion: 'v3' as const,
+      mode: 'source_grounded_learning_article' as const,
       title: 'A v3 lesson',
       keyConcepts: [{ id: 'kc1' }],
       retrievalPrompts: [{ id: 'rp1' }],

@@ -5,18 +5,21 @@ import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { CalloutGeneratorService } from './callout-generator.service'
+import { ClaimExtractorService } from './claim-extractor.service'
 import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { FidelityReviewService } from './fidelity-review.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningOutlineService } from './learning-outline.service'
 import { LearningPromptsService } from './learning-prompts.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
 import { SourceDiagnosisService } from './source-diagnosis.service'
 import { StructureModelService } from './structure-model.service'
 import { TableGeneratorService } from './table-generator.service'
 import type { ArticleJsonV2, FidelityReport } from './transformer.types'
+import { ArticlePipelineV3Service } from './v3/article-pipeline-v3.service'
 
 /** Prisma stub: one article row + one block row; records every status set. */
 function makeStubPrisma() {
@@ -117,6 +120,7 @@ function makeServices(overrides: {
   structure?: Partial<StructureModelService>
   segmentation?: Partial<ConceptualSegmentationService>
   plan?: Partial<ReshapingPlanService>
+  learningOutline?: Partial<LearningOutlineService>
   generate?: Partial<ArticleGeneratorService>
   fidelity?: Partial<FidelityCheckerService>
 }) {
@@ -162,6 +166,23 @@ function makeServices(overrides: {
     build: jest.fn(async () => ({ removedBlocks: [] })),
     ...overrides.plan,
   } as unknown as ReshapingPlanService
+  const learningOutline = {
+    // A minimal valid LearningOutline (DET-348); the pipeline persists it and
+    // hands it to the generator stub (which ignores it).
+    build: jest.fn(async () => ({
+      sourceKind: 'article',
+      articleShape: 'general',
+      title: { text: 'T', source: 'inferred' },
+      learningPath: [],
+      sections: [],
+      sourceNotesPlan: { notes: [] },
+      calloutPlan: [],
+      tablePlan: [],
+      reorderings: [],
+      warnings: [],
+    })),
+    ...overrides.learningOutline,
+  } as unknown as LearningOutlineService
   const generate = {
     generate: jest.fn(async () => sampleArticle),
     ...overrides.generate,
@@ -200,6 +221,9 @@ function makeServices(overrides: {
   // so the pipeline test also covers the quality-report rollup + its FINAL/BLOCKED
   // gate end to end.
   const fidelityReview = new FidelityReviewService()
+  const claims = {
+    extract: jest.fn(async () => []),
+  } as unknown as ClaimExtractorService
   // Real diagnosis service over a stub ConfigService (v3 flag off ⇒ always v2).
   const diagnosis = new SourceDiagnosisService({
     get: () => undefined,
@@ -214,10 +238,14 @@ function makeServices(overrides: {
     })),
     providerName: 'stub',
   } as unknown as AiService
+  // v3 is off in these tests (diagnosis flag off ⇒ always v2), so the orchestrator
+  // is never invoked — a bare stub satisfies the constructor.
+  const pipelineV3 = {} as unknown as ArticlePipelineV3Service
   return {
     structure,
     segmentation,
     plan,
+    learningOutline,
     generate,
     callouts,
     tables,
@@ -228,8 +256,10 @@ function makeServices(overrides: {
     learning,
     learningPrompts,
     fidelityReview,
+    claims,
     diagnosis,
     ai,
+    pipelineV3,
   }
 }
 
@@ -243,6 +273,7 @@ describe('ArticlePipelineService.run', () => {
       s.structure,
       s.segmentation,
       s.plan,
+      s.learningOutline,
       s.generate,
       s.callouts,
       s.tables,
@@ -253,7 +284,9 @@ describe('ArticlePipelineService.run', () => {
       s.learning,
       s.learningPrompts,
       s.fidelityReview,
+      s.claims,
       s.ai,
+      s.pipelineV3,
     )
 
     await pipeline.run('a1', 'src1', 1)
@@ -269,9 +302,16 @@ describe('ArticlePipelineService.run', () => {
     expect(article.articleJson).toBeTruthy()
     expect(article.coverageReport).toBeTruthy()
 
+    // The enriched v2 article stays schemaVersion 'v2' / mode
+    // 'source_preserving_article' (DET-343): 'v3' is reserved for the learning-first
+    // Source-Grounded Learning Article, so the reader's `isArticleJsonV3` dispatch
+    // never mis-routes a v2 article into the v3 learning reader.
+    const stored = article.articleJson as ArticleJsonV2
+    expect(stored.schemaVersion).toBe('v2')
+    expect(stored.mode).toBe('source_preserving_article')
+
     // The pipeline attaches deterministic inline callout placements (DET-272) to
     // the stored articleJson — computed in code, not by the generator stub.
-    const stored = article.articleJson as ArticleJsonV2
     expect(stored.calloutPlacements).toBeDefined()
     expect(stored.calloutPlacements?.bySection.s1).toHaveLength(1)
     expect(stored.calloutPlacements?.bySection.s1[0]).toMatchObject({
@@ -310,6 +350,7 @@ describe('ArticlePipelineService.run', () => {
       s.structure,
       s.segmentation,
       s.plan,
+      s.learningOutline,
       s.generate,
       s.callouts,
       s.tables,
@@ -320,7 +361,9 @@ describe('ArticlePipelineService.run', () => {
       s.learning,
       s.learningPrompts,
       s.fidelityReview,
+      s.claims,
       s.ai,
+      s.pipelineV3,
     )
 
     await pipeline.run('a1', 'src1', 1)
@@ -353,6 +396,7 @@ describe('ArticlePipelineService.run', () => {
       s.structure,
       s.segmentation,
       s.plan,
+      s.learningOutline,
       s.generate,
       s.callouts,
       s.tables,
@@ -363,7 +407,9 @@ describe('ArticlePipelineService.run', () => {
       s.learning,
       s.learningPrompts,
       s.fidelityReview,
+      s.claims,
       s.ai,
+      s.pipelineV3,
     )
 
     await pipeline.run('a1', 'src1', 1)
@@ -388,6 +434,7 @@ describe('ArticlePipelineService.run', () => {
       s.structure,
       s.segmentation,
       s.plan,
+      s.learningOutline,
       s.generate,
       s.callouts,
       s.tables,
@@ -398,7 +445,9 @@ describe('ArticlePipelineService.run', () => {
       s.learning,
       s.learningPrompts,
       s.fidelityReview,
+      s.claims,
       s.ai,
+      s.pipelineV3,
     )
 
     await pipeline.run('a1', 'src1', 1)
@@ -422,6 +471,7 @@ describe('ArticlePipelineService.run', () => {
       s.structure,
       s.segmentation,
       s.plan,
+      s.learningOutline,
       s.generate,
       s.callouts,
       s.tables,
@@ -432,7 +482,9 @@ describe('ArticlePipelineService.run', () => {
       s.learning,
       s.learningPrompts,
       s.fidelityReview,
+      s.claims,
       s.ai,
+      s.pipelineV3,
     )
 
     await pipeline.run('a1', 'src1', 1)
@@ -440,5 +492,72 @@ describe('ArticlePipelineService.run', () => {
     expect(statusLog).toContain(TransformedArticleStatus.FAILED)
     expect(statusLog).not.toContain(TransformedArticleStatus.FINAL)
     expect(String(article.error)).toMatch(/unknown block ids/i)
+  })
+
+  it('routes a v3-target source to the v3 pipeline and persists the learning-first article (DET-343)', async () => {
+    const { prisma, statusLog, article } = makeStubPrisma()
+    const s = makeServices({})
+    const v3Article = {
+      schemaVersion: 'v3',
+      mode: 'source_grounded_learning_article',
+      status: 'READY_FOR_REVIEW',
+      qualityReport: {
+        importantSourceCoverageScore: 90,
+        conceptCandidateCount: 2,
+      },
+    }
+    // Force the router to pick v3 (the flag/kind gate is tested in
+    // source-diagnosis.service.spec); here we assert the WIRING runs v3 instead of
+    // the v2 stages and persists the learning-first article.
+    const diagnosis = {
+      route: () => ({
+        pipeline: 'v3',
+        diagnosis: {
+          sourceKind: 'transcript_lesson',
+          articleShape: 'lesson_article',
+        },
+        reason: 'forced v3 (test)',
+      }),
+    } as unknown as (typeof s)['diagnosis']
+    const runV3 = jest.fn(async () => v3Article)
+    const pipelineV3 = { run: runV3 } as unknown as (typeof s)['pipelineV3']
+
+    const pipeline = new ArticlePipelineService(
+      prisma as never,
+      diagnosis,
+      s.structure,
+      s.segmentation,
+      s.plan,
+      s.learningOutline,
+      s.generate,
+      s.callouts,
+      s.tables,
+      s.fidelity,
+      s.illustrations,
+      s.enrichment,
+      s.editorialLayout,
+      s.learning,
+      s.learningPrompts,
+      s.fidelityReview,
+      s.claims,
+      s.ai,
+      pipelineV3,
+    )
+
+    await pipeline.run('a1', 'src1', 1)
+
+    expect(runV3).toHaveBeenCalledTimes(1)
+    const stored = article.articleJson as {
+      schemaVersion: string
+      mode: string
+      generatedAt?: string
+    }
+    expect(stored.schemaVersion).toBe('v3')
+    expect(stored.mode).toBe('source_grounded_learning_article')
+    expect(stored.generatedAt).toBeTruthy()
+    expect(statusLog).toContain(TransformedArticleStatus.FINAL)
+    // The v2 stages are bypassed entirely on the v3 path.
+    expect(s.structure.build).not.toHaveBeenCalled()
+    expect(s.generate.generate).not.toHaveBeenCalled()
   })
 })

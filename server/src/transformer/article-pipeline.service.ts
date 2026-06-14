@@ -12,6 +12,7 @@ import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { CalloutGeneratorService } from './callout-generator.service'
 import { placeCallouts } from './callout-placement.util'
+import { ClaimExtractorService } from './claim-extractor.service'
 import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { buildCoverageReport, type CoverageBlock } from './coverage.util'
 import { EditorialLayoutService } from './editorial-layout.service'
@@ -20,6 +21,8 @@ import { FidelityReviewService } from './fidelity-review.service'
 import { isBlockedByReview } from './fidelity-review.util'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningOutlineService } from './learning-outline.service'
+import { deriveLearningShape, deriveSourceKind } from './learning-outline.util'
 import type { PromptConceptCandidate } from './learning-prompts.prompt'
 import { LearningPromptsService } from './learning-prompts.service'
 import { buildReadingAids } from './reading-aids.util'
@@ -36,14 +39,18 @@ import type {
   SourceStructureModel,
 } from './schemas'
 import { SourceDiagnosisService } from './source-diagnosis.service'
-import type { SourceDiagnosisMetadata } from './source-diagnosis.types'
+import type {
+  SourceDiagnosis,
+  SourceDiagnosisMetadata,
+} from './source-diagnosis.types'
 import { buildSourceNotes } from './source-notes.util'
+import { buildSourceSegments } from './source-segments.util'
 import type { ClassifiedBlockInput } from './structure-model.service'
 import { StructureModelService } from './structure-model.service'
 import { TableGeneratorService } from './table-generator.service'
 import { ILLUSTRATION_IMAGE_SIZE } from './transformer.constants'
 import {
-  ARTICLE_SCHEMA_VERSION_V3,
+  ARTICLE_SCHEMA_VERSION,
   type ArticleComparisonTable,
   type ArticleGeneratedCallout,
   type ArticleJsonV2,
@@ -52,8 +59,13 @@ import {
   type CoverageReport,
   type EditorialLayout,
   type FidelityReport,
+  type KeyClaim,
   type SourcePreservingArticle,
 } from './transformer.types'
+import { ArticlePipelineV3Service } from './v3/article-pipeline-v3.service'
+import type { V3AssemblyMeta } from './v3/v3-assembly.util'
+import { isReadableStatusV3 } from './v3/v3-contract'
+import type { V3GeneratorBlock } from './v3/v3-generator.service'
 
 /** A loaded source block with everything the M2/M3 services need. */
 type LoadedBlock = ClassifiedBlockInput & { uncertain: boolean }
@@ -88,6 +100,7 @@ export class ArticlePipelineService {
     private readonly structureModel: StructureModelService,
     private readonly segmentation: ConceptualSegmentationService,
     private readonly reshapingPlan: ReshapingPlanService,
+    private readonly learningOutline: LearningOutlineService,
     private readonly generator: ArticleGeneratorService,
     private readonly callouts: CalloutGeneratorService,
     private readonly tables: TableGeneratorService,
@@ -98,7 +111,9 @@ export class ArticlePipelineService {
     private readonly learning: LearningLayerService,
     private readonly learningPrompts: LearningPromptsService,
     private readonly fidelityReview: FidelityReviewService,
+    private readonly claims: ClaimExtractorService,
     private readonly ai: AiService,
+    private readonly pipelineV3: ArticlePipelineV3Service,
   ) {}
 
   /**
@@ -171,10 +186,11 @@ export class ArticlePipelineService {
     // --- 5b. Source diagnosis (DET-345) -------------------------------------
     // Deterministic, no LLM: detect the SourceKind and select the v3 ArticleShape
     // BEFORE any prompt is built, then store the diagnosis on the job. The router
-    // decides v2 (default) vs v3 (flag + targeted-kind gated); v3 has no generator
-    // yet, so EVERY article still runs the v2 pipeline below — the decision is
-    // recorded for rollout/analytics and never alters the v2 output. Never fatal:
-    // a diagnosis failure logs and leaves the article on the conservative path.
+    // decides v2 (default) vs v3 (flag + targeted-kind gated). When it routes to
+    // v3 (DET-343), the source-grounded learning pipeline runs INSTEAD of the v2
+    // stages below and persists its own learning-first articleJson; otherwise every
+    // article runs the v2 pipeline as before. Never fatal: a diagnosis failure logs
+    // and leaves the article on the conservative v2 path.
     const meta = await this.loadSourceMeta(sourceId)
     const routing = this.tryDiagnose(articleId, blocks, meta)
     if (routing) {
@@ -182,6 +198,10 @@ export class ArticlePipelineService {
         sourceDiagnosis: routing.diagnosis as unknown as Prisma.InputJsonValue,
       })
       this.logger.log(`Article ${articleId} routing — ${routing.reason}`)
+    }
+    if (routing?.pipeline === 'v3') {
+      await this.runV3(articleId, sourceId, blocks, routing.diagnosis, meta)
+      return
     }
 
     // --- 6. Structure model -------------------------------------------------
@@ -211,9 +231,26 @@ export class ArticlePipelineService {
       reshapingPlan: plan as unknown as Prisma.InputJsonValue,
     })
 
+    // --- 7b. Learning-first outline (DET-348) -------------------------------
+    // Build a LEARNING structure over the same blocks — a teaching arc, concept-led
+    // sections, source furniture (references/bibliography/external links) demoted to
+    // source notes — and persist it. It is handed to the rewrite (generator) so the
+    // article follows the learning outline rather than cloning the source layout.
+    const sourceSegments = buildSourceSegments(blocks)
+    const sourceKind = deriveSourceKind(blocks)
+    const outline = await this.learningOutline.build({
+      sourceKind,
+      articleShape: deriveLearningShape(sourceKind, plan.shape),
+      blocks,
+      segments: sourceSegments,
+    })
+    await this.persist(articleId, {
+      learningOutline: outline as unknown as Prisma.InputJsonValue,
+    })
+
     // --- 8. Article generation ----------------------------------------------
     await this.setStatus(articleId, TransformedArticleStatus.GENERATING)
-    const generated = await this.generator.generate(plan, blocks)
+    const generated = await this.generator.generate(plan, blocks, outline)
     // Inline callout placement (DET-272) is deterministic, computed in code (no
     // LLM): place the end-matter (keyTerms/examples/caveats) against the sections
     // by source-block overlap and attach it to the stored artifact. The top-level
@@ -227,7 +264,12 @@ export class ArticlePipelineService {
     //  - source notes (references / bibliography / external links / removed
     //    navigation / low-importance) are DETERMINISTIC from the blocks, so they
     //    move out of the article body by default with no hallucination risk.
-    // This is what makes the article schemaVersion 'v3'.
+    // These enrich the v2 article (every field is optional on ArticleJsonV2); the
+    // article stays schemaVersion 'v2' and renders through the Compendium. The
+    // 'v3' schemaVersion + mode is RESERVED for the learning-first
+    // Source-Grounded Learning Article (DET-343, see `runV3` / `v3/v3-contract.ts`)
+    // so the reader's `isArticleJsonV3` dispatch never mis-routes an enriched v2
+    // article into the v3 learning reader.
     const generatedCallouts = await this.tryCallouts(
       articleId,
       generated,
@@ -236,7 +278,7 @@ export class ArticlePipelineService {
     const generatedTables = await this.tryTables(articleId, generated, blocks)
     const withExtras: ArticleJsonV2 = {
       ...generated,
-      schemaVersion: ARTICLE_SCHEMA_VERSION_V3,
+      schemaVersion: ARTICLE_SCHEMA_VERSION,
       calloutPlacements: {
         ...placement,
         ...(generatedCallouts.length > 0
@@ -251,9 +293,19 @@ export class ArticlePipelineService {
     // claims). They are attached HERE, before the fidelity check runs, so the
     // checker validates the highlights as traceable fragments on the enriched
     // artifact.
-    const article: ArticleJsonV2 = {
+    const withAids: ArticleJsonV2 = {
       ...withExtras,
       readingAids: buildReadingAids(withExtras, structureModel),
+    }
+    // Key claims (DET-352) — the v3 claims layer. Extracted HERE, after the
+    // article is rewritten and BEFORE the fidelity check, so the extracted claims
+    // ride on the article the checker audits (they are available to the fidelity
+    // reviewer) and downstream retrieval-prompt generation. Best-effort: a failure
+    // logs and yields no claims so the article still finalizes.
+    const keyClaims = await this.tryExtractClaims(articleId, withAids, blocks)
+    const article: ArticleJsonV2 = {
+      ...withAids,
+      ...(keyClaims.length > 0 ? { keyClaims } : {}),
     }
     await this.persist(articleId, {
       articleJson: article as unknown as Prisma.InputJsonValue,
@@ -361,6 +413,27 @@ export class ArticlePipelineService {
       illustrationPlan: plan as unknown as Prisma.InputJsonValue,
     })
     return plan
+  }
+
+  // --- Claim extraction, best-effort (DET-352) ------------------------------
+
+  /** Extract the source-grounded key claims; never throws — a failure logs and
+   *  yields [] so the article still finalizes without the v3 claims layer. */
+  private async tryExtractClaims(
+    articleId: string,
+    article: ArticleJsonV2,
+    blocks: LoadedBlock[],
+  ): Promise<KeyClaim[]> {
+    try {
+      return await this.claims.extract(article, blocks)
+    } catch (error) {
+      this.logger.warn(
+        `Claim extraction failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return []
+    }
   }
 
   // --- Source-grounded extras, best-effort (DET-350) ------------------------
@@ -630,14 +703,17 @@ export class ArticlePipelineService {
    * per-section candidates and DET-351 whole-article candidates live in the SAME
    * learningLayer JSON column, so we read the existing row and carry them forward —
    * regenerating the study concepts must never wipe the extracted candidates.
+   * The article's key claims (DET-352), when present, are passed as retrieval-prompt
+   * seeds so the generated self-test prompts target the article's important claims.
    */
   async generateLearningLayer(
     articleId: string,
     sourceId: string,
     blocksVersion: number,
+    keyClaims: KeyClaim[] = [],
   ): Promise<LearningLayer> {
     const blocks = await this.loadBlocks(sourceId, blocksVersion)
-    const built = await this.learning.build(blocks)
+    const built = await this.learning.build(blocks, keyClaims)
     const existing = await this.prisma.transformedArticle.findUnique({
       where: { id: articleId },
       select: { learningLayer: true, articleJson: true, structureModel: true },
@@ -841,6 +917,65 @@ export class ArticlePipelineService {
         r.classification === TransformerBlockClass.UNCERTAIN ||
         !r.classification,
     }))
+  }
+
+  // --- v3 source-grounded learning pipeline (DET-343) -----------------------
+
+  /**
+   * Run the v3 Source-Grounded Learning Article pipeline for a source the router
+   * sent to v3. Generates the learning-first article (`v3/v3-contract.ts`), reads
+   * the baked-in quality-gate verdict, and persists the result into the SAME
+   * `articleJson` column the v2 path uses — discriminated on `schemaVersion: 'v3'`
+   * + `mode`, so the reader dispatches it to the learning-first reader (DET-357)
+   * while v2 articles keep rendering through the Compendium.
+   *
+   * The row status maps the v3 status onto the existing enum: a readable article
+   * (READY_FOR_REVIEW/FINAL) ⇒ FINAL; any held-back status (blocked/needs-regen)
+   * ⇒ BLOCKED. An LLM/infra failure propagates to `run`, which marks the row
+   * FAILED — exactly like the v2 path.
+   */
+  private async runV3(
+    articleId: string,
+    sourceId: string,
+    blocks: LoadedBlock[],
+    diagnosis: SourceDiagnosis,
+    meta: SourceDiagnosisMetadata,
+  ): Promise<void> {
+    await this.setStatus(articleId, TransformedArticleStatus.GENERATING)
+
+    const genBlocks: V3GeneratorBlock[] = blocks.map((b) => ({
+      id: b.id,
+      blockType: b.type,
+      classification: b.classification,
+      removable: b.removable,
+      text: b.text,
+    }))
+    const captureMethod =
+      meta.sourceType === 'URL'
+        ? 'URL'
+        : meta.sourceType === 'PDF'
+          ? 'PDF'
+          : 'PASTE'
+    const assemblyMeta: V3AssemblyMeta = {
+      sourceKind: diagnosis.sourceKind,
+      shape: diagnosis.articleShape ?? 'concept_explainer',
+      sourceId,
+      sourceUrl: meta.url ?? null,
+      captureMethod,
+    }
+
+    const article = await this.pipelineV3.run(genBlocks, assemblyMeta)
+    article.generatedAt = new Date().toISOString()
+
+    await this.persist(articleId, {
+      articleJson: article as unknown as Prisma.InputJsonValue,
+      status: isReadableStatusV3(article.status)
+        ? TransformedArticleStatus.FINAL
+        : TransformedArticleStatus.BLOCKED,
+    })
+    this.logger.log(
+      `Article ${articleId} v3 ${article.status} (important coverage ${article.qualityReport.importantSourceCoverageScore}%, ${article.qualityReport.conceptCandidateCount} concepts)`,
+    )
   }
 
   private setStatus(

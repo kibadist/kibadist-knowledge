@@ -762,6 +762,54 @@ export interface ArticleReorderingAudit {
   risk: FidelityRisk
 }
 
+/* ===========================================================================
+ * Key claims — the v3 claims layer (DET-352).
+ * ===========================================================================
+ *
+ * An additive, source-grounded inventory of the important CLAIMS and
+ * DEFINITIONS a generated article makes. It rides on `ArticleJsonV2` as the
+ * optional `keyClaims` field (no schemaVersion bump — the codebase layers every
+ * post-generation artifact additively, exactly as readingAids / calloutPlacements
+ * / shape / reorderings did). It is the "v3" deliverable the article-generation
+ * project asks for: provenance, retrieval-prompt seeds, and later concept cards
+ * all read from here.
+ *
+ * THE INVARIANT (same as every other surface). A claim adds no meaning the source
+ * did not contain: every claim carries non-empty `sourceBlockIds` (the blocks it
+ * is drawn from) AND non-empty `articleSectionIds` (the article sections those
+ * blocks render in). Both are RE-DERIVED / re-checked in code from the article's
+ * own section→block map — the extractor LLM is never trusted for them. Definitions
+ * are extracted explicitly (claimType 'definition'); caveats/uncertainty are a
+ * first-class claimType so they are never silently dropped.
+ */
+
+/** The kind of claim a `KeyClaim` records (DET-352). */
+export type ClaimType =
+  | 'definition'
+  | 'mechanism'
+  | 'distinction'
+  | 'historical_claim'
+  | 'causal_claim'
+  | 'classification'
+  | 'example'
+  | 'caveat'
+
+/**
+ * One extracted key claim / source-backed definition (DET-352). `id` is minted in
+ * code. `text` is the claim faithfully phrased from the source. `sourceBlockIds`
+ * trace it to the blocks it is grounded in (non-empty); `articleSectionIds` are
+ * the article sections those blocks render in (non-empty, derived in code).
+ * `confidence` is the extractor's 0–1 self-rating (clamped in code).
+ */
+export interface KeyClaim {
+  id: string
+  text: string
+  sourceBlockIds: string[]
+  articleSectionIds: string[]
+  claimType: ClaimType
+  confidence: number
+}
+
 /**
  * Article JSON v2 — the structured superset of `SourcePreservingArticle`.
  * Discriminated on `schemaVersion: 'v2'`.
@@ -784,6 +832,12 @@ export interface ArticleJsonV2 {
   calloutPlacements?: ArticleCalloutPlacement
   shape?: ArticleShape
   reorderings?: ArticleReorderingAudit[]
+  /**
+   * Source-grounded key claims / definitions (DET-352, the v3 claims layer).
+   * Additive + optional: old rows and the legacy v1→v2 adapter simply omit it.
+   * Every claim is traceable (non-empty sourceBlockIds + articleSectionIds).
+   */
+  keyClaims?: KeyClaim[]
   /* v3 additive fields (DET-350) — present once the callout/table/source-note
    * lanes have run; optional here so a v3 article stays assignable to v2. */
   tables?: ArticleComparisonTable[]
