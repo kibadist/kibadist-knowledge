@@ -952,6 +952,106 @@ export class TransformerService {
   }
 
   /**
+   * Record the v3 reader's review decision for one CONCEPT CANDIDATE (DET-359),
+   * keyed by the Article JSON v3 `keyConcepts[].id`. This is an id-agnostic
+   * OVERLAY write: the article body owns the suggestion, this stores only the
+   * reader's decision (accept / reject / defer / in-place edit). Crucially,
+   * `accepted` is a user-review status ONLY — it has NO concept-row side effect,
+   * so accepting can never internalize a concept into permanent knowledge (the
+   * DET-359 invariant). Runs under the per-article row lock like the other
+   * learning-layer mutations. An all-empty patch is rejected.
+   */
+  async setV3ConceptReview(
+    userId: string,
+    articleId: string,
+    conceptId: string,
+    patch: {
+      status?: 'pending' | 'accepted' | 'rejected' | 'deferred'
+      label?: string
+      definition?: string
+      importance?: 'high' | 'medium' | 'low'
+    },
+  ): Promise<LearningLayer> {
+    if (
+      patch.status === undefined &&
+      patch.label === undefined &&
+      patch.definition === undefined &&
+      patch.importance === undefined
+    ) {
+      throw new BadRequestException('Nothing to update')
+    }
+    await this.findOwnedArticle(userId, articleId)
+    return this.withLockedLearningLayer(articleId, (layer) => {
+      const concepts = { ...(layer.v3Review?.concepts ?? {}) }
+      const prev = concepts[conceptId] ?? { status: 'pending' as const }
+      concepts[conceptId] = {
+        ...prev,
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.label !== undefined ? { label: patch.label } : {}),
+        ...(patch.definition !== undefined
+          ? { definition: patch.definition }
+          : {}),
+        ...(patch.importance !== undefined
+          ? { importance: patch.importance }
+          : {}),
+      }
+      return { ...layer, v3Review: { ...(layer.v3Review ?? {}), concepts } }
+    })
+  }
+
+  /**
+   * Record the v3 reader's review decision for one RETRIEVAL PROMPT (DET-359),
+   * keyed by the Article JSON v3 `retrievalPrompts[].id`. Like the concept
+   * overlay this is an id-agnostic write. It can NEVER schedule a permanent
+   * review card (no "scheduled" status exists), so a prompt never becomes a
+   * review card without the explicit, separately-gated downstream action. An
+   * `answered` status requires a non-empty answer (supplied now or already
+   * stored) — the scheduling gate is a user-authored answer, not a bare flip.
+   */
+  async setV3PromptReview(
+    userId: string,
+    articleId: string,
+    promptId: string,
+    patch: {
+      status?: 'suggested' | 'saved' | 'answered' | 'rejected'
+      userAnswer?: string
+      prompt?: string
+    },
+  ): Promise<LearningLayer> {
+    if (
+      patch.status === undefined &&
+      patch.userAnswer === undefined &&
+      patch.prompt === undefined
+    ) {
+      throw new BadRequestException('Nothing to update')
+    }
+    if (patch.prompt !== undefined && patch.prompt.trim().length === 0) {
+      throw new BadRequestException('Prompt text cannot be empty')
+    }
+    await this.findOwnedArticle(userId, articleId)
+    return this.withLockedLearningLayer(articleId, (layer) => {
+      const prompts = { ...(layer.v3Review?.prompts ?? {}) }
+      const prev = prompts[promptId] ?? { status: 'suggested' as const }
+      const nextAnswer = patch.userAnswer ?? prev.userAnswer
+      if (
+        patch.status === 'answered' &&
+        (nextAnswer === undefined || nextAnswer.trim().length === 0)
+      ) {
+        throw new BadRequestException('An answer is required to mark answered')
+      }
+      prompts[promptId] = {
+        ...prev,
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.userAnswer !== undefined
+          ? { userAnswer: patch.userAnswer }
+          : {}),
+        ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
+      }
+      return { ...layer, v3Review: { ...(layer.v3Review ?? {}), prompts } }
+    })
+  }
+
+  /**
    * Create the INBOX "to learn" Concept for a validated candidate (DET-283),
    * inside the caller's transaction. Source-preserving provenance: `sourceText`
    * is the VERBATIM text of the cited source blocks (pinned blocksVersion, in

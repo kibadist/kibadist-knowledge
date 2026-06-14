@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import type { LearningLayer } from './api'
+import type { LearningLayer, LearningLayerV3Review } from './api'
 import {
   ARTICLE_JSON_V3,
+  articleV3ToReview,
   type ConceptCandidateV3,
   groupCandidatesByImportance,
   groupPromptsByType,
@@ -11,6 +12,10 @@ import {
   promptAllowsScheduling,
   type RetrievalPromptV3,
 } from './article-learning-review'
+import type {
+  ConceptCandidateV3 as ConceptCandidateJsonV3,
+  RetrievalPromptV3 as RetrievalPromptJsonV3,
+} from './article-v3'
 
 /**
  * DET-359 v3 review contract. These are the pure helpers + the server-layer
@@ -205,5 +210,106 @@ describe('learningLayerToReviewV3', () => {
     expect(p.linkedConceptIds).toEqual(['cc1'])
     expect(p.expectedAnswerBlockIds).toEqual(['b9'])
     expect(promptAllowsScheduling(p)).toBe(true)
+  })
+})
+
+function jsonConcept(
+  over: Partial<ConceptCandidateJsonV3> = {},
+): ConceptCandidateJsonV3 {
+  return {
+    id: 'kc1',
+    name: 'Backpropagation',
+    normalizedName: 'backpropagation',
+    type: 'core_concept',
+    shortDefinition: 'Reverse-mode differentiation over a network.',
+    sourceBlockIds: ['b1', 'b2'],
+    articleSectionIds: ['s1'],
+    importance: 'high',
+    suggestedCognitiveState: 'Seen',
+    status: 'ai_suggested',
+    ...over,
+  }
+}
+
+function jsonPrompt(
+  over: Partial<RetrievalPromptJsonV3> = {},
+): RetrievalPromptJsonV3 {
+  return {
+    id: 'rp1',
+    question: 'How does backprop assign blame?',
+    expectedAnswerSourceBlockIds: ['b2'],
+    relatedConceptCandidateIds: ['kc1'],
+    promptType: 'mechanism',
+    difficulty: 'medium',
+    status: 'ai_suggested',
+    ...over,
+  }
+}
+
+describe('articleV3ToReview (DET-359)', () => {
+  it('renders concepts + prompts straight from the Article JSON v3 body', () => {
+    const review = articleV3ToReview({
+      keyConcepts: [jsonConcept()],
+      retrievalPrompts: [jsonPrompt()],
+    })
+    const c = review.conceptCandidates[0]
+    expect(c.id).toBe('kc1')
+    expect(c.label).toBe('Backpropagation')
+    expect(c.definition).toBe('Reverse-mode differentiation over a network.')
+    expect(c.importance).toBe('high')
+    expect(c.sourceBlockIds).toEqual(['b1', 'b2'])
+    // Untouched items default to pending / suggested.
+    expect(c.status).toBe('pending')
+    const p = review.retrievalPrompts[0]
+    expect(p.id).toBe('rp1')
+    expect(p.prompt).toBe('How does backprop assign blame?')
+    // The body prompt taxonomy collapses to the review grouping taxonomy.
+    expect(p.type).toBe('cause_effect')
+    expect(p.linkedConceptIds).toEqual(['kc1'])
+    expect(p.expectedAnswerBlockIds).toEqual(['b2'])
+    expect(p.status).toBe('suggested')
+  })
+
+  it('overlays the persisted review decision over the body, by item id', () => {
+    const v3Review: LearningLayerV3Review = {
+      concepts: {
+        kc1: { status: 'accepted', label: 'Backprop (edited)' },
+      },
+      prompts: {
+        rp1: { status: 'answered', userAnswer: 'It uses the chain rule.' },
+      },
+    }
+    const review = articleV3ToReview(
+      { keyConcepts: [jsonConcept()], retrievalPrompts: [jsonPrompt()] },
+      v3Review,
+    )
+    const c = review.conceptCandidates[0]
+    expect(c.status).toBe('accepted')
+    expect(c.label).toBe('Backprop (edited)')
+    // Accepting is a review state only — it never internalizes (invariant).
+    expect(isInternalized(c)).toBe(false)
+    expect(c.conceptId).toBeUndefined()
+    const p = review.retrievalPrompts[0]
+    expect(p.status).toBe('answered')
+    expect(p.userAnswer).toBe('It uses the chain rule.')
+    // A user-authored answer is the single scheduling gate.
+    expect(promptAllowsScheduling(p)).toBe(true)
+  })
+
+  it('falls back to the concept name when no short definition exists', () => {
+    const review = articleV3ToReview({
+      keyConcepts: [jsonConcept({ shortDefinition: undefined })],
+      retrievalPrompts: [],
+    })
+    expect(review.conceptCandidates[0].definition).toBe('')
+    expect(review.conceptCandidates[0].label).toBe('Backpropagation')
+  })
+
+  it('a saved prompt is NOT schedulable — saving keeps a suggestion only', () => {
+    const review = articleV3ToReview(
+      { keyConcepts: [], retrievalPrompts: [jsonPrompt()] },
+      { prompts: { rp1: { status: 'saved' } } },
+    )
+    expect(promptAllowsScheduling(review.retrievalPrompts[0])).toBe(false)
   })
 })

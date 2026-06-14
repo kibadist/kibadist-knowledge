@@ -27,6 +27,8 @@ import { RenderIllustrationDto } from './dto/render-illustration.dto'
 import { UpdateIllustrationDto } from './dto/update-illustration.dto'
 import { UpdateLearningItemDto } from './dto/update-learning-item.dto'
 import { UpdateRetrievalPromptDto } from './dto/update-retrieval-prompt.dto'
+import { UpdateV3ConceptReviewDto } from './dto/update-v3-concept-review.dto'
+import { UpdateV3PromptReviewDto } from './dto/update-v3-prompt-review.dto'
 import { TransformerService } from './transformer.service'
 
 /**
@@ -317,5 +319,47 @@ export class TransformerController {
         prompt: dto.prompt,
       },
     )
+  }
+
+  /**
+   * Record the v3 reader's review decision for a concept candidate (DET-359),
+   * keyed by the Article JSON v3 `keyConcepts[].id`. `accepted` is a user-review
+   * state only — it never internalizes a concept (no concept row is created), so
+   * this can't be a back door to permanent knowledge. User/workspace scoping is
+   * resolved in the service (ownership via the source's userId).
+   */
+  @Patch('articles/:id/v3-review/concepts/:conceptId')
+  setV3ConceptReview(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('conceptId') conceptId: string,
+    @Body() dto: UpdateV3ConceptReviewDto,
+  ) {
+    return this.transformer.setV3ConceptReview(user.userId, id, conceptId, {
+      status: dto.status,
+      label: dto.label,
+      definition: dto.definition,
+      importance: dto.importance,
+    })
+  }
+
+  /**
+   * Record the v3 reader's review decision for a retrieval prompt (DET-359),
+   * keyed by the Article JSON v3 `retrievalPrompts[].id`. There is no "scheduled"
+   * status here, so this endpoint can never make a prompt a permanent review
+   * card; the service requires a non-empty answer to mark a prompt `answered`.
+   */
+  @Patch('articles/:id/v3-review/prompts/:promptId')
+  setV3PromptReview(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('promptId') promptId: string,
+    @Body() dto: UpdateV3PromptReviewDto,
+  ) {
+    return this.transformer.setV3PromptReview(user.userId, id, promptId, {
+      status: dto.status,
+      userAnswer: dto.userAnswer,
+      prompt: dto.prompt,
+    })
   }
 }

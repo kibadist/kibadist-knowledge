@@ -547,10 +547,27 @@ function ArticleView({
 
   // v3 articles render through the dedicated learning-first reader (DET-357). It
   // carries its own status banner, provenance byline, and learning panels, so it
-  // bypasses the v2 fidelity notice + learning-event hydration below entirely
-  // (the v3 active-recall surface is separate, downstream work).
+  // bypasses the v2 fidelity notice + learning-event hydration below entirely.
+  // The DET-359 review surface is wired in as the reader's `reviewSlot`: it
+  // replaces the read-only key-concepts + retrieval-prompts panels with the
+  // interactive review of the SAME suggestions (accept/reject/edit; answer/save/
+  // reject/edit), persisted via the v3-review endpoints. Nothing here becomes
+  // permanent knowledge or a scheduled review without an explicit action.
   if (isArticleJsonV3(article.articleJson)) {
-    return <ArticleV3View article={article.articleJson} />
+    const v3Article = article.articleJson
+    return (
+      <ArticleV3View
+        article={v3Article}
+        reviewSlot={
+          <ArticleReviewPanels
+            articleId={articleId}
+            article={v3Article}
+            v3Review={article.learningLayer?.v3Review}
+            state={article.status === 'BLOCKED' ? 'blocked' : 'ready'}
+          />
+        }
+      />
+    )
   }
 
   if (!learningArticle) return null
@@ -584,25 +601,17 @@ function ArticleView({
       {surface === 'article' ? (
         // The Article tab is the finished, readable Compendium render (DET-318) —
         // a magazine/encyclopedia presentation of the same Article JSON v2, with
-        // any rendered illustrations placed as plates. The active-recall modes
-        // stay on the Exercise tab. Below it, the DET-359 review surface lets the
-        // reader vet AI-suggested concepts and retrieval prompts — nothing here
-        // is internalized or scheduled without an explicit action.
-        <>
-          <MagazineArticle
-            article={learningArticle}
-            articleId={articleId}
-            illustrations={article.illustrationPlan?.suggestions ?? []}
-            enrichment={article.enrichment}
-            editorialLayout={article.editorialLayout}
-            provenance={provenance}
-          />
-          <ArticleReviewPanels
-            articleId={articleId}
-            layer={article.learningLayer}
-            state={article.status === 'BLOCKED' ? 'blocked' : 'ready'}
-          />
-        </>
+        // any rendered illustrations placed as plates. This is the LEGACY v2
+        // render; v3 articles return earlier and carry the DET-359 review surface
+        // in the v3 reader. The active-recall modes stay on the Exercise tab.
+        <MagazineArticle
+          article={learningArticle}
+          articleId={articleId}
+          illustrations={article.illustrationPlan?.suggestions ?? []}
+          enrichment={article.enrichment}
+          editorialLayout={article.editorialLayout}
+          provenance={provenance}
+        />
       ) : (
         <ReadingSurface
           surface={surface}

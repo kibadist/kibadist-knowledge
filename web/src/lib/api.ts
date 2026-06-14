@@ -1565,6 +1565,25 @@ export interface MisconceptionCandidate {
   status: 'ai_suggested' | 'validated' | 'rejected'
 }
 
+// The v3 reader's review overlay (DET-359), keyed by Article JSON v3 item ids.
+// The article body holds the suggestions; this holds only the reader's decision
+// per item, so the SAME concepts/prompts shown in the v3 reader are reviewable.
+export interface LearningLayerV3ConceptReview {
+  status: 'pending' | 'accepted' | 'rejected' | 'deferred'
+  label?: string
+  definition?: string
+  importance?: 'high' | 'medium' | 'low'
+}
+export interface LearningLayerV3PromptReview {
+  status: 'suggested' | 'saved' | 'answered' | 'rejected'
+  userAnswer?: string
+  prompt?: string
+}
+export interface LearningLayerV3Review {
+  concepts?: Record<string, LearningLayerV3ConceptReview>
+  prompts?: Record<string, LearningLayerV3PromptReview>
+}
+
 export interface LearningLayer {
   concepts: LearningConcept[]
   retrievalPrompts: LearningRetrievalPrompt[]
@@ -1574,6 +1593,8 @@ export interface LearningLayer {
   // candidates. Old learning-layer rows predate these and omit them.
   retrievalPromptCandidates?: RetrievalPromptCandidate[]
   misconceptions?: MisconceptionCandidate[]
+  // Additive (DET-359): the v3 reader's review overlay keyed by v3 item ids.
+  v3Review?: LearningLayerV3Review
 }
 
 // GET /transformer/articles/:id — the article + fidelity + coverage + status.
@@ -2217,6 +2238,43 @@ export const api = {
   ) =>
     request<LearningLayer>(
       `/transformer/articles/${articleId}/learning-layer/retrieval-prompts/${promptId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+    ),
+
+  // v3 reader review (DET-359): persist the reader's decision for an Article
+  // JSON v3 concept candidate, keyed by `keyConcepts[].id`. Accepting moves it to
+  // a user-review state — it NEVER internalizes the concept (no knowledge row is
+  // created server-side), so nothing becomes permanent without a later, explicit
+  // "create Living Concept" step.
+  setV3ConceptReview: (
+    articleId: string,
+    conceptId: string,
+    patch: {
+      status?: 'pending' | 'accepted' | 'rejected' | 'deferred'
+      label?: string
+      definition?: string
+      importance?: 'high' | 'medium' | 'low'
+    },
+  ) =>
+    request<LearningLayer>(
+      `/transformer/articles/${articleId}/v3-review/concepts/${conceptId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+    ),
+  // v3 reader review (DET-359): persist the reader's decision for an Article JSON
+  // v3 retrieval prompt, keyed by `retrievalPrompts[].id`. This endpoint can
+  // never schedule a permanent review card — scheduling stays gated downstream on
+  // a user-authored answer (an `answered` status requires a non-empty answer).
+  setV3PromptReview: (
+    articleId: string,
+    promptId: string,
+    patch: {
+      status?: 'suggested' | 'saved' | 'answered' | 'rejected'
+      userAnswer?: string
+      prompt?: string
+    },
+  ) =>
+    request<LearningLayer>(
+      `/transformer/articles/${articleId}/v3-review/prompts/${promptId}`,
       { method: 'PATCH', body: JSON.stringify(patch) },
     ),
 

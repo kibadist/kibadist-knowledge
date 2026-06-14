@@ -1,4 +1,9 @@
-import type { LearningLayer } from './api'
+import type { LearningLayer, LearningLayerV3Review } from './api'
+import type {
+  ArticleJsonV3,
+  ConceptCandidateV3 as ConceptCandidateJsonV3,
+  RetrievalPromptTypeV3,
+} from './article-v3'
 
 /**
  * Article learning-review contract (DET-359).
@@ -303,6 +308,99 @@ export function learningLayerToReviewV3(
     userAnswer: p.userAnswer,
     sourceBlockIds: p.sourceBlockIds,
   }))
+
+  return {
+    schema_version: ARTICLE_JSON_V3,
+    conceptCandidates,
+    retrievalPrompts,
+  }
+}
+
+// --- Article JSON v3 → review adapter (DET-359) ------------------------------
+
+/**
+ * Map a v3 article-body prompt type (DET-353 taxonomy) onto the review grouping
+ * taxonomy. The two enums differ (the body type is generation-oriented, the
+ * review type is recall-oriented); this collapses them to the nearest review
+ * bucket so prompts group sensibly in the panel. Unknown values fall to `recall`.
+ */
+const V3_PROMPT_TYPE_TO_REVIEW: Record<
+  RetrievalPromptTypeV3,
+  RetrievalPromptType
+> = {
+  definition: 'definition',
+  mechanism: 'cause_effect',
+  distinction: 'comparison',
+  sequence: 'cause_effect',
+  analogy: 'synthesis',
+  misconception_repair: 'recall',
+  transfer: 'application',
+}
+
+/** v3 body concept status → review status (the overlay decision wins over this). */
+function conceptStatusFromV3(
+  status: ConceptCandidateJsonV3['status'],
+): ConceptCandidateReviewStatus {
+  switch (status) {
+    case 'user_validated':
+      return 'accepted'
+    case 'rejected':
+      return 'rejected'
+    default:
+      return 'pending'
+  }
+}
+
+/**
+ * Build the v3 review model straight from the Article JSON v3 body (its
+ * `keyConcepts` + `retrievalPrompts`), overlaid with the reader's persisted
+ * review decisions (`learningLayer.v3Review`, keyed by the same item ids). This
+ * is the DET-359 data source: the panels render the SAME concepts/prompts the
+ * reader sees in the article, and each item carries its own review status so the
+ * accept/reject/edit and answer/save/reject/edit actions have somewhere to land.
+ *
+ * The two structural invariants still hold: a concept's `status` is only ever a
+ * review state (acceptance never sets `conceptId`/internalizes — see
+ * `isInternalized`), and a prompt is schedulable only once answered
+ * (`promptAllowsScheduling`). Pure — never mutates its inputs.
+ */
+export function articleV3ToReview(
+  article: Pick<ArticleJsonV3, 'keyConcepts' | 'retrievalPrompts'>,
+  v3Review?: LearningLayerV3Review | null,
+): ArticleLearningReviewV3 {
+  const conceptOverlay = v3Review?.concepts ?? {}
+  const promptOverlay = v3Review?.prompts ?? {}
+
+  const conceptCandidates: ConceptCandidateV3[] = article.keyConcepts.map(
+    (c) => {
+      const o = conceptOverlay[c.id]
+      return {
+        id: c.id,
+        label: o?.label ?? c.name,
+        importance: coerceImportance(o?.importance ?? c.importance),
+        definition: o?.definition ?? c.shortDefinition ?? '',
+        sourceBlockIds: c.sourceBlockIds,
+        sectionId: c.articleSectionIds[0],
+        status: o?.status ?? conceptStatusFromV3(c.status),
+      }
+    },
+  )
+
+  const retrievalPrompts: RetrievalPromptV3[] = article.retrievalPrompts.map(
+    (p) => {
+      const o = promptOverlay[p.id]
+      return {
+        id: p.id,
+        prompt: o?.prompt ?? p.question,
+        type: V3_PROMPT_TYPE_TO_REVIEW[p.promptType] ?? 'recall',
+        linkedConceptIds: p.relatedConceptCandidateIds,
+        expectedAnswerBlockIds: p.expectedAnswerSourceBlockIds,
+        status: coercePromptStatus(o?.status),
+        userAnswer: o?.userAnswer,
+        sourceBlockIds: p.expectedAnswerSourceBlockIds,
+      }
+    },
+  )
 
   return {
     schema_version: ARTICLE_JSON_V3,

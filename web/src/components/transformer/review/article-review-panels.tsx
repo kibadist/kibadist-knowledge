@@ -1,40 +1,46 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
-import { ApiError, api, type LearningLayer } from '@/lib/api'
+import { ApiError, api, type LearningLayerV3Review } from '@/lib/api'
 import {
+  articleV3ToReview,
   type ConceptCandidateV3,
-  learningLayerToReviewV3,
   type RetrievalPromptV3,
   type ReviewArticleState,
 } from '@/lib/article-learning-review'
+import type { ArticleJsonV3 } from '@/lib/article-v3'
 
 import { ConceptCandidatesReviewPanel } from './concept-candidates-review-panel'
 import { RetrievalPromptsReviewPanel } from './retrieval-prompts-review-panel'
 
 /**
- * The v3 article reader's learning-review surface (DET-359). Wraps the concept
- * candidates and retrieval prompts panels, owns the persistence mutations (each
- * invalidates the shared `['transformer-article', articleId]` query so the
- * refetched layer flows back down), and renders the blocked / generating /
- * empty states the article can be in.
+ * The v3 article reader's learning-review surface (DET-359). Renders the concept
+ * candidates + retrieval prompts STRAIGHT FROM the Article JSON v3 body
+ * (`keyConcepts` / `retrievalPrompts`) — the same suggestions the reader sees in
+ * the article — overlaid with the reader's persisted review decisions
+ * (`learningLayer.v3Review`). Every action lands on the DET-359 v3-review
+ * endpoints, which invalidate the shared `['transformer-article', articleId]`
+ * query so the refetched overlay flows back down.
  *
- * It derives the v3 review shape from the server `LearningLayer` via
- * `learningLayerToReviewV3`. Concept Accept/Reject reuse the existing validation
- * PATCH (validated = a user-review concept, never internalized); Edit and every
- * retrieval-prompt action use the DET-359 endpoints. "Create Living Concept
- * later" is a client-only deferral — it keeps the candidate pending on the
- * server and simply tucks it into the "later" bucket on screen.
+ * The two acceptance invariants are structural, not cosmetic:
+ *  - Accept moves a concept to a USER-REVIEW state and never internalizes it
+ *    (the server writes a status only — no Concept row). "Create Living Concept
+ *    later" persists a `deferred` decision; the concept is still never created.
+ *  - A retrieval prompt only becomes a permanent review card downstream, gated on
+ *    a user-authored answer — this surface can mark `answered`/`saved` but never
+ *    schedules.
  */
 export function ArticleReviewPanels({
   articleId,
-  layer,
+  article,
+  v3Review,
   state,
 }: {
   articleId: string
-  layer: LearningLayer | null
+  article: Pick<ArticleJsonV3, 'keyConcepts' | 'retrievalPrompts'>
+  v3Review?: LearningLayerV3Review | null
   state: ReviewArticleState
 }) {
   const queryClient = useQueryClient()
@@ -43,47 +49,37 @@ export function ArticleReviewPanels({
       queryKey: ['transformer-article', articleId],
     })
 
-  // Client-only "decide later" set: ids the reader deferred this session. The
-  // server keeps them pending; we only re-bucket them on screen.
-  const [deferred, setDeferred] = useState<ReadonlySet<string>>(new Set())
+  const review = useMemo(
+    () => articleV3ToReview(article, v3Review),
+    [article, v3Review],
+  )
 
-  const review = useMemo(() => learningLayerToReviewV3(layer), [layer])
-
-  const generate = useMutation({
-    mutationFn: () => api.generateLearningLayer(articleId),
-    onSuccess: invalidate,
-  })
-  const validate = useMutation({
-    mutationFn: (input: { id: string; status: 'validated' | 'dismissed' }) =>
-      api.setLearningItemValidation(articleId, input.id, input.status),
-    onSuccess: invalidate,
-  })
-  const editItem = useMutation({
+  const conceptReview = useMutation({
     mutationFn: (input: {
       id: string
-      edit: { label?: string; definition?: string }
-    }) => api.editLearningItem(articleId, input.id, input.edit),
+      patch: {
+        status?: 'pending' | 'accepted' | 'rejected' | 'deferred'
+        label?: string
+        definition?: string
+      }
+    }) => api.setV3ConceptReview(articleId, input.id, input.patch),
     onSuccess: invalidate,
   })
   const promptReview = useMutation({
     mutationFn: (input: {
       id: string
       patch: {
-        reviewStatus?: 'suggested' | 'saved' | 'answered' | 'rejected'
+        status?: 'suggested' | 'saved' | 'answered' | 'rejected'
         userAnswer?: string
         prompt?: string
       }
-    }) => api.setRetrievalPromptReview(articleId, input.id, input.patch),
+    }) => api.setV3PromptReview(articleId, input.id, input.patch),
     onSuccess: invalidate,
   })
 
-  const busy =
-    validate.isPending ||
-    editItem.isPending ||
-    promptReview.isPending ||
-    generate.isPending
+  const busy = conceptReview.isPending || promptReview.isPending
 
-  const mutationError = [validate, editItem, promptReview, generate].find(
+  const mutationError = [conceptReview, promptReview].find(
     (m) => m.isError,
   )?.error
 
@@ -127,15 +123,10 @@ export function ArticleReviewPanels({
     review.conceptCandidates.map((c) => [c.id, c.label]),
   )
 
-  // Apply the client-only deferral on top of the server-derived status.
-  const candidates: ConceptCandidateV3[] = review.conceptCandidates.map((c) =>
-    deferred.has(c.id) && c.status === 'pending'
-      ? { ...c, status: 'deferred' }
-      : c,
-  )
+  const candidates: ConceptCandidateV3[] = review.conceptCandidates
+  const prompts: RetrievalPromptV3[] = review.retrievalPrompts
 
-  const hasContent =
-    review.conceptCandidates.length > 0 || review.retrievalPrompts.length > 0
+  const hasContent = candidates.length > 0 || prompts.length > 0
 
   return (
     <section className='panel tf-ai-panel tf-review-surface'>
@@ -152,24 +143,9 @@ export function ArticleReviewPanels({
       {!hasContent ? (
         <div className='tf-ai-empty'>
           <p className='block-sub'>
-            No suggestions yet. Generate source-grounded concept candidates and
-            retrieval prompts to review.
+            No concept candidates or retrieval prompts were suggested for this
+            article. There’s nothing to review yet.
           </p>
-          {generate.isError && (
-            <p className='notice notice-error'>
-              {generate.error instanceof ApiError
-                ? generate.error.message
-                : 'Could not generate suggestions.'}
-            </p>
-          )}
-          <button
-            type='button'
-            className='btn-ghost'
-            disabled={generate.isPending}
-            onClick={() => generate.mutate()}
-          >
-            {generate.isPending ? 'Generating…' : 'Generate suggestions'}
-          </button>
         </div>
       ) : (
         <>
@@ -177,29 +153,31 @@ export function ArticleReviewPanels({
             candidates={candidates}
             busy={busy}
             actions={{
-              onAccept: (id) => validate.mutate({ id, status: 'validated' }),
-              onReject: (id) => validate.mutate({ id, status: 'dismissed' }),
-              onEdit: (id, edit) => editItem.mutate({ id, edit }),
-              onDefer: (id) => setDeferred((prev) => new Set(prev).add(id)),
+              onAccept: (id) =>
+                conceptReview.mutate({ id, patch: { status: 'accepted' } }),
+              onReject: (id) =>
+                conceptReview.mutate({ id, patch: { status: 'rejected' } }),
+              onEdit: (id, edit) => conceptReview.mutate({ id, patch: edit }),
+              // "Create Living Concept later" — persist the deferral; the concept
+              // is still never created (that stays a later, explicit step).
+              onDefer: (id) =>
+                conceptReview.mutate({ id, patch: { status: 'deferred' } }),
             }}
           />
           <RetrievalPromptsReviewPanel
-            prompts={review.retrievalPrompts}
+            prompts={prompts}
             conceptLabels={labelById}
             busy={busy}
             actions={{
               onAnswer: (id, answer) =>
                 promptReview.mutate({
                   id,
-                  patch: { reviewStatus: 'answered', userAnswer: answer },
+                  patch: { status: 'answered', userAnswer: answer },
                 }),
               onSave: (id) =>
-                promptReview.mutate({ id, patch: { reviewStatus: 'saved' } }),
+                promptReview.mutate({ id, patch: { status: 'saved' } }),
               onReject: (id) =>
-                promptReview.mutate({
-                  id,
-                  patch: { reviewStatus: 'rejected' },
-                }),
+                promptReview.mutate({ id, patch: { status: 'rejected' } }),
               onEdit: (id, prompt) =>
                 promptReview.mutate({ id, patch: { prompt } }),
             }}

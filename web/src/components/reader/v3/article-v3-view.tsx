@@ -64,10 +64,19 @@ export function ArticleV3View({
   /** Lifecycle status — the v3 status preferred, falling back to the JSON's own. */
   status,
   onInspect,
+  reviewSlot,
 }: {
   article: ArticleJsonV3
   status?: ArticleStatusV3
   onInspect?: (selection: ArticleV3InspectSelection) => void
+  /**
+   * The interactive learning-review surface (DET-359). When supplied, it REPLACES
+   * the read-only key-concepts + retrieval-prompts panels — the reader vets the
+   * same suggestions here (accept / reject / edit; answer / save / reject / edit)
+   * instead of only seeing them. Omitted (tests / the standalone demo), the
+   * read-only panels render as before.
+   */
+  reviewSlot?: React.ReactNode
 }) {
   const effectiveStatus = status ?? article.status
   const inspect = onInspect ?? (() => {})
@@ -144,17 +153,27 @@ export function ArticleV3View({
 
       {/* ---- Learning panels (review surface, nothing auto-accepted) ---- */}
       <div className='av3-panels'>
-        {article.keyConcepts.length > 0 && (
-          <KeyConceptsPanel
-            concepts={article.keyConcepts}
-            onInspect={inspect}
-          />
-        )}
-        {article.retrievalPrompts.length > 0 && (
-          <RetrievalPromptsPanel
-            prompts={article.retrievalPrompts}
-            onInspect={inspect}
-          />
+        {/* When the host wires the DET-359 review surface, it REPLACES the two
+            read-only panels: the reader acts on the same concepts/prompts here
+            (accept/reject/edit; answer/save/reject/edit) rather than only seeing
+            them. Without it (tests / demo), the read-only panels render. */}
+        {reviewSlot ? (
+          reviewSlot
+        ) : (
+          <>
+            {article.keyConcepts.length > 0 && (
+              <KeyConceptsPanel
+                concepts={article.keyConcepts}
+                onInspect={inspect}
+              />
+            )}
+            {article.retrievalPrompts.length > 0 && (
+              <RetrievalPromptsPanel
+                prompts={article.retrievalPrompts}
+                onInspect={inspect}
+              />
+            )}
+          </>
         )}
         {article.misconceptionWarnings.length > 0 && (
           <MisconceptionsPanel
