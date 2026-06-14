@@ -1294,6 +1294,27 @@ export interface ArticleReorderingAudit {
   risk: FidelityRisk
 }
 
+/** The claim taxonomy (DET-352, mirrors transformer.types.ts). */
+export type ClaimType =
+  | 'definition'
+  | 'mechanism'
+  | 'distinction'
+  | 'historical_claim'
+  | 'causal_claim'
+  | 'classification'
+  | 'example'
+  | 'caveat'
+
+/** One source-grounded key claim / definition (DET-352, the v3 claims layer). */
+export interface KeyClaim {
+  id: string
+  text: string
+  sourceBlockIds: string[]
+  articleSectionIds: string[]
+  claimType: ClaimType
+  confidence: number
+}
+
 export interface ArticleJsonV2 {
   schemaVersion: ArticleSchemaVersion
   mode: 'source_preserving_article'
@@ -1309,6 +1330,8 @@ export interface ArticleJsonV2 {
   calloutPlacements?: ArticleCalloutPlacement
   shape?: ArticleShape
   reorderings?: ArticleReorderingAudit[]
+  /** Source-grounded key claims / definitions (DET-352, the v3 claims layer). */
+  keyClaims?: KeyClaim[]
   // v3 additive fields (DET-350).
   tables?: ArticleComparisonTable[]
   sourceNotes?: ArticleSourceNotes

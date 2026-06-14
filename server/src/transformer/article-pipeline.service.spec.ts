@@ -5,6 +5,7 @@ import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
 import { CalloutGeneratorService } from './callout-generator.service'
+import { ClaimExtractorService } from './claim-extractor.service'
 import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
@@ -208,6 +209,9 @@ function makeServices(overrides: {
   const learningPrompts = {
     build: jest.fn(async () => ({ retrievalPrompts: [], misconceptions: [] })),
   } as unknown as LearningPromptsService
+  const claims = {
+    extract: jest.fn(async () => []),
+  } as unknown as ClaimExtractorService
   // Real diagnosis service over a stub ConfigService (v3 flag off ⇒ always v2).
   const diagnosis = new SourceDiagnosisService({
     get: () => undefined,
@@ -239,6 +243,7 @@ function makeServices(overrides: {
     editorialLayout,
     learning,
     learningPrompts,
+    claims,
     diagnosis,
     ai,
     pipelineV3,
@@ -265,6 +270,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.claims,
       s.ai,
       s.pipelineV3,
     )
@@ -340,6 +346,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.claims,
       s.ai,
       s.pipelineV3,
     )
@@ -384,6 +391,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.claims,
       s.ai,
       s.pipelineV3,
     )
@@ -420,6 +428,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.claims,
       s.ai,
       s.pipelineV3,
     )
@@ -455,6 +464,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.claims,
       s.ai,
       s.pipelineV3,
     )
@@ -510,6 +520,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.claims,
       s.ai,
       pipelineV3,
     )

@@ -9,6 +9,7 @@ import { ArticlePipelineService } from './article-pipeline.service'
 import { BlockClassifierService } from './block-classifier.service'
 import { BlockRoleClassifierService } from './block-role-classifier.service'
 import { CalloutGeneratorService } from './callout-generator.service'
+import { ClaimExtractorService } from './claim-extractor.service'
 import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
@@ -59,6 +60,7 @@ import { V3GeneratorService } from './v3/v3-generator.service'
     EditorialLayoutService,
     LearningLayerService,
     LearningPromptsService,
+    ClaimExtractorService,
     V3GeneratorService,
     ArticlePipelineV3Service,
     ArticlePipelineService,

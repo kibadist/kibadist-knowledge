@@ -12,6 +12,7 @@ import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { CalloutGeneratorService } from './callout-generator.service'
 import { placeCallouts } from './callout-placement.util'
+import { ClaimExtractorService } from './claim-extractor.service'
 import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { buildCoverageReport, type CoverageBlock } from './coverage.util'
 import { EditorialLayoutService } from './editorial-layout.service'
@@ -55,6 +56,7 @@ import {
   type CoverageReport,
   type EditorialLayout,
   type FidelityReport,
+  type KeyClaim,
   type SourcePreservingArticle,
 } from './transformer.types'
 import { ArticlePipelineV3Service } from './v3/article-pipeline-v3.service'
@@ -105,6 +107,7 @@ export class ArticlePipelineService {
     private readonly editorialLayout: EditorialLayoutService,
     private readonly learning: LearningLayerService,
     private readonly learningPrompts: LearningPromptsService,
+    private readonly claims: ClaimExtractorService,
     private readonly ai: AiService,
     private readonly pipelineV3: ArticlePipelineV3Service,
   ) {}
@@ -286,9 +289,19 @@ export class ArticlePipelineService {
     // claims). They are attached HERE, before the fidelity check runs, so the
     // checker validates the highlights as traceable fragments on the enriched
     // artifact.
-    const article: ArticleJsonV2 = {
+    const withAids: ArticleJsonV2 = {
       ...withExtras,
       readingAids: buildReadingAids(withExtras, structureModel),
+    }
+    // Key claims (DET-352) — the v3 claims layer. Extracted HERE, after the
+    // article is rewritten and BEFORE the fidelity check, so the extracted claims
+    // ride on the article the checker audits (they are available to the fidelity
+    // reviewer) and downstream retrieval-prompt generation. Best-effort: a failure
+    // logs and yields no claims so the article still finalizes.
+    const keyClaims = await this.tryExtractClaims(articleId, withAids, blocks)
+    const article: ArticleJsonV2 = {
+      ...withAids,
+      ...(keyClaims.length > 0 ? { keyClaims } : {}),
     }
     await this.persist(articleId, {
       articleJson: article as unknown as Prisma.InputJsonValue,
@@ -371,6 +384,27 @@ export class ArticlePipelineService {
       illustrationPlan: plan as unknown as Prisma.InputJsonValue,
     })
     return plan
+  }
+
+  // --- Claim extraction, best-effort (DET-352) ------------------------------
+
+  /** Extract the source-grounded key claims; never throws — a failure logs and
+   *  yields [] so the article still finalizes without the v3 claims layer. */
+  private async tryExtractClaims(
+    articleId: string,
+    article: ArticleJsonV2,
+    blocks: LoadedBlock[],
+  ): Promise<KeyClaim[]> {
+    try {
+      return await this.claims.extract(article, blocks)
+    } catch (error) {
+      this.logger.warn(
+        `Claim extraction failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return []
+    }
   }
 
   // --- Source-grounded extras, best-effort (DET-350) ------------------------
@@ -621,14 +655,17 @@ export class ArticlePipelineService {
    * per-section candidates and DET-351 whole-article candidates live in the SAME
    * learningLayer JSON column, so we read the existing row and carry them forward —
    * regenerating the study concepts must never wipe the extracted candidates.
+   * The article's key claims (DET-352), when present, are passed as retrieval-prompt
+   * seeds so the generated self-test prompts target the article's important claims.
    */
   async generateLearningLayer(
     articleId: string,
     sourceId: string,
     blocksVersion: number,
+    keyClaims: KeyClaim[] = [],
   ): Promise<LearningLayer> {
     const blocks = await this.loadBlocks(sourceId, blocksVersion)
-    const built = await this.learning.build(blocks)
+    const built = await this.learning.build(blocks, keyClaims)
     const existing = await this.prisma.transformedArticle.findUnique({
       where: { id: articleId },
       select: { learningLayer: true, articleJson: true, structureModel: true },
