@@ -33,23 +33,34 @@ const concept = {
   suggestedCognitiveState: 'Parsed' as const,
 }
 
+// Three concepts so a grounded article clears the minConceptCandidateCount (3) gate.
+const concepts = [
+  concept,
+  { ...concept, id: 'concept-1', name: 'Y', normalizedName: 'y' },
+  { ...concept, id: 'concept-2', name: 'Z', normalizedName: 'z' },
+]
+
 function grounded(status: 'READY_FOR_REVIEW' | 'BLOCKED_LOW_COVERAGE') {
-  // Cites b1 ⇒ 100% coverage; has a concept + a prompt ⇒ gate passes.
+  // Cites b1 ⇒ 100% coverage; has 3 concepts + a prompt ⇒ gate passes.
   return makeV3Article({
     status,
     sourceKind: 'transcript_lesson',
-    keyConcepts: [concept],
+    keyConcepts: concepts,
   })
 }
 
 function lowCoverage(status: 'BLOCKED_LOW_COVERAGE') {
   // Cites nothing real anywhere (body, concept, prompt) ⇒ b1 missing ⇒ low
-  // coverage. A concept still EXISTS (count > 0) so missing_concepts never fires —
+  // coverage. 3 concepts still EXIST (count ≥ 3) so missing_concepts never fires —
   // low_coverage is the sole, addressable blocker.
   return makeV3Article({
     status,
     sourceKind: 'transcript_lesson',
-    keyConcepts: [{ ...concept, sourceBlockIds: [], articleSectionIds: [] }],
+    keyConcepts: concepts.map((c) => ({
+      ...c,
+      sourceBlockIds: [],
+      articleSectionIds: [],
+    })),
     retrievalPrompts: [
       {
         id: 'prompt-0',
