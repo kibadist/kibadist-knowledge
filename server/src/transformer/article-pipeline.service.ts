@@ -18,6 +18,10 @@ import {
   importantCoverageScore,
   isBlockedStatus,
 } from './article-quality-gate'
+import {
+  ArticleRegenerationService,
+  type RepairResult,
+} from './article-regeneration.service'
 import { CalloutGeneratorService } from './callout-generator.service'
 import { placeCallouts } from './callout-placement.util'
 import { ClaimExtractorService } from './claim-extractor.service'
@@ -70,6 +74,7 @@ import {
   type FidelityFinding,
   type FidelityReport,
   type KeyClaim,
+  type RegenerationReport,
   type SourcePreservingArticle,
 } from './transformer.types'
 import { ArticlePipelineV3Service } from './v3/article-pipeline-v3.service'
@@ -125,6 +130,7 @@ export class ArticlePipelineService {
     private readonly editorialLayout: EditorialLayoutService,
     private readonly learning: LearningLayerService,
     private readonly learningPrompts: LearningPromptsService,
+    private readonly regeneration: ArticleRegenerationService,
     private readonly fidelityReview: FidelityReviewService,
     private readonly claims: ClaimExtractorService,
     private readonly ai: AiService,
@@ -328,8 +334,56 @@ export class ArticlePipelineService {
 
     // --- 9. Fidelity + coverage ---------------------------------------------
     await this.setStatus(articleId, TransformedArticleStatus.CHECKING)
-    const report = await this.fidelity.check(article, structureModel, blocks)
-    const coverage = this.buildCoverage(article, blocks, plan)
+    let report = await this.fidelity.check(article, structureModel, blocks)
+    let coverage = this.buildCoverage(article, blocks, plan)
+
+    // Whole-article concept extraction (DET-351). A source-grounded learning lane
+    // that mints the Concept Library candidates for this article so a concept-rich
+    // source never finalizes with zero (the bug this fixes). Best-effort: a failure
+    // logs and yields null, and the article still finalizes without candidates. It
+    // runs BEFORE the repair pass so a `missing_concepts` blocker can see the count
+    // and a repair can re-extract.
+    let articleConceptCandidates = await this.tryExtractArticleConcepts(
+      articleId,
+      article,
+      blocks,
+    )
+
+    // --- 9b. Targeted regeneration (DET-356) --------------------------------
+    // A rejected gate is REPAIRED rather than retried blindly: the gate findings
+    // are distilled into blockers and only the implicated stage(s) are re-run, with
+    // prior valid sections preserved. The pass re-checks the gate and returns the
+    // (possibly improved) article + reports + a RegenerationReport recording which
+    // stage was re-run and why. Best-effort: a failure leaves the original BLOCKED
+    // state untouched. A repaired article reaches FINAL; a failed repair stays
+    // BLOCKED with the report's clear explanation.
+    let currentArticle = article
+    let currentPlan = plan
+    let regenerationReport: RegenerationReport | null = null
+    if (!report.approved) {
+      const repaired = await this.tryRepair(articleId, {
+        article: currentArticle,
+        structureModel,
+        blocks,
+        plan: currentPlan,
+        fidelity: report,
+        coverage,
+        conceptCandidates: articleConceptCandidates,
+        sourceKind: routing?.diagnosis.sourceKind ?? 'unknown',
+        segmentation: segments,
+      })
+      if (repaired) {
+        currentArticle = repaired.article
+        currentPlan = repaired.plan
+        report = repaired.fidelity
+        coverage = repaired.coverage
+        articleConceptCandidates = repaired.conceptCandidates
+        regenerationReport = repaired.report
+        this.logger.log(
+          `Article ${articleId} repair — ${regenerationReport.outcome}: ${regenerationReport.explanation}`,
+        )
+      }
+    }
 
     // --- 9b. Learning extraction (DET-258) ----------------------------------
     // The fidelity REVIEW grades concept/retrieval readiness, so the learning
@@ -346,7 +400,7 @@ export class ArticlePipelineService {
     // carries untraceable fragments is held BLOCKED with a specific, stage-targeted
     // reason + regeneration hint.
     const reviewReport = this.fidelityReview.review({
-      article,
+      article: currentArticle,
       structureModel,
       blocks: blocks.map((b) => ({
         id: b.id,
@@ -366,18 +420,13 @@ export class ArticlePipelineService {
     // CHECKING state and pressured the per-user rate limit, so they DON'T block:
     // we finalize now (article readable, the frontend stops polling) and render
     // plates in the BACKGROUND, where they appear on the learner's next fetch.
-    const enrichment = await this.tryEnrich(articleId, article)
+    // Both run on the (possibly repaired) article.
+    const enrichment = await this.tryEnrich(articleId, currentArticle)
     // Editorial layout (the generative presentation lane) is another fast text
     // call, so it stays INLINE beside enrichment and ships at the terminal status.
-    const editorialLayout = await this.tryEditorialLayout(articleId, article)
-    // Whole-article concept extraction (DET-351). A source-grounded learning lane
-    // that mints the Concept Library candidates for this article so a concept-rich
-    // source never finalizes with zero (the bug this fixes). Best-effort: a failure
-    // logs and yields null, and the article still finalizes without candidates.
-    const articleConceptCandidates = await this.tryExtractArticleConcepts(
+    const editorialLayout = await this.tryEditorialLayout(
       articleId,
-      article,
-      blocks,
+      currentArticle,
     )
 
     // --- 11. Quality gates + blocker status (DET-355) -----------------------
@@ -423,7 +472,7 @@ export class ArticlePipelineService {
     // semantics so existing v2 consumers render unchanged (DET-355 criterion 6):
     // a gate-passed article is FINAL, any held-back gate is BLOCKED.
     const finalArticle = {
-      ...article,
+      ...currentArticle,
       status: gate.status,
       qualityReport,
     }
@@ -438,7 +487,17 @@ export class ArticlePipelineService {
       !isBlockedStatus(gate.status)
 
     await this.persist(articleId, {
+      // Always persist the article JSON with the DET-355 gate status + quality
+      // report folded in. `finalArticle` is built from the (possibly repaired)
+      // `currentArticle`, so the DET-356 repair output is what lands here. When a
+      // repair ran, also record its RegenerationReport.
       articleJson: finalArticle as unknown as Prisma.InputJsonValue,
+      ...(regenerationReport
+        ? {
+            regenerationReport:
+              regenerationReport as unknown as Prisma.InputJsonValue,
+          }
+        : {}),
       fidelityReport: report as unknown as Prisma.InputJsonValue,
       fidelityScore: Math.round(report.fidelityScore),
       coverageReport: coverage as unknown as Prisma.InputJsonValue,
@@ -471,7 +530,32 @@ export class ArticlePipelineService {
 
     // Fire-and-forget: the article is already terminal and the poll has stopped.
     // Never awaited; self-contained (never throws).
-    void this.illustrateInBackground(articleId, article, blocks)
+    void this.illustrateInBackground(articleId, currentArticle, blocks)
+  }
+
+  /**
+   * Run a targeted-regeneration repair pass (DET-356); never throws — a failure
+   * logs and yields null so the article keeps its original BLOCKED state and
+   * report. The service itself is internally best-effort, so this wrapper only
+   * guards against an unexpected throw.
+   */
+  private async tryRepair(
+    articleId: string,
+    input: Omit<
+      Parameters<ArticleRegenerationService['repair']>[0],
+      'articleId'
+    >,
+  ): Promise<RepairResult | null> {
+    try {
+      return await this.regeneration.repair({ ...input, articleId })
+    } catch (error) {
+      this.logger.warn(
+        `Targeted regeneration failed for ${articleId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
   }
 
   // --- On-demand extras -----------------------------------------------------
