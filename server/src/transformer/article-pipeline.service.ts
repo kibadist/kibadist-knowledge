@@ -568,8 +568,16 @@ export class ArticlePipelineService {
     })
 
     // Fire-and-forget: the article is already terminal and the poll has stopped.
-    // Never awaited; self-contained (never throws).
-    void this.illustrateInBackground(articleId, currentArticle, blocks)
+    // Never awaited; self-contained (never throws). DET-360: only a quality-ready
+    // (fidelity-approved) article auto-renders plates; a BLOCKED article yields
+    // draft suggestions but no rendered images. Pass `currentArticle` so the
+    // DET-356 repair output is what gets illustrated.
+    void this.illustrateInBackground(
+      articleId,
+      currentArticle,
+      blocks,
+      report.approved,
+    )
   }
 
   /**
@@ -599,15 +607,22 @@ export class ArticlePipelineService {
 
   // --- On-demand extras -----------------------------------------------------
 
-  /** Generate + persist illustration suggestions for a FINAL/BLOCKED article. */
+  /**
+   * Generate + persist illustration suggestions for a FINAL/BLOCKED article.
+   * DET-360: a BLOCKED article (qualityReady=false) still gets draft suggestions,
+   * but each is marked ineligible with a quality warning so it is never rendered.
+   */
   async generateIllustrations(
     articleId: string,
     article: SourcePreservingArticle | ArticleJsonV2,
     sourceId: string,
     blocksVersion: number,
+    qualityReady = true,
   ): Promise<IllustrationPlan> {
     const blocks = await this.loadBlocks(sourceId, blocksVersion)
-    const plan = await this.illustrations.plan(article, blocks)
+    const plan = await this.illustrations.plan(article, blocks, {
+      qualityReady,
+    })
     await this.persist(articleId, {
       illustrationPlan: plan as unknown as Prisma.InputJsonValue,
     })
@@ -800,13 +815,17 @@ export class ArticlePipelineService {
     articleId: string,
     article: ArticleJsonV2,
     blocks: LoadedBlock[],
+    qualityReady: boolean,
   ): Promise<void> {
     try {
-      const plan = await this.illustrations.plan(article, blocks)
-      const suggestions = await this.autoRenderEligible(
-        articleId,
-        plan.suggestions,
-      )
+      const plan = await this.illustrations.plan(article, blocks, {
+        qualityReady,
+      })
+      // DET-360: a not-ready article gets DRAFT suggestions only (each already
+      // marked ineligible + warned by the planner) — never auto-rendered images.
+      const suggestions = qualityReady
+        ? await this.autoRenderEligible(articleId, plan.suggestions)
+        : plan.suggestions
       await this.persist(articleId, {
         illustrationPlan: { suggestions } as unknown as Prisma.InputJsonValue,
       })
@@ -834,7 +853,13 @@ export class ArticlePipelineService {
     const out: IllustrationSuggestion[] = []
     let rendered = 0
     for (const s of suggestions) {
-      if (rendered >= MAX_AUTO_ILLUSTRATIONS || s.fidelityRisk === 'high') {
+      // DET-360: never render an ineligible (quality-gated) suggestion; high-risk
+      // and over-cap suggestions also stay pending.
+      if (
+        s.eligible === false ||
+        rendered >= MAX_AUTO_ILLUSTRATIONS ||
+        s.fidelityRisk === 'high'
+      ) {
         out.push(s)
         continue
       }

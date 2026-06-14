@@ -24,6 +24,7 @@ function suggestion(
     fidelityRisk: 'low',
     reason: 'r',
     sourceBlockIds: ['b1'],
+    eligible: true,
     approval: 'approved',
     ...over,
   }
@@ -138,6 +139,23 @@ describe('TransformerService illustration render (DET-261)', () => {
     const { service, image } = makeHarness([
       suggestion({ approval: 'pending' }),
     ])
+    await expect(
+      service.renderIllustration('u1', 'a1', 's1', false),
+    ).rejects.toBeInstanceOf(ConflictException)
+    expect(image).not.toHaveBeenCalled()
+  })
+
+  it('rejects rendering when the article is BLOCKED for quality (DET-360)', async () => {
+    const { service, image, article } = makeHarness([suggestion()])
+    article.status = 'BLOCKED'
+    await expect(
+      service.renderIllustration('u1', 'a1', 's1', false),
+    ).rejects.toBeInstanceOf(ConflictException)
+    expect(image).not.toHaveBeenCalled()
+  })
+
+  it('rejects rendering an ineligible (quality-gated) suggestion (DET-360)', async () => {
+    const { service, image } = makeHarness([suggestion({ eligible: false })])
     await expect(
       service.renderIllustration('u1', 'a1', 's1', false),
     ).rejects.toBeInstanceOf(ConflictException)

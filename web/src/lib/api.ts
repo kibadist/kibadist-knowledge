@@ -1462,6 +1462,15 @@ export interface IllustrationSuggestion {
   fidelityRisk: FidelityRisk
   reason: string
   sourceBlockIds: string[]
+  // DET-360: article section ids a diagram/illustration is anchored to, resolved
+  // server-side from the cited source blocks. Diagram specs always carry these.
+  sectionIds?: string[]
+  // DET-360: quality gate. `eligible` is false when the article did not pass its
+  // structure/quality gates — the suggestion is a DRAFT that must not be rendered
+  // (the render endpoint rejects it). `qualityWarning` is the reason to surface.
+  // Older plans predate these fields, so both are optional (absent ⇒ eligible).
+  eligible?: boolean
+  qualityWarning?: string
   approval: IllustrationApproval
   // DET-261: present once the approved suggestion has been rendered into an
   // image. Absent/null = not yet rendered. The PNG bytes are fetched separately
