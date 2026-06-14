@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { RetrievalPromptV3 } from '@/lib/article-v3'
+import type { RetrievalPromptV3 } from '@/lib/article-learning-review'
 import {
   type RetrievalPromptActions,
   RetrievalPromptsReviewPanel,

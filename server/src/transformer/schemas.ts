@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type {
   ArticleJsonV2,
+  ArticleJsonV3,
   ArticleParagraph,
   ArticleSection,
   ArticleSectionV2,
@@ -94,6 +95,65 @@ export const SourceStructureModelSchema = z.object({
 })
 
 export type SourceStructureModel = z.infer<typeof SourceStructureModelSchema>
+
+// --- Conceptual segmentation (DET-347) -------------------------------------
+
+/** A segment's teaching role — what it does FOR THE LEARNER, not its block type. */
+const segmentRole = z.enum([
+  'orientation',
+  'definition',
+  'mechanism',
+  'distinction',
+  'example',
+  'analogy',
+  'history',
+  'application',
+  'caveat',
+  'summary',
+])
+
+const segmentImportance = z.enum(['high', 'medium', 'low'])
+const segmentArticlePlacement = z.enum(['main_body', 'callout', 'source_notes'])
+
+/**
+ * What the SEGMENTATION LLM returns (DET-347) — the segment MINUS its `id`, which
+ * is code-minted (`seg-N`) after the segments are ordered, never prompt-trusted
+ * (the house rule: ids the downstream relies on are owned by code). Every segment
+ * still cites a non-empty `sourceBlockIds`; the `repair` hook prunes invented ids
+ * before validation and the service re-checks every surviving id in code.
+ * `mustPreserveClaims` are quotes of what the source already says (defaults to []).
+ */
+const llmSegment = z.object({
+  title: z.string().min(1),
+  role: segmentRole,
+  sourceBlockIds,
+  importance: segmentImportance,
+  summary: z.string().min(1),
+  mustPreserveClaims: z.array(z.string().min(1)).default([]),
+  suggestedArticlePlacement: segmentArticlePlacement,
+})
+
+/**
+ * The segmentation wire shape (DET-347). `segments.min(1)` so a result that groups
+ * nothing is a loud failure (the pipeline degrades to no-segmentation around it).
+ * `unsegmentedBlocks` records blocks the model deliberately left out of every
+ * segment, each with a reason; the coverage guard in code fills in any
+ * high-importance block the model forgot, so the persisted artifact always has a
+ * reason for every uncovered block.
+ */
+export const SegmentationLlmSchema = z.object({
+  segments: z.array(llmSegment).min(1),
+  unsegmentedBlocks: z
+    .array(
+      z.object({
+        blockId: z.string().min(1),
+        reason: z.string().min(1),
+      }),
+    )
+    .default([]),
+})
+
+export type SegmentationLlm = z.infer<typeof SegmentationLlmSchema>
 
 // --- Reshaping plan (step 7) -----------------------------------------------
 
@@ -445,9 +505,81 @@ const callout = z.object({
   placementReason: z.string().min(1),
 })
 
+// --- Source-grounded generated callouts + tables (DET-350) -----------------
+
+/** The pedagogical callout vocabulary; mirrors `ArticleCalloutType`. */
+const calloutType = z.enum([
+  'definition',
+  'key_idea',
+  'source_analogy',
+  'caveat',
+  'example',
+  'warning',
+  'remember',
+  'compare',
+])
+
+/**
+ * A stored source-grounded generated callout (DET-350). Carries new prose
+ * (title/body) but is GROUNDED: non-empty `sourceBlockIds` is the first gate (the
+ * generator re-checks ids exist; the fidelity checker re-verifies). The id is
+ * code-minted (`gco-<type>-<index>`), so the schema requires it.
+ */
+const generatedCallout = z.object({
+  id: z.string().min(1),
+  type: calloutType,
+  title: z.string().min(1),
+  body: z.string().min(1),
+  sourceBlockIds,
+  relatedSectionIds: z.array(z.string().min(1)),
+  fidelityRisk,
+})
+
 const calloutPlacements = z.object({
   bySection: z.record(z.string(), z.array(callout)),
   unplaced: z.array(callout),
+  // v3 (DET-350): the generated, source-grounded callouts. Optional so a v2
+  // placement (end-matter only) still validates.
+  generated: z.array(generatedCallout).optional(),
+})
+
+/** One comparison-table cell — per-cell grounding is optional ("where possible"). */
+const tableCell = z.object({
+  text: z.string().min(1),
+  sourceBlockIds: z.array(z.string().min(1)).optional(),
+})
+
+/** One comparison-table row — row-level grounding is REQUIRED (non-empty). */
+const comparisonTableRow = z.object({
+  cells: z.array(tableCell).min(1),
+  sourceBlockIds,
+})
+
+/** A stored source-grounded comparison table (DET-350). */
+const comparisonTable = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  columns: z.array(z.string().min(1)).min(2),
+  rows: z.array(comparisonTableRow).min(1),
+  sourceBlockIds,
+  relatedSectionIds: z.array(z.string().min(1)),
+  fidelityRisk,
+})
+
+/** One source-note item (DET-350): a fragment moved out of the body, traceable. */
+const sourceNoteItem = z.object({
+  text: z.string().min(1),
+  sourceBlockIds,
+  url: z.string().min(1).optional(),
+})
+
+/** Source notes — references/bibliography/links/removed-nav/low-importance. */
+const sourceNotes = z.object({
+  references: z.array(sourceNoteItem),
+  bibliography: z.array(sourceNoteItem),
+  externalLinks: z.array(sourceNoteItem),
+  removedNavigation: z.array(sourceNoteItem),
+  lowImportance: z.array(sourceNoteItem),
 })
 
 const articleShape = z.enum([
@@ -545,7 +677,9 @@ export const ArticleLlmV2Schema = z.object({
 
 export type ArticleLlmV2 = z.infer<typeof ArticleLlmV2Schema>
 
-export const ArticleJsonV2Schema: z.ZodType<ArticleJsonV2> = z.object({
+// The shared structured-article object. Kept as a raw ZodObject (not the
+// `z.ZodType<>`-annotated export) so the v3 schema can `.extend` it.
+const articleJsonObject = z.object({
   schemaVersion: z.literal('v2'),
   mode: z.literal('source_preserving_article'),
   title: z.object({ text: z.string().min(1), source: headingSourceV2 }),
@@ -574,7 +708,26 @@ export const ArticleJsonV2Schema: z.ZodType<ArticleJsonV2> = z.object({
   calloutPlacements: calloutPlacements.optional(),
   shape: articleShape.optional(),
   reorderings: z.array(reorderingAudit).optional(),
+  // v3 additive fields (DET-350); optional so a v2 article still validates.
+  tables: z.array(comparisonTable).optional(),
+  sourceNotes: sourceNotes.optional(),
 })
+
+export const ArticleJsonV2Schema: z.ZodType<ArticleJsonV2> = articleJsonObject
+
+/**
+ * Article JSON v3 (DET-350) — the v2 object with `schemaVersion: 'v3'` and the
+ * three v3 fields promoted to REQUIRED (generated callouts live inside
+ * `calloutPlacements`, plus `tables` and `sourceNotes`). Validates a native v3
+ * article end-to-end.
+ */
+export const ArticleJsonV3Schema: z.ZodType<ArticleJsonV3> =
+  articleJsonObject.extend({
+    schemaVersion: z.literal('v3'),
+    calloutPlacements,
+    tables: z.array(comparisonTable),
+    sourceNotes,
+  }) as unknown as z.ZodType<ArticleJsonV3>
 
 // --- Fidelity report (step 9) ----------------------------------------------
 
@@ -849,15 +1002,241 @@ const learningConceptCandidate = z.object({
 
 export type LearningConceptCandidate = z.infer<typeof learningConceptCandidate>
 
+// --- Article-level concept extraction (DET-351) ----------------------------
+//
+// A WHOLE-ARTICLE learning-extraction stage that runs after generation and
+// returns rich concept candidates + terminology + relationships for the Concept
+// Library / Proof-of-Learning flow. Distinct from the DET-258 study layer and the
+// DET-283 per-section candidates: this stage covers the full article in one pass
+// so a concept-rich source can never finalize with zero candidates (the bug this
+// fixes — both observed failures returned conceptCandidateCount: 0).
+//
+// Like every other extraction lane the model is UNTRUSTED. The LLM proposes the
+// candidates; CODE owns the invariants (`learning-layer.service.ts`):
+//  - grounding: a candidate without ≥1 real sourceBlockId is dropped;
+//  - `normalizedName` is computed in code (never prompt-trusted) and candidates
+//    are deduplicated by it (acceptance criterion);
+//  - `articleSectionIds` are resolved in code from the candidate's grounded
+//    blocks against the article's section index, never taken from the model;
+//  - `eligibleForLibraryReview` is set in code from importance (high ⇒ eligible);
+//  - `validationStatus` is forced 'pending' and `aiAssisted` true — NOTHING is
+//    auto-promoted to permanent knowledge without explicit user validation.
+
+const conceptCandidateType = z.enum([
+  'core_concept',
+  'supporting_concept',
+  'term',
+  'process',
+  'distinction',
+  'method',
+  'model',
+  'misconception',
+])
+
+export type ConceptCandidateType = z.infer<typeof conceptCandidateType>
+
+const conceptImportance = z.enum(['high', 'medium', 'low'])
+export type ConceptImportance = z.infer<typeof conceptImportance>
+
+/** Cognitive state a freshly-extracted candidate may be SUGGESTED for — never the
+ *  earned states; extraction can only propose 'Seen' or 'Parsed'. */
+const suggestedCognitiveState = z.enum(['Seen', 'Parsed'])
+
+const conceptRelationshipType = z.enum([
+  'related_to',
+  'prerequisite_of',
+  'confused_with',
+  'contrasts_with',
+  'example_of',
+  'applied_in',
+  'misconception_about',
+])
+
+export type ConceptRelationshipType = z.infer<typeof conceptRelationshipType>
+
+/**
+ * A proposed relationship between two concept candidates. `targetNormalizedName`
+ * points at another candidate's code-computed `normalizedName`; the service drops
+ * any relationship whose target does not resolve to a real candidate (no dangling
+ * edges) and whose `type` is not a known relationship kind.
+ */
+const conceptRelationshipCandidate = z.object({
+  type: conceptRelationshipType,
+  targetNormalizedName: z.string().min(1),
+  rationale: z.string().min(1).optional(),
+})
+
+export type ConceptRelationshipCandidate = z.infer<
+  typeof conceptRelationshipCandidate
+>
+
+/**
+ * A whole-article concept CANDIDATE (DET-351). A proposal for the Concept
+ * Library — never an earned Concept: `aiAssisted` is forced true and
+ * `validationStatus` starts 'pending'. `name`/`type`/`importance` come from the
+ * model; `normalizedName`, `articleSectionIds` and `eligibleForLibraryReview` are
+ * code-owned. `sourceBlockIds` is non-empty (grounding is required; the service
+ * drops ungrounded candidates). `conceptId` is stamped only when the user later
+ * validates the candidate, making promotion idempotent.
+ */
+const articleConceptCandidate = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  normalizedName: z.string().min(1),
+  domain: z.string().min(1).optional(),
+  type: conceptCandidateType,
+  shortDefinition: z.string().min(1).optional(),
+  sourceBlockIds,
+  articleSectionIds: z.array(z.string().min(1)),
+  importance: conceptImportance,
+  suggestedCognitiveState,
+  /** Code-set from importance: high-importance candidates are surfaced for
+   *  Concept Library review (and potential Living Concept generation). */
+  eligibleForLibraryReview: z.boolean(),
+  aiAssisted: z.literal(true),
+  validationStatus,
+  conceptId: z.string().min(1).optional(),
+  relationshipCandidates: z.array(conceptRelationshipCandidate).optional(),
+})
+
+export type ArticleConceptCandidate = z.infer<typeof articleConceptCandidate>
+
+// --- Learning prompts: retrieval + misconceptions (DET-353) -----------------
+//
+// A SEPARATE study aid from the DET-258 learning layer above: AI-suggested active
+// recall prompts and misconception candidates, generated from source-grounded
+// article content (sections, concept candidates, key claims, source examples,
+// callouts). Like every other lane the model is UNTRUSTED — the service grounds
+// every item against the real source block ids, validates concept-candidate links,
+// mints ids, and forces every status to its AI-suggested initial value. NOTHING is
+// scheduled permanently here: a prompt becomes a real review card only when the
+// user validates or answers it (status flips downstream, never at generation).
+//
+// NOTE on naming: the canonical ticket interface is `RetrievalPrompt`, but that
+// name is already taken by the DET-258 learning layer's simpler `{id, prompt,
+// sourceBlockIds}` shape above. We call the richer DET-353 shape
+// `RetrievalPromptCandidate` to avoid the collision and to emphasise it is a
+// candidate — never a permanent card until the learner validates it.
+
+/** The pedagogical category of a retrieval prompt (DET-353). */
+const retrievalPromptType = z.enum([
+  'definition',
+  'mechanism',
+  'distinction',
+  'sequence',
+  'analogy',
+  'misconception_repair',
+  'transfer',
+])
+
+export type RetrievalPromptType = z.infer<typeof retrievalPromptType>
+
+const promptDifficulty = z.enum(['easy', 'medium', 'hard'])
+
+/** Retrieval-prompt lifecycle: AI suggests, the learner validates/answers or rejects. */
+const retrievalPromptStatus = z.enum([
+  'ai_suggested',
+  'user_validated',
+  'rejected',
+])
+
+/** Misconception lifecycle: AI suggests, the learner validates or rejects. */
+const misconceptionStatus = z.enum(['ai_suggested', 'validated', 'rejected'])
+
+/**
+ * A stored active-recall prompt (DET-353). `question` is the prompt the learner
+ * answers; `expectedAnswerSourceBlockIds` are the REAL source blocks whose content
+ * holds the answer (non-empty — the service drops any prompt it cannot ground);
+ * `relatedConceptCandidateIds` link the prompt to the concept candidates it tests
+ * (validated against the article's candidates in code). `status` starts
+ * `ai_suggested` and only the learner ever advances it — nothing is scheduled as a
+ * permanent review card at generation time.
+ */
+const retrievalPromptCandidate = z.object({
+  id: z.string().min(1),
+  question: z.string().min(1),
+  expectedAnswerSourceBlockIds: sourceBlockIds,
+  relatedConceptCandidateIds: z.array(z.string().min(1)),
+  promptType: retrievalPromptType,
+  difficulty: promptDifficulty,
+  status: retrievalPromptStatus,
+})
+
+export type RetrievalPromptCandidate = z.infer<typeof retrievalPromptCandidate>
+
+/**
+ * A stored misconception candidate (DET-353): a likely wrong belief plus its
+ * source-faithful correction. `sourceBlockIds` MAY be empty — per the ticket a
+ * misconception is allowed when it is either source-grounded OR clearly marked as
+ * AI-suggested; an ungrounded one is kept but stays `ai_suggested` (and the
+ * permanent-card gate never schedules it until the learner validates). `confidence`
+ * is clamped to [0,1] in code.
+ */
+const misconceptionCandidate = z.object({
+  id: z.string().min(1),
+  misconception: z.string().min(1),
+  correction: z.string().min(1),
+  sourceBlockIds: z.array(z.string().min(1)),
+  relatedConceptCandidateIds: z.array(z.string().min(1)),
+  confidence: z.number().min(0).max(1),
+  status: misconceptionStatus,
+})
+
+export type MisconceptionCandidate = z.infer<typeof misconceptionCandidate>
+
+/** The generated learning-prompt set (retrieval prompts + misconceptions). */
+export const LearningPromptSetSchema = z.object({
+  retrievalPrompts: z.array(retrievalPromptCandidate),
+  misconceptions: z.array(misconceptionCandidate),
+})
+
+export type LearningPromptSet = z.infer<typeof LearningPromptSetSchema>
+
+/**
+ * What the LLM returns for the learning-prompt stage (DET-353) — no id/status
+ * (code mints ids and forces the initial status). Source-block id arrays and
+ * concept-candidate id arrays are loosened to allow empties / unknowns so the
+ * service can DROP retrieval prompts that ground in nothing and FILTER invalid
+ * links in code, rather than the model silently omitting them to satisfy the
+ * schema. `promptType` / `difficulty` fall back to safe defaults on benign drift;
+ * `confidence` defaults to 0.5 and is clamped in code.
+ */
+export const LearningPromptSetLlmSchema = z.object({
+  retrievalPrompts: z.array(
+    z.object({
+      question: z.string().min(1),
+      expectedAnswerSourceBlockIds: z.array(z.string()).default([]),
+      relatedConceptCandidateIds: z.array(z.string()).default([]),
+      promptType: retrievalPromptType.catch('definition'),
+      difficulty: promptDifficulty.catch('medium'),
+    }),
+  ),
+  misconceptions: z.array(
+    z.object({
+      misconception: z.string().min(1),
+      correction: z.string().min(1),
+      sourceBlockIds: z.array(z.string()).default([]),
+      relatedConceptCandidateIds: z.array(z.string()).default([]),
+      confidence: z.number().catch(0.5).default(0.5),
+    }),
+  ),
+})
+
 /**
  * Stored learning layer (code-managed ids + validationStatus). `conceptCandidates`
- * is an ADDITIVE optional parallel array (DET-283): old stored rows predate it and
- * still parse. `concepts` / `retrievalPrompts` and their update flow are untouched.
+ * (DET-283) and `articleConceptCandidates` (DET-351) are ADDITIVE optional parallel
+ * arrays: old stored rows predate them and still parse. `retrievalPromptCandidates`
+ * / `misconceptions` are the same kind of additive optional arrays (DET-353) — the
+ * richer recall prompts + misconception candidates produced by the learning-prompt
+ * stage. `concepts` / `retrievalPrompts` and their update flow are untouched.
  */
 export const LearningLayerSchema = z.object({
   concepts: z.array(learningConcept),
   retrievalPrompts: z.array(retrievalPrompt),
   conceptCandidates: z.array(learningConceptCandidate).optional(),
+  articleConceptCandidates: z.array(articleConceptCandidate).optional(),
+  retrievalPromptCandidates: z.array(retrievalPromptCandidate).optional(),
+  misconceptions: z.array(misconceptionCandidate).optional(),
 })
 
 export type LearningLayer = z.infer<typeof LearningLayerSchema>
@@ -900,3 +1279,92 @@ export const ConceptCandidatesLlmSchema = z.object({
     }),
   ),
 })
+
+// --- Source-grounded callout / table LLM wire shapes (DET-350) --------------
+//
+// What the callout / table generators ask the model for. As with the
+// illustration and learning lanes, `sourceBlockIds` / `relatedSectionIds` are
+// LOOSENED (plain string arrays, default []) so the SERVICE drops ungrounded
+// items in code rather than the model silently omitting them to satisfy the
+// schema; the id is code-minted (absent here); `fidelityRisk` defaults to the
+// cautious 'medium' when the model omits it.
+
+export const GeneratedCalloutsLlmSchema = z.object({
+  callouts: z.array(
+    z.object({
+      type: calloutType,
+      title: z.string().min(1),
+      body: z.string().min(1),
+      sourceBlockIds: z.array(z.string()).default([]),
+      relatedSectionIds: z.array(z.string()).default([]),
+      fidelityRisk: fidelityRisk.default('medium'),
+    }),
+  ),
+})
+
+/**
+ * What the LLM returns for the DET-351 whole-article extraction. Deliberately
+ * PERMISSIVE so a single off-taxonomy value never fails the whole pass:
+ *  - `type` / `importance` / `suggestedCognitiveState` fall back via `.catch`;
+ *  - `sourceBlockIds` is loosened to allow empties — the service drops ungrounded
+ *    candidates in code rather than the model omitting them to pass the schema;
+ *  - relationship `type` / `targetName` stay free `string`s; the service maps
+ *    them to the known relationship enum and resolves targets to real candidates,
+ *    dropping anything that does not resolve.
+ * Everything code-owns (`id`, `normalizedName`, `articleSectionIds`,
+ * `eligibleForLibraryReview`, `validationStatus`, `aiAssisted`) is ABSENT here.
+ */
+export const ArticleConceptExtractionLlmSchema = z.object({
+  candidates: z.array(
+    z.object({
+      name: z.string().min(1),
+      domain: z.string().min(1).optional(),
+      type: conceptCandidateType.catch('term'),
+      shortDefinition: z.string().min(1).optional(),
+      sourceBlockIds: z.array(z.string()).default([]),
+      importance: conceptImportance.catch('medium'),
+      suggestedCognitiveState: suggestedCognitiveState.catch('Seen'),
+      relationships: z
+        .array(
+          z.object({
+            type: z.string().min(1),
+            targetName: z.string().min(1),
+            rationale: z.string().min(1).optional(),
+          }),
+        )
+        .default([]),
+    }),
+  ),
+})
+
+export type GeneratedCalloutsLlm = z.infer<typeof GeneratedCalloutsLlmSchema>
+
+export const ComparisonTablesLlmSchema = z.object({
+  tables: z.array(
+    z.object({
+      title: z.string().min(1),
+      columns: z.array(z.string().min(1)).min(2),
+      rows: z.array(
+        z.object({
+          cells: z
+            .array(
+              z.object({
+                text: z.string().min(1),
+                sourceBlockIds: z.array(z.string()).default([]),
+              }),
+            )
+            .min(1),
+          sourceBlockIds: z.array(z.string()).default([]),
+        }),
+      ),
+      relatedSectionIds: z.array(z.string()).default([]),
+      fidelityRisk: fidelityRisk.default('medium'),
+    }),
+  ),
+})
+
+export type ComparisonTablesLlm = z.infer<typeof ComparisonTablesLlmSchema>
+
+export type ArticleConceptExtractionLlm = z.infer<
+  typeof ArticleConceptExtractionLlmSchema
+>

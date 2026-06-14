@@ -19,6 +19,7 @@ import { fetchReadable } from '../inbox/url-fetch.util'
 import { PrismaService } from '../prisma/prisma.service'
 import { toArticleV2 } from './article-compat.util'
 import { ArticlePipelineService } from './article-pipeline.service'
+import { isArticleV3 } from './article-v3.schema'
 import { placeCallouts } from './callout-placement.util'
 import type { CreateTextSourceDto } from './dto/create-text-source.dto'
 import type { CreateUrlSourceDto } from './dto/create-url-source.dto'
@@ -418,6 +419,16 @@ export class TransformerService {
       | SourcePreservingArticle
       | ArticleJsonV2
       | null
+    // Article JSON v3 (DET-344) is a PARALLEL, opt-in contract with its own
+    // (not-yet-wired) read/render path. The v2 read boundary must never mistake a
+    // v3 record for a legacy v1 doc (which would mis-parse it as v1 here), so we
+    // fail loud instead. This branch is unreachable until a v3 record exists
+    // (opt-in flag + the future v3 generator); v1/v2 records are untouched.
+    if (isArticleV3(stored)) {
+      throw new ConflictException(
+        'This article was generated with schema v3, which this endpoint does not yet render.',
+      )
+    }
     // Inline callout placement (DET-272) is deterministic and cheap, so compute
     // it here for any article that lacks it — legacy v1 articles and v2 articles
     // generated before this wave. The adapter stays representation-only on

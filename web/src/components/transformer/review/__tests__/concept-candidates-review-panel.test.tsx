@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { ConceptCandidateV3 } from '@/lib/article-v3'
+import type { ConceptCandidateV3 } from '@/lib/article-learning-review'
 import {
   type ConceptCandidateActions,
   ConceptCandidatesReviewPanel,

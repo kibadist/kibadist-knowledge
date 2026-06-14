@@ -1,305 +1,467 @@
-import type { LearningLayer } from './api'
-
 /**
- * Article JSON v3 — the learning-review contract (DET-359).
+ * Article JSON v3 — the client-side contract for source-grounded learning
+ * articles (DET-344, the "Source-Grounded Learning Article Engine" epic
+ * DET-343).
  *
- * v3 extends the generated article with a first-class *review* layer: the
- * AI-suggested concept candidates and retrieval prompts a reader vets before any
- * of it becomes permanent knowledge. Like `article-v2.ts` (the DET-278
- * coordination contract), this is a client-side shape distinct from the api.ts
- * wire types; the article *body* still flows as Article JSON v2. The adapter
- * `learningLayerToReviewV3` bridges the existing server `LearningLayer` into this
- * shape so the v3 review panels render from real data, defaulting the v3-only
- * fields (importance, prompt type, linked concepts, expected-answer blocks,
- * review status) on rows generated before this lane.
+ * v3 is a PARALLEL shape to the legacy `source_preserving_article` v2 contract
+ * (see `api.ts` `ArticleJsonV2`), not a replacement: the strangler-pattern
+ * migration (DET-362) keeps v2 as a stable fallback while v3 generation rolls
+ * out behind a feature flag. The reader dispatches on `schemaVersion` —
+ * v2 articles keep rendering through the Compendium/MagazineArticle path, v3
+ * articles render through the learning-first reader (DET-357).
  *
- * Two invariants are encoded structurally (DET-359 acceptance criteria):
- *  - A concept candidate's "accepted" status is a USER-REVIEW state. It never
- *    internalizes the concept into permanent knowledge — promotion stays a
- *    separate, explicit step. `isInternalized` is therefore always false here.
- *  - A retrieval prompt never becomes a permanent review card from this layer.
- *    Scheduling stays gated on explicit user validation or a user-authored
- *    answer; `promptAllowsScheduling` is the single gate the UI reads.
+ * This file MIRRORS the server-side v3 contract being built in the transformer
+ * (DET-344). It is intentionally self-contained — it imports nothing from
+ * `api.ts` so the dependency runs one way (`api.ts` re-exports `ArticleJsonV3`
+ * from here), and every field tolerates the additive evolution of the pipeline:
+ * panels and sections are guarded so an article generated before a given stage
+ * shipped simply omits that affordance rather than crashing the renderer.
+ *
+ * Source-trace invariant (DET-344): every paragraph, section, claim, concept,
+ * callout, table, and prompt carries source-block ids so the reader can ground
+ * each rendered fragment back in the original material. AI-assisted scaffolding
+ * (a fragment with no source blocks, or `aiAssisted: true`) is rendered visually
+ * distinct from source-grounded claims — never silently mixed in.
  */
 
-export const ARTICLE_JSON_V3 = 'article_json_v3' as const
+export const ARTICLE_JSON_V3 = 'v3' as const
 
-// --- Concept candidates ------------------------------------------------------
+// --- Source diagnosis (DET-345) ---------------------------------------------
 
-/** Importance the generator assigns a concept candidate (DET-359). */
-export type ConceptImportance = 'high' | 'medium' | 'low'
+/** What kind of source the article was generated from (detected pre-generation). */
+export type SourceKind =
+  | 'transcript_lesson'
+  | 'structured_web_article'
+  | 'research_paper'
+  | 'raw_notes'
+  | 'documentation'
+  | 'unknown'
+
+/** The learning shape the article was reorganised into (selected from sourceKind). */
+export type ArticleShapeV3 =
+  | 'lesson_article'
+  | 'concept_explainer'
+  | 'research_digest'
+  | 'technical_walkthrough'
+  | 'reference_digest'
+  | 'structured_notes'
+
+// --- Quality gates + blocker status (DET-355) -------------------------------
 
 /**
- * Review lifecycle of a concept candidate in the v3 reader (DET-359).
- *  - `pending`  — proposed, not yet reviewed.
- *  - `accepted` — moved to user-review state; NOT internalized as knowledge.
- *  - `rejected` — dismissed by the reader.
- *  - `deferred` — "create Living Concept later"; kept around, decided later.
+ * The article lifecycle status. Anything `BLOCKED_*` (or `NEEDS_REGENERATION`)
+ * is a held-back state the reader renders with its blocker reasons +
+ * regeneration hints; `READY_FOR_REVIEW`/`FINAL` are the readable, passed states.
  */
-export type ConceptCandidateReviewStatus =
-  | 'pending'
-  | 'accepted'
-  | 'rejected'
-  | 'deferred'
+export type ArticleStatusV3 =
+  | 'DRAFT'
+  | 'GENERATING'
+  | 'NEEDS_REGENERATION'
+  | 'BLOCKED_LOW_COVERAGE'
+  | 'BLOCKED_UNSUPPORTED_CLAIMS'
+  | 'BLOCKED_MISSING_CONCEPTS'
+  | 'BLOCKED_FIDELITY'
+  | 'READY_FOR_REVIEW'
+  | 'FINAL'
 
-export interface ConceptCandidateV3 {
+/** Machine-readable blocker codes that map onto the quality-gate failures. */
+export type ArticleBlockerCode =
+  | 'low_coverage'
+  | 'unsupported_claims'
+  | 'missing_concepts'
+  | 'fidelity'
+  | 'lost_information'
+  | 'weak_exercise_readiness'
+
+/** A single reason an article is held back, with a pointer to its report entry. */
+export interface ArticleBlockerReason {
+  code: ArticleBlockerCode
+  message: string
+  /** Points at a quality-report field/warning (DET-355) so the reader can link. */
+  qualityReportRef?: string
+  sourceBlockIds?: string[]
+}
+
+// --- Fidelity + transformation provenance -----------------------------------
+
+export type FidelityRiskV3 = 'low' | 'medium' | 'high'
+
+export type TransformationTypeV3 =
+  | 'verbatim'
+  | 'grammar_cleanup'
+  | 'speech_cleanup'
+  | 'light_reword'
+  | 'source_grounded_rewrite'
+  | 'source_grounded_summary'
+  | 'paragraph_split'
+  | 'paragraph_merge'
+  | 'heading_inference'
+
+/** Provenance for the article as a whole (DET-344 `ArticleProvenance`). */
+export interface ArticleProvenanceV3 {
+  sourceId?: string
+  sourceUrl?: string | null
+  sourceKind: SourceKind
+  captureMethod?: 'PASTE' | 'URL' | 'PDF'
+  capturedAt?: string
+  totalSourceBlocks?: number
+  representedSourceBlocks?: number
+  /** Whether the original source spans are still available behind this article. */
+  sourceAvailable?: boolean
+}
+
+// --- Body content ------------------------------------------------------------
+
+export interface ArticleTitleV3 {
+  text: string
+  /** Where the title came from — an inferred title is AI scaffolding, not source. */
+  source?: 'original' | 'cleanedOriginal' | 'inferred'
+}
+
+/**
+ * A body paragraph. `sourceBlockIds` ground it in the source; an empty array
+ * (or `aiAssisted: true`) marks it as AI scaffolding the reader renders as
+ * visually distinct from source-grounded prose.
+ */
+export interface ArticleParagraphV3 {
+  id: string
+  text: string
+  sourceBlockIds: string[]
+  transformationType?: TransformationTypeV3
+  fidelityRisk?: FidelityRiskV3
+  aiAssisted?: boolean
+}
+
+/** Source-grounded section role (DET-348 outline). Drives the small-caps label. */
+export type SectionRoleV3 =
+  | 'introduction'
+  | 'definition'
+  | 'boundaries'
+  | 'mechanism'
+  | 'types'
+  | 'example'
+  | 'application'
+  | 'misconception'
+  | 'evidence'
+  | 'method'
+  | 'results'
+  | 'limitations'
+  | 'implications'
+  | 'steps'
+  | 'reference'
+  | 'summary'
+
+export interface ArticleSectionV3 {
+  id: string
+  heading: string
+  sectionRole?: SectionRoleV3
+  /** Concept names this section is built around (DET-348). */
+  conceptFocus?: string[]
+  /** What the reader should be able to do after this section (DET-348). */
+  targetReaderOutcome?: string
+  sourceBlockIds: string[]
+  paragraphs: ArticleParagraphV3[]
+  subsections?: ArticleSectionV3[]
+}
+
+// --- Source-grounded callouts, tables, notes (DET-350) ----------------------
+
+export type ArticleCalloutTypeV3 =
+  | 'definition'
+  | 'key_idea'
+  | 'source_analogy'
+  | 'caveat'
+  | 'example'
+  | 'warning'
+  | 'remember'
+  | 'compare'
+
+export interface ArticleCalloutV3 {
+  id: string
+  type: ArticleCalloutTypeV3
+  title?: string
+  body: string
+  sourceBlockIds: string[]
+  relatedSectionIds?: string[]
+  fidelityRisk?: FidelityRiskV3
+  aiAssisted?: boolean
+}
+
+/**
+ * Where each callout is placed. `bySection` anchors a callout beside the section
+ * it belongs to; `unplaced` ones have nowhere inline to live and render in a
+ * trailing group. Full callout objects are embedded (mirrors the v2 placement
+ * map) so the reader renders straight from the map.
+ */
+export interface CalloutPlacementMapV3 {
+  bySection: Record<string, ArticleCalloutV3[]>
+  unplaced: ArticleCalloutV3[]
+}
+
+export interface ArticleTableV3 {
+  id: string
+  title?: string
+  columns: string[]
+  rows: string[][]
+  sourceBlockIds: string[]
+  relatedSectionIds?: string[]
+  fidelityRisk?: FidelityRiskV3
+}
+
+/**
+ * Material moved OUT of the article body by default (DET-348/350): references,
+ * bibliography, external links, stripped navigation/footer, and low-importance
+ * source matter. Surfaced in the Source notes drawer, never as a body section.
+ */
+export type SourceNoteKindV3 =
+  | 'reference'
+  | 'bibliography'
+  | 'external_link'
+  | 'removed_navigation'
+  | 'low_importance'
+
+export interface SourceNoteV3 {
+  id: string
+  kind: SourceNoteKindV3
+  text: string
+  url?: string
+  sourceBlockIds?: string[]
+}
+
+export interface SourceReferenceV3 {
   id: string
   label: string
-  importance: ConceptImportance
-  /** Source-backed short definition. */
-  definition: string
-  /** A short preview of the source span this candidate is grounded in. */
-  sourceSpanPreview?: string
-  /** The source blocks backing the candidate (non-empty when grounded). */
-  sourceBlockIds: string[]
-  /** The v2 section the candidate was extracted from, when known. */
-  sectionId?: string
-  status: ConceptCandidateReviewStatus
-  /**
-   * Set once acceptance created the user-review ("to learn") concept. Its
-   * presence makes acceptance idempotent — never a second knowledge row.
-   */
-  conceptId?: string
+  url?: string
+  sourceBlockIds?: string[]
 }
 
-// --- Retrieval prompts -------------------------------------------------------
+export interface SourceExampleV3 {
+  id: string
+  text: string
+  sourceBlockIds: string[]
+  relatedSectionIds?: string[]
+}
 
-/** The kind of recall a retrieval prompt exercises (DET-359, grouping key). */
-export type RetrievalPromptType =
-  | 'recall'
-  | 'definition'
-  | 'application'
-  | 'comparison'
-  | 'cause_effect'
-  | 'synthesis'
+// --- Learning layer (DET-351 / 352 / 353) -----------------------------------
+
+export type ConceptCandidateTypeV3 =
+  | 'core_concept'
+  | 'supporting_concept'
+  | 'term'
+  | 'process'
+  | 'distinction'
+  | 'method'
+  | 'model'
+  | 'misconception'
+
+export type ConceptRelationshipTypeV3 =
+  | 'related_to'
+  | 'prerequisite_of'
+  | 'confused_with'
+  | 'contrasts_with'
+  | 'example_of'
+  | 'applied_in'
+  | 'misconception_about'
+
+export interface ConceptRelationshipCandidateV3 {
+  type: ConceptRelationshipTypeV3
+  targetName: string
+}
 
 /**
- * Review lifecycle of a retrieval prompt (DET-359).
- *  - `suggested` — AI-proposed, untouched.
- *  - `saved`     — kept as a suggestion. NOT scheduled (scheduling stays gated).
- *  - `answered`  — the reader authored an answer; this is the gate that lets a
- *                  prompt be scheduled downstream.
- *  - `rejected`  — dismissed.
+ * An AI-suggested concept (DET-351). It is a PROPOSAL the reader reviews — never
+ * auto-promoted to permanent knowledge. `status` defaults to `ai_suggested`.
  */
-export type RetrievalPromptReviewStatus =
-  | 'suggested'
-  | 'saved'
-  | 'answered'
-  | 'rejected'
+export interface ConceptCandidateV3 {
+  id: string
+  name: string
+  normalizedName: string
+  domain?: string
+  type: ConceptCandidateTypeV3
+  shortDefinition?: string
+  sourceBlockIds: string[]
+  articleSectionIds: string[]
+  importance: 'high' | 'medium' | 'low'
+  suggestedCognitiveState: 'Seen' | 'Parsed'
+  relationshipCandidates?: ConceptRelationshipCandidateV3[]
+  status?: 'ai_suggested' | 'user_validated' | 'rejected'
+}
 
+export type ClaimTypeV3 =
+  | 'definition'
+  | 'mechanism'
+  | 'distinction'
+  | 'historical_claim'
+  | 'causal_claim'
+  | 'classification'
+  | 'example'
+  | 'caveat'
+
+export interface ClaimCandidateV3 {
+  id: string
+  text: string
+  sourceBlockIds: string[]
+  articleSectionIds: string[]
+  claimType: ClaimTypeV3
+  confidence: number
+}
+
+export interface TerminologyItemV3 {
+  id: string
+  term: string
+  definition: string
+  sourceBlockIds: string[]
+}
+
+export type RetrievalPromptTypeV3 =
+  | 'definition'
+  | 'mechanism'
+  | 'distinction'
+  | 'sequence'
+  | 'analogy'
+  | 'misconception_repair'
+  | 'transfer'
+
+/**
+ * An AI-suggested active-recall prompt (DET-353). Visible for review but never
+ * scheduled permanently until the user validates or answers it.
+ */
 export interface RetrievalPromptV3 {
   id: string
-  prompt: string
-  type: RetrievalPromptType
-  /** Concept candidates this prompt exercises (ids into `conceptCandidates`). */
-  linkedConceptIds: string[]
-  /** The source blocks that hold the expected answer. */
-  expectedAnswerBlockIds: string[]
-  status: RetrievalPromptReviewStatus
-  /** The reader's own-words answer, stored verbatim. Gates scheduling. */
-  userAnswer?: string
-  /** All source blocks grounding the prompt (superset of expected-answer). */
+  question: string
+  expectedAnswerSourceBlockIds: string[]
+  relatedConceptCandidateIds: string[]
+  promptType: RetrievalPromptTypeV3
+  difficulty: 'easy' | 'medium' | 'hard'
+  status: 'ai_suggested' | 'user_validated' | 'rejected'
+}
+
+export interface MisconceptionCandidateV3 {
+  id: string
+  misconception: string
+  correction: string
   sourceBlockIds: string[]
+  relatedConceptCandidateIds: string[]
+  confidence: number
+  status: 'ai_suggested' | 'validated' | 'rejected'
 }
 
-/** The v3 review layer: candidates + prompts a reader vets before keeping. */
-export interface ArticleLearningReviewV3 {
-  schema_version: typeof ARTICLE_JSON_V3
-  conceptCandidates: ConceptCandidateV3[]
+/** An ordered "what you'll learn" item (DET-348 `LearningPathItem`). */
+export interface LearningPathItemV3 {
+  id: string
+  label: string
+  /** The section this path item maps to, when known. */
+  sectionId?: string
+  outcome?: string
+}
+
+// --- Quality report (DET-354) -----------------------------------------------
+
+export interface ArticleQualityReportV3 {
+  sourceCoverageScore: number
+  importantSourceCoverageScore: number
+  citationCoverageScore: number
+  unsupportedClaimCount: number
+  highSeverityLostInfoCount: number
+  conceptCandidateCount: number
+  keyClaimCount: number
+  retrievalPromptCount: number
+  tableCount: number
+  calloutCount: number
+  exerciseReadinessScore: number
+  articleReadabilityScore: number
+  provenanceCompletenessScore: number
+  reviewerWarnings: string[]
+  blockerReasons: ArticleBlockerReason[]
+  regenerationHints: string[]
+}
+
+// --- Top-level contract ------------------------------------------------------
+
+export interface ArticleJsonV3 {
+  schemaVersion: typeof ARTICLE_JSON_V3
+  mode: 'source_grounded_learning_article'
+  status: ArticleStatusV3
+  sourceKind: SourceKind
+  shape: ArticleShapeV3
+  title: ArticleTitleV3
+  dek?: string
+  abstract: ArticleParagraphV3[]
+  learningPath: LearningPathItemV3[]
+  sections: ArticleSectionV3[]
+  keyConcepts: ConceptCandidateV3[]
+  keyClaims: ClaimCandidateV3[]
+  terminology: TerminologyItemV3[]
+  sourceExamples: SourceExampleV3[]
+  misconceptionWarnings: MisconceptionCandidateV3[]
   retrievalPrompts: RetrievalPromptV3[]
+  calloutPlacements: CalloutPlacementMapV3
+  tables: ArticleTableV3[]
+  sourceNotes: SourceNoteV3[]
+  references: SourceReferenceV3[]
+  provenance: ArticleProvenanceV3
+  qualityReport: ArticleQualityReportV3
+  /** Precomputed reading time; the reader falls back to a word-count estimate. */
+  readingTimeMinutes?: number
+  generatedAt?: string
 }
+
+// --- Helpers -----------------------------------------------------------------
 
 /**
- * Readiness of the article that backs the review surface. `blocked` is the
- * fidelity-gate hold (still reviewable, flagged); `generating`/`failed` have no
- * review layer yet; `unavailable` covers a missing/foreign article.
+ * The reader dispatch boundary: is this article JSON the v3 learning shape? Used
+ * to route between the v3 learning-first reader and the legacy v2 Compendium so
+ * v2 articles keep rendering unchanged (DET-357 acceptance criterion 1).
  */
-export type ReviewArticleState =
-  | 'ready'
-  | 'blocked'
-  | 'generating'
-  | 'failed'
-  | 'unavailable'
-
-// --- Ordering + grouping helpers --------------------------------------------
-
-/** High → low: the order importance buckets render in. */
-export const IMPORTANCE_ORDER: readonly ConceptImportance[] = [
-  'high',
-  'medium',
-  'low',
-]
-
-/** The order retrieval-prompt type groups render in (stable, generator-agnostic). */
-export const RETRIEVAL_TYPE_ORDER: readonly RetrievalPromptType[] = [
-  'recall',
-  'definition',
-  'application',
-  'comparison',
-  'cause_effect',
-  'synthesis',
-]
-
-/** Human label for each importance bucket. */
-export const IMPORTANCE_LABEL: Record<ConceptImportance, string> = {
-  high: 'High importance',
-  medium: 'Medium importance',
-  low: 'Low importance',
+export function isArticleJsonV3(
+  json: { schemaVersion?: string } | null | undefined,
+): json is ArticleJsonV3 {
+  return !!json && json.schemaVersion === ARTICLE_JSON_V3
 }
 
-/** Human label for each retrieval-prompt type. */
-export const RETRIEVAL_TYPE_LABEL: Record<RetrievalPromptType, string> = {
-  recall: 'Recall',
-  definition: 'Definition',
-  application: 'Application',
-  comparison: 'Comparison',
-  cause_effect: 'Cause & effect',
-  synthesis: 'Synthesis',
+/** A held-back status: a blocker gate or a pending regeneration (DET-355). */
+export function isBlockedStatusV3(status: ArticleStatusV3): boolean {
+  return status.startsWith('BLOCKED_') || status === 'NEEDS_REGENERATION'
 }
 
-/** A non-empty group of candidates sharing an importance bucket, in render order. */
-export interface CandidateGroup {
-  importance: ConceptImportance
-  candidates: ConceptCandidateV3[]
+/** A readable, gate-passed status the reader treats as a finished article. */
+export function isReadableStatusV3(status: ArticleStatusV3): boolean {
+  return status === 'READY_FOR_REVIEW' || status === 'FINAL'
 }
+
+/** Plain text of a paragraph list, for word-count / a11y label scanning. */
+export function v3PlainText(paragraphs: ArticleParagraphV3[]): string {
+  return paragraphs.map((p) => p.text).join(' ')
+}
+
+const WORDS_PER_MINUTE = 220
 
 /**
- * Group candidates by importance in High→Low order, preserving input order
- * within a bucket and omitting empty buckets. Pure — never mutates the input.
+ * Reading time in minutes: the precomputed value when present, else a
+ * deterministic word-count estimate over the abstract + every section body
+ * (never returns 0 — a non-empty article is at least a one-minute read).
  */
-export function groupCandidatesByImportance(
-  candidates: ConceptCandidateV3[],
-): CandidateGroup[] {
-  return IMPORTANCE_ORDER.map((importance) => ({
-    importance,
-    candidates: candidates.filter((c) => c.importance === importance),
-  })).filter((g) => g.candidates.length > 0)
-}
-
-/** A non-empty group of prompts sharing a type, in render order. */
-export interface PromptGroup {
-  type: RetrievalPromptType
-  prompts: RetrievalPromptV3[]
-}
-
-/**
- * Group retrieval prompts by type in `RETRIEVAL_TYPE_ORDER`, preserving input
- * order within a group and omitting empty groups. Pure.
- */
-export function groupPromptsByType(
-  prompts: RetrievalPromptV3[],
-): PromptGroup[] {
-  return RETRIEVAL_TYPE_ORDER.map((type) => ({
-    type,
-    prompts: prompts.filter((p) => p.type === type),
-  })).filter((g) => g.prompts.length > 0)
-}
-
-/**
- * The single scheduling gate (DET-359): a prompt may be scheduled as a permanent
- * review card ONLY when the reader authored an answer for it. "Saved as a
- * suggestion" deliberately does NOT qualify — saving keeps a proposal, it does
- * not validate it. This is the invariant the UI reads before offering to keep a
- * prompt as a review card; the scheduling itself lives downstream.
- */
-export function promptAllowsScheduling(prompt: RetrievalPromptV3): boolean {
-  return (
-    prompt.status === 'answered' && (prompt.userAnswer?.trim().length ?? 0) > 0
-  )
-}
-
-/**
- * Whether a candidate has been internalized into permanent knowledge. Always
- * false at this layer: accepting a candidate only moves it to a user-review
- * state, it never internalizes it (DET-359). Kept as a function so the invariant
- * is asserted in tests rather than assumed.
- */
-export function isInternalized(_candidate: ConceptCandidateV3): boolean {
-  return false
-}
-
-// --- Adapter -----------------------------------------------------------------
-
-/** Map the server validation status onto the v3 candidate review status. */
-function candidateStatusFromValidation(
-  status: 'pending' | 'validated' | 'dismissed',
-): ConceptCandidateReviewStatus {
-  switch (status) {
-    case 'validated':
-      // Validation moves a candidate to the user-review ("to learn") inbox — a
-      // review state, never internalized knowledge. That is exactly "accepted".
-      return 'accepted'
-    case 'dismissed':
-      return 'rejected'
-    default:
-      return 'pending'
+export function v3ReadingMinutes(article: ArticleJsonV3): number {
+  if (article.readingTimeMinutes && article.readingTimeMinutes > 0) {
+    return article.readingTimeMinutes
   }
+  const collect = (sections: ArticleSectionV3[]): string[] =>
+    sections.flatMap((s) => [
+      v3PlainText(s.paragraphs),
+      ...collect(s.subsections ?? []),
+    ])
+  const text = [v3PlainText(article.abstract), ...collect(article.sections)]
+    .join(' ')
+    .trim()
+  if (!text) return 0
+  const words = text.split(/\s+/).length
+  return Math.max(1, Math.round(words / WORDS_PER_MINUTE))
 }
 
-/** Narrow an arbitrary string to a known importance, else `medium`. */
-function coerceImportance(value: unknown): ConceptImportance {
-  return value === 'high' || value === 'medium' || value === 'low'
-    ? value
-    : 'medium'
-}
-
-/** Narrow an arbitrary string to a known prompt type, else `recall`. */
-function coercePromptType(value: unknown): RetrievalPromptType {
-  return RETRIEVAL_TYPE_ORDER.includes(value as RetrievalPromptType)
-    ? (value as RetrievalPromptType)
-    : 'recall'
-}
-
-/** Narrow an arbitrary string to a known prompt review status, else `suggested`. */
-function coercePromptStatus(value: unknown): RetrievalPromptReviewStatus {
-  return value === 'saved' ||
-    value === 'answered' ||
-    value === 'rejected' ||
-    value === 'suggested'
-    ? value
-    : 'suggested'
-}
-
-/**
- * Adapt the server `LearningLayer` into the v3 review shape (DET-359). The
- * v3-only fields default gracefully on legacy rows: importance → `medium`,
- * prompt type → `recall`, review status → `suggested`, expected-answer blocks →
- * the prompt's own source blocks. A null layer yields empty arrays so the panels
- * can render their empty states. Pure.
- */
-export function learningLayerToReviewV3(
-  layer: LearningLayer | null,
-): ArticleLearningReviewV3 {
-  const conceptCandidates: ConceptCandidateV3[] = (
-    layer?.conceptCandidates ?? []
-  ).map((c) => ({
-    id: c.id,
-    label: c.label,
-    importance: coerceImportance(c.importance),
-    definition: c.definition,
-    sourceSpanPreview: c.sourceSpanPreview,
-    sourceBlockIds: c.sourceBlockIds,
-    sectionId: c.sectionId,
-    status: candidateStatusFromValidation(c.validationStatus),
-    conceptId: c.conceptId,
-  }))
-
-  const retrievalPrompts: RetrievalPromptV3[] = (
-    layer?.retrievalPrompts ?? []
-  ).map((p) => ({
-    id: p.id,
-    prompt: p.prompt,
-    type: coercePromptType(p.promptType),
-    linkedConceptIds: p.linkedConceptIds ?? [],
-    expectedAnswerBlockIds: p.expectedAnswerBlockIds ?? p.sourceBlockIds,
-    status: coercePromptStatus(p.reviewStatus),
-    userAnswer: p.userAnswer,
-    sourceBlockIds: p.sourceBlockIds,
-  }))
-
-  return {
-    schema_version: ARTICLE_JSON_V3,
-    conceptCandidates,
-    retrievalPrompts,
-  }
+/** A paragraph/callout is AI scaffolding when flagged or ungrounded in source. */
+export function isAiScaffolding(item: {
+  aiAssisted?: boolean
+  sourceBlockIds: string[]
+}): boolean {
+  return item.aiAssisted === true || item.sourceBlockIds.length === 0
 }

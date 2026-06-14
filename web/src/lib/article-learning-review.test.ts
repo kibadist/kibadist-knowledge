@@ -10,7 +10,7 @@ import {
   learningLayerToReviewV3,
   promptAllowsScheduling,
   type RetrievalPromptV3,
-} from './article-v3'
+} from './article-learning-review'
 
 /**
  * DET-359 v3 review contract. These are the pure helpers + the server-layer

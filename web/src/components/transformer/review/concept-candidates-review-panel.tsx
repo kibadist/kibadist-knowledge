@@ -6,7 +6,7 @@ import {
   type ConceptCandidateV3,
   groupCandidatesByImportance,
   IMPORTANCE_LABEL,
-} from '@/lib/article-v3'
+} from '@/lib/article-learning-review'
 
 /**
  * Concept candidates review panel (DET-359). Lists AI-suggested concepts grouped

@@ -15,6 +15,7 @@ import {
 } from '@/components/deep-reading'
 import { MagazineArticle } from '@/components/magazine/magazine-article'
 import { ArticleReader } from '@/components/reader/article-reader'
+import { ArticleV3View } from '@/components/reader/v3/article-v3-view'
 import { ArticleReviewPanels } from '@/components/transformer/review/article-review-panels'
 import { SourceInspector } from '@/components/transformer/source-inspector'
 import {
@@ -30,6 +31,7 @@ import {
   useArticleLearningState,
 } from '@/lib/article-learning-events'
 import type { ArticleV2 } from '@/lib/article-v2'
+import { isArticleJsonV3 } from '@/lib/article-v3'
 import {
   ARTICLE_STEPS,
   articleStatusLabel,
@@ -405,7 +407,12 @@ function ArticleView({
   // The single adaptation boundary (lib/transformer-to-article-v2): section and
   // block ids carry through so learning events anchor to the persisted ids.
   const learningArticle = useMemo(() => {
-    if (!article?.articleJson) return null
+    // v3 articles are NOT adapted through the v2 boundary — they render through
+    // the dedicated learning-first reader (DET-357). Only legacy v2 articles
+    // feed the Deep Reading / active-recall surfaces.
+    if (!article?.articleJson || isArticleJsonV3(article.articleJson)) {
+      return null
+    }
     return transformerArticleToV2(article.articleJson, {
       articleId: article.id,
       sourceId: article.sourceId,
@@ -428,6 +435,7 @@ function ArticleView({
     queryFn: () => api.listArticleLearningEvents(articleId),
     enabled: Boolean(
       article?.articleJson &&
+        !isArticleJsonV3(article.articleJson) &&
         (article.status === 'FINAL' || article.status === 'BLOCKED'),
     ),
   })
@@ -536,6 +544,14 @@ function ArticleView({
   // Still generating / failed — never a dead wait; the Source view is one toggle
   // away and remains readable.
   if (!showBody) return <ArticleProgress status={article.status} />
+
+  // v3 articles render through the dedicated learning-first reader (DET-357). It
+  // carries its own status banner, provenance byline, and learning panels, so it
+  // bypasses the v2 fidelity notice + learning-event hydration below entirely
+  // (the v3 active-recall surface is separate, downstream work).
+  if (isArticleJsonV3(article.articleJson)) {
+    return <ArticleV3View article={article.articleJson} />
+  }
 
   if (!learningArticle) return null
 

@@ -1,11 +1,14 @@
 import {
   ArticleJsonV2Schema,
+  ArticleJsonV3Schema,
   ArticleSchema,
+  ComparisonTablesLlmSchema,
+  GeneratedCalloutsLlmSchema,
   LearningLayerSchema,
   ReshapingPlanSchema,
   SourceStructureModelSchema,
 } from './schemas'
-import type { ArticleJsonV2 } from './transformer.types'
+import type { ArticleJsonV2, ArticleJsonV3 } from './transformer.types'
 
 describe('zod schemas reject missing/empty sourceBlockIds', () => {
   it('SourceStructureModelSchema rejects a claim with empty sourceBlockIds', () => {
@@ -403,5 +406,124 @@ describe('LearningLayerSchema conceptCandidates (DET-283)', () => {
       ],
     }
     expect(LearningLayerSchema.safeParse(broken).success).toBe(false)
+  })
+})
+
+describe('v3 source-grounded extras schemas (DET-350)', () => {
+  it('ArticleJsonV3Schema validates a full v3 article (generated callouts, tables, source notes)', () => {
+    const v3: ArticleJsonV3 = {
+      schemaVersion: 'v3',
+      mode: 'source_preserving_article',
+      title: { text: 'T', source: 'original' },
+      abstract: [],
+      sections: [],
+      keyTerms: [],
+      sourceExamples: [],
+      caveats: [],
+      originalStructure: [],
+      calloutPlacements: {
+        bySection: {},
+        unplaced: [],
+        generated: [
+          {
+            id: 'gco-definition-0',
+            type: 'definition',
+            title: 'Term',
+            body: 'A definition from the source.',
+            sourceBlockIds: ['b1'],
+            relatedSectionIds: ['s1'],
+            fidelityRisk: 'low',
+          },
+        ],
+      },
+      tables: [
+        {
+          id: 'gtbl-0',
+          title: 'A vs B',
+          columns: ['X', 'Y'],
+          rows: [
+            { cells: [{ text: 'a' }, { text: 'b' }], sourceBlockIds: ['b1'] },
+            { cells: [{ text: 'c' }, { text: 'd' }], sourceBlockIds: ['b2'] },
+          ],
+          sourceBlockIds: ['b1', 'b2'],
+          relatedSectionIds: ['s1'],
+          fidelityRisk: 'low',
+        },
+      ],
+      sourceNotes: {
+        references: [{ text: '[1] Source.', sourceBlockIds: ['b3'] }],
+        bibliography: [],
+        externalLinks: [
+          { text: 'link', sourceBlockIds: ['b4'], url: 'https://x.test' },
+        ],
+        removedNavigation: [],
+        lowImportance: [],
+      },
+    }
+    expect(ArticleJsonV3Schema.safeParse(v3).success).toBe(true)
+  })
+
+  it('rejects a generated callout with empty sourceBlockIds', () => {
+    const result = ArticleJsonV3Schema.safeParse({
+      schemaVersion: 'v3',
+      mode: 'source_preserving_article',
+      title: { text: 'T', source: 'original' },
+      abstract: [],
+      sections: [],
+      keyTerms: [],
+      sourceExamples: [],
+      caveats: [],
+      originalStructure: [],
+      tables: [],
+      sourceNotes: {
+        references: [],
+        bibliography: [],
+        externalLinks: [],
+        removedNavigation: [],
+        lowImportance: [],
+      },
+      calloutPlacements: {
+        bySection: {},
+        unplaced: [],
+        generated: [
+          {
+            id: 'gco-key_idea-0',
+            type: 'key_idea',
+            title: 'T',
+            body: 'B',
+            sourceBlockIds: [], // empty grounding → rejected
+            relatedSectionIds: [],
+            fidelityRisk: 'low',
+          },
+        ],
+      },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('GeneratedCalloutsLlmSchema loosens grounding and defaults fidelityRisk', () => {
+    const parsed = GeneratedCalloutsLlmSchema.parse({
+      callouts: [{ type: 'remember', title: 'T', body: 'B' }],
+    })
+    expect(parsed.callouts[0].sourceBlockIds).toEqual([])
+    expect(parsed.callouts[0].relatedSectionIds).toEqual([])
+    expect(parsed.callouts[0].fidelityRisk).toBe('medium')
+  })
+
+  it('ComparisonTablesLlmSchema requires at least two columns', () => {
+    const ok = ComparisonTablesLlmSchema.safeParse({
+      tables: [
+        {
+          title: 'T',
+          columns: ['A', 'B'],
+          rows: [{ cells: [{ text: 'a' }], sourceBlockIds: ['b1'] }],
+        },
+      ],
+    })
+    expect(ok.success).toBe(true)
+    const bad = ComparisonTablesLlmSchema.safeParse({
+      tables: [{ title: 'T', columns: ['A'], rows: [] }],
+    })
+    expect(bad.success).toBe(false)
   })
 })

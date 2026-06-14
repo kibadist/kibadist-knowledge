@@ -9,7 +9,7 @@ import {
   learningLayerToReviewV3,
   type RetrievalPromptV3,
   type ReviewArticleState,
-} from '@/lib/article-v3'
+} from '@/lib/article-learning-review'
 
 import { ConceptCandidatesReviewPanel } from './concept-candidates-review-panel'
 import { RetrievalPromptsReviewPanel } from './retrieval-prompts-review-panel'

@@ -7,7 +7,7 @@ import {
   promptAllowsScheduling,
   RETRIEVAL_TYPE_LABEL,
   type RetrievalPromptV3,
-} from '@/lib/article-v3'
+} from '@/lib/article-learning-review'
 
 /**
  * Retrieval prompts review panel (DET-359). Shows AI-suggested prompts grouped
