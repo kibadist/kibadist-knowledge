@@ -1484,12 +1484,24 @@ model TransformedArticle {
   // stay NULL (the pipeline degrades to no-segmentation around a failure).
   segments        Json?
   reshapingPlan   Json?
+  // Learning-first article outline (DET-348): a teaching arc, concept-led sections,
+  // source furniture (references/bibliography/external links) demoted to source
+  // notes. Built between the reshaping plan and the rewrite (generator) and passed
+  // to it. Additive nullable lane; old rows stay NULL.
+  learningOutline Json?
   articleJson     Json?
   fidelityReport  Json?
   fidelityScore   Int?
   coverageReport  Json?
   illustrationPlan Json?
   learningLayer   Json?
+  // Fidelity-review rollup (DET-354): the v3 ArticleQualityReportV3 — a
+  // deterministic synthesis of the fidelity report, coverage, structure model and
+  // learning layer (raw vs important source coverage, unsupported-addition and
+  // lost-info counts, blocker reasons + stage-targeted regeneration hints). Its
+  // high-severity blockers are the second gate on FINAL/BLOCKED. Additive lane;
+  // never folded into articleJson. Old rows stay NULL.
+  qualityReport   Json?
   // AI-added encyclopedia metadata (DET-319) — non-source-grounded, its own lane,
   // never folded into articleJson; the UI labels it "AI · not from your source".
   enrichment      Json?

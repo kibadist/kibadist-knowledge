@@ -251,6 +251,114 @@ describe('mergeDeterministicChecks (fidelity blocking rules)', () => {
     expect(out.approved).toBe(false)
   })
 
+  // --- DET-352 key-claim traceability --------------------------------------
+
+  function v2WithClaims(keyClaims: ArticleJsonV2['keyClaims']): ArticleJsonV2 {
+    return {
+      schemaVersion: 'v2',
+      mode: 'source_preserving_article',
+      title: { text: 'T', source: 'original' },
+      abstract: [
+        {
+          id: 'p1',
+          text: 'x',
+          sourceBlockIds: ['b1'],
+          transformationType: 'verbatim',
+          fidelityRisk: 'low',
+        },
+      ],
+      sections: [
+        {
+          id: 's1',
+          heading: 'S',
+          headingSource: 'original',
+          sourceBlockIds: ['b1'],
+          blocks: [
+            {
+              id: 'sb1',
+              type: 'paragraph',
+              text: 'x',
+              sourceBlockIds: ['b1'],
+              transformationType: 'verbatim',
+              fidelityRisk: 'low',
+            },
+          ],
+        },
+      ],
+      keyTerms: [],
+      sourceExamples: [],
+      caveats: [],
+      originalStructure: [],
+      keyClaims,
+    }
+  }
+
+  it('approves: a fully traceable key claim', () => {
+    const out = mergeDeterministicChecks(
+      emptyReport(99),
+      v2WithClaims([
+        {
+          id: 'k1',
+          text: 'a claim',
+          sourceBlockIds: ['b1'],
+          articleSectionIds: ['s1'],
+          claimType: 'definition',
+          confidence: 0.9,
+        },
+      ]),
+      known,
+    )
+    expect(out.approved).toBe(true)
+  })
+
+  it('blocks: a key claim citing an unknown source block', () => {
+    const out = mergeDeterministicChecks(
+      emptyReport(99),
+      v2WithClaims([
+        {
+          id: 'k1',
+          text: 'a claim',
+          sourceBlockIds: ['ghost'],
+          articleSectionIds: ['s1'],
+          claimType: 'mechanism',
+          confidence: 0.9,
+        },
+      ]),
+      known,
+    )
+    expect(out.approved).toBe(false)
+    expect(
+      out.structuralFindings.some(
+        (f) => f.severity === 'high' && /Key claim/.test(f.description),
+      ),
+    ).toBe(true)
+  })
+
+  it('blocks: a key claim referencing an unknown article section', () => {
+    const out = mergeDeterministicChecks(
+      emptyReport(99),
+      v2WithClaims([
+        {
+          id: 'k1',
+          text: 'a claim',
+          sourceBlockIds: ['b1'],
+          articleSectionIds: ['sGhost'],
+          claimType: 'caveat',
+          confidence: 0.9,
+        },
+      ]),
+      known,
+    )
+    expect(out.approved).toBe(false)
+    expect(
+      out.structuralFindings.some(
+        (f) =>
+          f.severity === 'high' &&
+          /unknown article section/.test(f.description),
+      ),
+    ).toBe(true)
+  })
+
   it('old stored report shape (no emphasis/structural fields) still parses via schema defaults', () => {
     // An old stored fidelityReport JSON predates DET-281 — it has none of the
     // two new groups. The schema `.default([])` must fill them in on re-read.

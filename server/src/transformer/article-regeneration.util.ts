@@ -1,7 +1,7 @@
 import type {
   ArticleBlock,
-  ArticleBlockerReason,
   ArticleJsonV2,
+  ArticleRepairReason,
   ArticleSectionV2,
   RegenerationStage,
 } from './transformer.types'
@@ -27,7 +27,7 @@ export interface RegenerationStrategy {
  * pipeline stages. `fidelity_recheck` is appended by the orchestrator after any
  * repair so the gate is always re-evaluated.
  */
-const STRATEGY: Record<ArticleBlockerReason, RegenerationStrategy> = {
+const STRATEGY: Record<ArticleRepairReason, RegenerationStrategy> = {
   low_coverage: {
     stages: ['reshaping_plan', 'generation'],
     why: 'Re-plan and regenerate so high-importance unrepresented source blocks are merged into sections; prior valid sections are preserved.',
@@ -47,9 +47,7 @@ const STRATEGY: Record<ArticleBlockerReason, RegenerationStrategy> = {
 }
 
 /** Look up the targeted repair strategy for a blocker reason. */
-export function strategyFor(
-  reason: ArticleBlockerReason,
-): RegenerationStrategy {
+export function strategyFor(reason: ArticleRepairReason): RegenerationStrategy {
   return STRATEGY[reason]
 }
 

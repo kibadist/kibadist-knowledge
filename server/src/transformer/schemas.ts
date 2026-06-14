@@ -1,13 +1,16 @@
 import { z } from 'zod'
 
 import type {
+  ArticleBlockerReason,
   ArticleJsonV2,
   ArticleJsonV3,
   ArticleParagraph,
+  ArticleQualityReportV3,
   ArticleSection,
   ArticleSectionV2,
   FidelityFinding,
   FidelityReport,
+  KeyClaim,
   SourcePreservingArticle,
 } from './transformer.types'
 
@@ -677,6 +680,57 @@ export const ArticleLlmV2Schema = z.object({
 
 export type ArticleLlmV2 = z.infer<typeof ArticleLlmV2Schema>
 
+// --- Key claims — the v3 claims layer (DET-352) ----------------------------
+
+/** The claim taxonomy (mirrors `ClaimType` in transformer.types.ts). */
+const claimType = z.enum([
+  'definition',
+  'mechanism',
+  'distinction',
+  'historical_claim',
+  'causal_claim',
+  'classification',
+  'example',
+  'caveat',
+])
+
+/**
+ * A stored key claim (`KeyClaim`). Annotated `z.ZodType<KeyClaim>` so it can never
+ * drift from the frozen contract. Both `sourceBlockIds` and `articleSectionIds`
+ * are non-empty — a claim with no provenance or no home section is never stored
+ * (the service drops it in code). `confidence` is clamped to 0–1 in code.
+ */
+const keyClaim: z.ZodType<KeyClaim> = z.object({
+  id: z.string().min(1),
+  text: z.string().min(1),
+  sourceBlockIds,
+  articleSectionIds: z.array(z.string().min(1)).min(1),
+  claimType,
+  confidence: z.number().min(0).max(1),
+})
+
+/**
+ * What the CLAIM-EXTRACTOR LLM returns (DET-352) — no `id` (code mints it) and no
+ * `articleSectionIds` (code DERIVES them from the article's section→block map, so
+ * the model is never trusted for structural mapping; it only reports the claim,
+ * its grounding blocks, its type and a confidence). `sourceBlockIds` is loosened
+ * to allow empties so the service can DROP ungrounded claims in code rather than
+ * the model omitting them to satisfy the schema (mirrors the learning-layer lane).
+ * `confidence` defaults to 0.5 and is clamped in code.
+ */
+export const ClaimExtractionLlmSchema = z.object({
+  claims: z.array(
+    z.object({
+      text: z.string().min(1),
+      sourceBlockIds: z.array(z.string()).default([]),
+      claimType,
+      confidence: z.number().catch(0.5).default(0.5),
+    }),
+  ),
+})
+
+export type ClaimExtractionLlm = z.infer<typeof ClaimExtractionLlmSchema>
+
 // The shared structured-article object. Kept as a raw ZodObject (not the
 // `z.ZodType<>`-annotated export) so the v3 schema can `.extend` it.
 const articleJsonObject = z.object({
@@ -708,6 +762,7 @@ const articleJsonObject = z.object({
   calloutPlacements: calloutPlacements.optional(),
   shape: articleShape.optional(),
   reorderings: z.array(reorderingAudit).optional(),
+  keyClaims: z.array(keyClaim).optional(),
   // v3 additive fields (DET-350); optional so a v2 article still validates.
   tables: z.array(comparisonTable).optional(),
   sourceNotes: sourceNotes.optional(),
@@ -757,6 +812,51 @@ export const FidelityReportSchema: z.ZodType<FidelityReport> = z.object({
   emphasisChanges: z.array(fidelityFinding).default([]),
   structuralFindings: z.array(fidelityFinding).default([]),
 })
+
+// --- Article quality report v3 (fidelity review, DET-354) ------------------
+
+const qualityStage = z.enum([
+  'structure-model',
+  'reshaping-plan',
+  'generator',
+  'learning-layer',
+])
+
+const articleBlockerReason: z.ZodType<ArticleBlockerReason> = z.object({
+  code: z.string().min(1),
+  dimension: z.string().min(1),
+  severity,
+  message: z.string().min(1),
+  articleRefs: z.array(z.string().min(1)).optional(),
+  sourceBlockIds: z.array(z.string().min(1)).optional(),
+  stage: qualityStage,
+})
+
+/**
+ * The v3 quality report (DET-354). Produced deterministically by the fidelity
+ * review; this schema exists for read-back / persistence safety (validating a
+ * stored `qualityReport` JSON), mirroring how the fidelity + article schemas pin
+ * their committed contracts with `z.ZodType<...>` so a drift is a compile error.
+ */
+export const ArticleQualityReportV3Schema: z.ZodType<ArticleQualityReportV3> =
+  z.object({
+    sourceCoverageScore: z.number(),
+    importantSourceCoverageScore: z.number(),
+    citationCoverageScore: z.number(),
+    unsupportedClaimCount: z.number(),
+    highSeverityLostInfoCount: z.number(),
+    conceptCandidateCount: z.number(),
+    keyClaimCount: z.number(),
+    retrievalPromptCount: z.number(),
+    tableCount: z.number(),
+    calloutCount: z.number(),
+    exerciseReadinessScore: z.number(),
+    articleReadabilityScore: z.number(),
+    provenanceCompletenessScore: z.number(),
+    reviewerWarnings: z.array(z.string()),
+    blockerReasons: z.array(articleBlockerReason),
+    regenerationHints: z.array(z.string()),
+  })
 
 // --- Illustration plan (step 10, DET-259) ----------------------------------
 
@@ -1413,3 +1513,112 @@ export type ComparisonTablesLlm = z.infer<typeof ComparisonTablesLlmSchema>
 export type ArticleConceptExtractionLlm = z.infer<
   typeof ArticleConceptExtractionLlmSchema
 >
+
+// --- Learning-first article outline (DET-348) ------------------------------
+//
+// What the OUTLINE LLM returns. The stage organises a LEARNING structure (a
+// teaching arc, concept-led sections, source furniture demoted to notes) over the
+// classified blocks + derived segments, then the rewrite stage writes prose against
+// it. Like the other lanes the wire schema is deliberately LENIENT on traceability
+// arrays (`sourceBlockIds`/`sourceSegmentIds` default to []), because the SERVICE
+// does the strict work in code: it prunes ids the source can't back, drops a
+// section/note/callout/table left with no real provenance, then re-checks every
+// surviving id (loud failure on an unknown id, exactly like the structure-model and
+// plan stages). `sourceKind` / `articleShape` are set in code (derived
+// deterministically + passed in), never trusted from the model, so they are absent
+// here. The canonical `LearningOutline` type lives in learning-outline.types.ts;
+// this is only the model's reply shape.
+
+const learningSectionRole = z.enum([
+  'introduction',
+  'concept',
+  'background',
+  'practice',
+  'summary',
+  'sourceNotes',
+  'definition',
+  'boundaries',
+  'types',
+  'mechanism',
+  'example',
+  'application',
+  'misconception',
+  'question',
+  'method',
+  'evidence',
+  'results',
+  'limitations',
+  'implications',
+])
+
+const segmentKindSchema = z.enum([
+  'content',
+  'references',
+  'bibliography',
+  'externalLinks',
+  'furtherReading',
+  'citations',
+  'seeAlso',
+  'footer',
+  'noise',
+])
+
+const outlineSection = z
+  .object({
+    heading: z.string().min(1),
+    headingSource: planHeadingSource,
+    headingInferenceReason: z.string().min(1).optional(),
+    sectionRole: learningSectionRole,
+    sourceSegmentIds: z.array(z.string()).default([]),
+    sourceBlockIds: z.array(z.string()).default([]),
+    conceptFocus: z.string().min(1),
+    requiredClaims: z.array(z.string().min(1)).default([]),
+    targetReaderOutcome: z.string().min(1),
+  })
+  .refine((s) => s.headingSource !== 'inferred' || !!s.headingInferenceReason, {
+    message: 'an inferred heading must carry a headingInferenceReason',
+    path: ['headingInferenceReason'],
+  })
+
+const learningPathItem = z.object({
+  step: z.number().int().min(1),
+  outcome: z.string().min(1),
+  sectionHeadings: z.array(z.string().min(1)).default([]),
+})
+
+const sourceNoteWire = z.object({
+  kind: segmentKindSchema,
+  sourceBlockIds: z.array(z.string()).default([]),
+  sourceSegmentIds: z.array(z.string()).default([]),
+  reason: z.string().min(1),
+})
+
+const calloutPlanWire = z.object({
+  kind: z.enum(['definition', 'example', 'caveat', 'keyIdea', 'misconception']),
+  text: z.string().min(1),
+  sourceBlockIds: z.array(z.string()).default([]),
+  sectionHeading: z.string().min(1).optional(),
+})
+
+const tablePlanWire = z.object({
+  caption: z.string().min(1).optional(),
+  sourceBlockIds: z.array(z.string()).default([]),
+  sectionHeading: z.string().min(1).optional(),
+  reason: z.string().min(1),
+})
+
+export const LearningOutlineLlmSchema = z.object({
+  title: z.object({ text: z.string().min(1), source: planHeadingSource }),
+  dek: z.string().min(1).optional(),
+  learningPath: z.array(learningPathItem).default([]),
+  sections: z.array(outlineSection).min(1),
+  sourceNotesPlan: z
+    .object({ notes: z.array(sourceNoteWire).default([]) })
+    .default({ notes: [] }),
+  calloutPlan: z.array(calloutPlanWire).default([]),
+  tablePlan: z.array(tablePlanWire).default([]),
+  reorderings: z.array(reorderingAudit).default([]),
+  warnings: z.array(z.string().min(1)).default([]),
+})
+
+export type LearningOutlineLlm = z.infer<typeof LearningOutlineLlmSchema>

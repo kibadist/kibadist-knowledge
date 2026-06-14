@@ -4,8 +4,8 @@ import {
   strategyFor,
 } from './article-regeneration.util'
 import type {
-  ArticleBlockerReason,
   ArticleJsonV2,
+  ArticleRepairReason,
   ArticleSectionV2,
 } from './transformer.types'
 
@@ -54,7 +54,7 @@ function article(
 }
 
 describe('strategyFor', () => {
-  const reasons: ArticleBlockerReason[] = [
+  const reasons: ArticleRepairReason[] = [
     'low_coverage',
     'unsupported_claims',
     'missing_concepts',

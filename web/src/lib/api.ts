@@ -1079,6 +1079,46 @@ export interface CoverageReport {
   reorderAudit?: { audited: number; unaudited: number }
 }
 
+// --- Article quality report v3 (fidelity review, DET-354) ---
+// MIRROR of ArticleQualityReportV3 / ArticleBlockerReason in
+// server/src/transformer/transformer.types.ts. The fidelity review synthesises the
+// fidelity + coverage reports, the structure model and the learning layer into one
+// rollup; its high-severity `blockerReasons` are the second gate on FINAL/BLOCKED.
+export type ArticleQualityStage =
+  | 'structure-model'
+  | 'reshaping-plan'
+  | 'generator'
+  | 'learning-layer'
+
+export interface ArticleBlockerReason {
+  code: string
+  dimension: string
+  severity: Severity
+  message: string
+  articleRefs?: string[]
+  sourceBlockIds?: string[]
+  stage: ArticleQualityStage
+}
+
+export interface ArticleQualityReportV3 {
+  sourceCoverageScore: number
+  importantSourceCoverageScore: number
+  citationCoverageScore: number
+  unsupportedClaimCount: number
+  highSeverityLostInfoCount: number
+  conceptCandidateCount: number
+  keyClaimCount: number
+  retrievalPromptCount: number
+  tableCount: number
+  calloutCount: number
+  exerciseReadinessScore: number
+  articleReadabilityScore: number
+  provenanceCompletenessScore: number
+  reviewerWarnings: string[]
+  blockerReasons: ArticleBlockerReason[]
+  regenerationHints: string[]
+}
+
 // --- Article JSON v2 contract (DET-277) ---
 // MIRROR of the v2/v3 contract in server/src/transformer/transformer.types.ts —
 // the SERVER is the single adaptation boundary (`getArticle` adapts legacy v1 →
@@ -1294,6 +1334,27 @@ export interface ArticleReorderingAudit {
   risk: FidelityRisk
 }
 
+/** The claim taxonomy (DET-352, mirrors transformer.types.ts). */
+export type ClaimType =
+  | 'definition'
+  | 'mechanism'
+  | 'distinction'
+  | 'historical_claim'
+  | 'causal_claim'
+  | 'classification'
+  | 'example'
+  | 'caveat'
+
+/** One source-grounded key claim / definition (DET-352, the v3 claims layer). */
+export interface KeyClaim {
+  id: string
+  text: string
+  sourceBlockIds: string[]
+  articleSectionIds: string[]
+  claimType: ClaimType
+  confidence: number
+}
+
 export interface ArticleJsonV2 {
   schemaVersion: ArticleSchemaVersion
   mode: 'source_preserving_article'
@@ -1309,6 +1370,8 @@ export interface ArticleJsonV2 {
   calloutPlacements?: ArticleCalloutPlacement
   shape?: ArticleShape
   reorderings?: ArticleReorderingAudit[]
+  /** Source-grounded key claims / definitions (DET-352, the v3 claims layer). */
+  keyClaims?: KeyClaim[]
   // v3 additive fields (DET-350).
   tables?: ArticleComparisonTable[]
   sourceNotes?: ArticleSourceNotes
@@ -1610,6 +1673,8 @@ export interface TransformedArticle {
   fidelityReport: FidelityReport | null
   fidelityScore: number | null
   coverageReport: CoverageReport | null
+  // Fidelity-review rollup (DET-354); null on articles generated before the review.
+  qualityReport: ArticleQualityReportV3 | null
   illustrationPlan: IllustrationPlan | null
   learningLayer: LearningLayer | null
   // AI world-knowledge extras for the Compendium render (rendered with a visible
