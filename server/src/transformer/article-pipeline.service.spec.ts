@@ -4,6 +4,7 @@ import { AiService } from '../ai/ai.service'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
+import { ArticleRegenerationService } from './article-regeneration.service'
 import { CalloutGeneratorService } from './callout-generator.service'
 import { ConceptualSegmentationService } from './conceptual-segmentation.service'
 import { EditorialLayoutService } from './editorial-layout.service'
@@ -118,6 +119,7 @@ function makeServices(overrides: {
   plan?: Partial<ReshapingPlanService>
   generate?: Partial<ArticleGeneratorService>
   fidelity?: Partial<FidelityCheckerService>
+  regeneration?: Partial<ArticleRegenerationService>
 }) {
   const structure = {
     // A minimal valid structure model: one preserved claim grounded in b1, which
@@ -188,6 +190,32 @@ function makeServices(overrides: {
   const learningPrompts = {
     build: jest.fn(async () => ({ retrievalPrompts: [], misconceptions: [] })),
   } as unknown as LearningPromptsService
+  // Default regeneration stub: a no-op repair that leaves the article BLOCKED (the
+  // gate verdict is unchanged), so the BLOCKED-path test still asserts BLOCKED.
+  // The DET-356 wiring (repair is invoked only on a rejected gate, its result is
+  // adopted) is exercised by its own tests below.
+  const regeneration = {
+    repair: jest.fn(
+      async (inp: Parameters<ArticleRegenerationService['repair']>[0]) => ({
+        report: {
+          attempted: true,
+          outcome: 'still_blocked' as const,
+          blockersBefore: [],
+          blockersAfter: [],
+          actions: [],
+          preservedSectionIds: [],
+          explanation: 'stub: still blocked',
+        },
+        article: inp.article,
+        fidelity: inp.fidelity,
+        coverage: inp.coverage,
+        conceptCandidates: inp.conceptCandidates,
+        plan: inp.plan,
+        segmentation: inp.segmentation,
+      }),
+    ),
+    ...overrides.regeneration,
+  } as unknown as ArticleRegenerationService
   // Real diagnosis service over a stub ConfigService (v3 flag off ⇒ always v2).
   const diagnosis = new SourceDiagnosisService({
     get: () => undefined,
@@ -215,6 +243,7 @@ function makeServices(overrides: {
     editorialLayout,
     learning,
     learningPrompts,
+    regeneration,
     diagnosis,
     ai,
   }
@@ -239,6 +268,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.regeneration,
       s.ai,
     )
 
@@ -305,6 +335,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.regeneration,
       s.ai,
     )
 
@@ -347,6 +378,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.regeneration,
       s.ai,
     )
 
@@ -381,6 +413,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.regeneration,
       s.ai,
     )
 
@@ -414,6 +447,7 @@ describe('ArticlePipelineService.run', () => {
       s.editorialLayout,
       s.learning,
       s.learningPrompts,
+      s.regeneration,
       s.ai,
     )
 

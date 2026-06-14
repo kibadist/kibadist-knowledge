@@ -6,6 +6,7 @@ import { WorkspacesModule } from '../workspaces/workspaces.module'
 import { ArticleEnrichmentService } from './article-enrichment.service'
 import { ArticleGeneratorService } from './article-generator.service'
 import { ArticlePipelineService } from './article-pipeline.service'
+import { ArticleRegenerationService } from './article-regeneration.service'
 import { BlockClassifierService } from './block-classifier.service'
 import { BlockRoleClassifierService } from './block-role-classifier.service'
 import { CalloutGeneratorService } from './callout-generator.service'
@@ -55,6 +56,7 @@ import { TransformerService } from './transformer.service'
     EditorialLayoutService,
     LearningLayerService,
     LearningPromptsService,
+    ArticleRegenerationService,
     ArticlePipelineService,
   ],
   exports: [TransformerService, PipelineService],

@@ -114,6 +114,95 @@ export interface CoverageReport {
 }
 
 /* ===========================================================================
+ * Targeted regeneration of blocked articles (DET-356).
+ * ===========================================================================
+ *
+ * A BLOCKED article (the fidelity/coverage gate rejected it) is repaired by
+ * RE-RUNNING ONLY the pipeline stages implicated by WHY it failed, instead of
+ * retrying the whole pipeline blindly. The gate findings are first distilled into
+ * a small set of `ArticleBlocker`s (the WHY); each blocker maps to a regeneration
+ * strategy (the WHICH STAGE + the WHY-WE-RERAN-IT); the repaired article keeps
+ * every prior section the blockers did not implicate.
+ */
+
+/** The four repairable reasons a generated article gets BLOCKED (DET-356). */
+export type ArticleBlockerReason =
+  | 'low_coverage'
+  | 'unsupported_claims'
+  | 'missing_concepts'
+  | 'poor_transcript_coherence'
+
+/**
+ * One distilled reason a generation was blocked. Derived deterministically from
+ * the fidelity + coverage reports (plus concept/segmentation context), never from
+ * an LLM — it is the audit of WHY the gate rejected, keyed so a repair strategy
+ * can be looked up.
+ */
+export interface ArticleBlocker {
+  reason: ArticleBlockerReason
+  /** Worst severity of the underlying findings behind this blocker. */
+  severity: Severity
+  /** Human-readable explanation (shown when a repair fails to clear it). */
+  explanation: string
+  /** Evidence behind the blocker, for the inspector + targeted repair. */
+  evidence: {
+    /** Source blocks implicated (e.g. high-importance unrepresented blocks). */
+    sourceBlockIds?: string[]
+    /** Article items implicated (e.g. sections carrying unsupported claims). */
+    articleRefs?: string[]
+    /** A raw count behind the blocker (e.g. concept candidates found). */
+    count?: number
+  }
+}
+
+/** A pipeline stage a repair handler can re-run (DET-356). */
+export type RegenerationStage =
+  | 'conceptual_segmentation'
+  | 'reshaping_plan'
+  | 'generation'
+  | 'claim_pruning'
+  | 'learning_extraction'
+  | 'fidelity_recheck'
+
+/** One targeted repair attempt for a single blocker (DET-356). */
+export interface RegenerationAction {
+  blockerReason: ArticleBlockerReason
+  /** The stage(s) this handler re-ran. */
+  stagesRerun: RegenerationStage[]
+  /** Why these stages were re-run (recorded for the inspector + analytics). */
+  why: string
+  /** Whether the targeted signal measurably improved after the rerun. */
+  resolved: boolean
+}
+
+/** The terminal outcome of a repair pass (DET-356). */
+export type RegenerationOutcome = 'repaired' | 'still_blocked' | 'no_blockers'
+
+/**
+ * The record of a single targeted-regeneration pass (DET-356). Persisted on the
+ * article so the inspector can see which stage was re-run and why, which sections
+ * were preserved, and — when the repair fails — a clear explanation of what is
+ * still wrong.
+ */
+export interface RegenerationReport {
+  /** Whether a repair pass actually ran (false ⇒ nothing was blocked). */
+  attempted: boolean
+  outcome: RegenerationOutcome
+  /** The blockers detected BEFORE the repair pass. */
+  blockersBefore: ArticleBlocker[]
+  /** The blockers still present AFTER the repair pass. */
+  blockersAfter: ArticleBlocker[]
+  /** One action per blocker handled. */
+  actions: RegenerationAction[]
+  /** Section ids preserved verbatim from the prior (valid) generation. */
+  preservedSectionIds: string[]
+  /** A clear explanation of the outcome (esp. when still blocked). */
+  explanation: string
+  /** ISO-8601 timestamp; stamped in code, never prompt-trusted. */
+  attemptedAt?: string
+}
+
+/* ===========================================================================
  * Article JSON v2 contract (DET-277) — the structured, typed-block evolution.
  * ===========================================================================
  *

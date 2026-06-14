@@ -1498,6 +1498,12 @@ model TransformedArticle {
   // never folded into articleJson, only references its ids. Ungrounded furniture is
   // labelled "AI · not from your source" in the UI.
   editorialLayout Json?
+  // Targeted regeneration audit (DET-356): the record of the repair pass run on a
+  // BLOCKED article — the blockers detected before/after, one action per blocker
+  // (which stage was re-run and why), the sections preserved, and a clear
+  // explanation of the outcome. NULL on articles that never needed repair (the
+  // gate approved on the first pass) and on rows produced before this wave.
+  regenerationReport Json?
   error           String?
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
