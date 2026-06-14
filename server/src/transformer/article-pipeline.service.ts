@@ -10,6 +10,7 @@ import { AiService } from '../ai/ai.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { toArticleV2 } from './article-compat.util'
 import { ArticleEnrichmentService } from './article-enrichment.service'
+import type { ArticleGenerationContext } from './article-generation-router'
 import { ArticleGeneratorService } from './article-generator.service'
 import {
   type ArticleGateResult,
@@ -90,6 +91,14 @@ type LoadedBlock = ClassifiedBlockInput & {
   important: boolean
 }
 
+/**
+ * Per-job generation options (DET-362). `internalPreview` marks an internal preview
+ * run, which the router may route to v3 while the rollout is still preview-only.
+ */
+export interface ArticleGenerationOptions {
+  internalPreview?: boolean
+}
+
 /** Cap auto-rendered illustrations per article to bound gpt-image-1 cost/latency
  *  (DET-319). High-fidelity-risk suggestions are never auto-rendered. */
 const MAX_AUTO_ILLUSTRATIONS = 3
@@ -141,8 +150,14 @@ export class ArticlePipelineService {
    * Create a fresh article for a READY source and run the full pipeline. Returns
    * the new article id. Fire-and-forget the returned promise; failures are
    * persisted onto the article, never thrown to the caller.
+   *
+   * `options.internalPreview` marks the job as an internal preview so it can route
+   * to v3 while the rollout is still in internal-preview-only mode (DET-362).
    */
-  async createAndRun(sourceId: string): Promise<string> {
+  async createAndRun(
+    sourceId: string,
+    options: ArticleGenerationOptions = {},
+  ): Promise<string> {
     const source = await this.prisma.transformerSource.findUnique({
       where: { id: sourceId },
       select: { id: true, workspaceId: true, blocksVersion: true },
@@ -159,7 +174,7 @@ export class ArticlePipelineService {
       select: { id: true },
     })
 
-    void this.run(article.id, source.id, source.blocksVersion).catch(
+    void this.run(article.id, source.id, source.blocksVersion, options).catch(
       (error) => {
         this.logger.error(
           `Article pipeline promise rejected for ${article.id}: ${
@@ -176,6 +191,7 @@ export class ArticlePipelineService {
     articleId: string,
     sourceId: string,
     blocksVersion: number,
+    options: ArticleGenerationOptions = {},
   ): Promise<void> {
     if (this.running.has(articleId)) {
       this.logger.warn(`Article ${articleId} already running; skip.`)
@@ -183,7 +199,7 @@ export class ArticlePipelineService {
     }
     this.running.add(articleId)
     try {
-      await this.runInner(articleId, sourceId, blocksVersion)
+      await this.runInner(articleId, sourceId, blocksVersion, options)
     } catch (error) {
       // FAILED = could not produce valid artifacts (schema/traceability/exception).
       const message = error instanceof Error ? error.message : 'pipeline failed'
@@ -198,31 +214,54 @@ export class ArticlePipelineService {
     articleId: string,
     sourceId: string,
     blocksVersion: number,
+    options: ArticleGenerationOptions = {},
   ): Promise<void> {
     const blocks = await this.loadBlocks(sourceId, blocksVersion)
     if (blocks.length === 0) {
       throw new Error('Source has no blocks at the pinned version')
     }
 
-    // --- 5b. Source diagnosis (DET-345) -------------------------------------
+    // --- 5b. Source diagnosis + generation routing (DET-345 / DET-362) ------
     // Deterministic, no LLM: detect the SourceKind and select the v3 ArticleShape
     // BEFORE any prompt is built, then store the diagnosis on the job. The router
-    // decides v2 (default) vs v3 (flag + targeted-kind gated). When it routes to
-    // v3 (DET-343), the source-grounded learning pipeline runs INSTEAD of the v2
-    // stages below and persists its own learning-first articleJson; otherwise every
-    // article runs the v2 pipeline as before. Never fatal: a diagnosis failure logs
-    // and leaves the article on the conservative v2 path.
+    // decides v2 (default) vs v3 (master + per-kind + internal-preview flags via the
+    // dedicated article-generation-router). When it routes to v3 (DET-343), the
+    // source-grounded learning pipeline runs INSTEAD of the v2 stages below and
+    // persists its own learning-first articleJson; otherwise every article runs the
+    // v2 pipeline as before. If a v3 job throws and the decision carries
+    // `fallbackToV2OnFailure`, the job falls back to the v2 pipeline rather than
+    // failing the article (DET-362). Never fatal: a diagnosis failure logs and leaves
+    // the article on the conservative v2 path.
     const meta = await this.loadSourceMeta(sourceId)
-    const routing = this.tryDiagnose(articleId, blocks, meta)
+    const routing = this.tryDiagnose(articleId, blocks, meta, {
+      internalPreview: options.internalPreview === true,
+    })
     if (routing) {
       await this.persist(articleId, {
         sourceDiagnosis: routing.diagnosis as unknown as Prisma.InputJsonValue,
       })
-      this.logger.log(`Article ${articleId} routing — ${routing.reason}`)
+      this.logger.log(
+        `Article ${articleId} routing → ${routing.pipeline} (${routing.reason}); v2-fallback-on-failure=${routing.fallbackToV2OnFailure}`,
+      )
     }
     if (routing?.pipeline === 'v3') {
-      await this.runV3(articleId, sourceId, blocks, routing.diagnosis, meta)
-      return
+      try {
+        await this.runV3(articleId, sourceId, blocks, routing.diagnosis, meta)
+        return
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        // Acceptance criterion (DET-362): "Failed v3 jobs can fall back to v2
+        // only when explicitly configured." With the fallback flag OFF, a v3
+        // failure propagates to `run`, which marks the article FAILED exactly
+        // like a v2 failure. With it ON, the job re-runs on the frozen v2
+        // pipeline below instead of failing — the safety net while v3 is still
+        // proving out against the regression fixtures.
+        if (!routing.fallbackToV2OnFailure) throw error
+        this.logger.warn(
+          `Article ${articleId} v3 pipeline failed (${message}); falling back to v2 per ARTICLE_GENERATION_V3_FALLBACK_TO_V2`,
+        )
+        // fall through to the v2 stages below (a full, fresh v2 generation).
+      }
     }
 
     // --- 6. Structure model -------------------------------------------------
@@ -1047,9 +1086,10 @@ export class ArticlePipelineService {
     articleId: string,
     blocks: LoadedBlock[],
     meta: SourceDiagnosisMetadata,
+    context: ArticleGenerationContext = {},
   ): ReturnType<SourceDiagnosisService['route']> | null {
     try {
-      return this.sourceDiagnosis.route(blocks, meta)
+      return this.sourceDiagnosis.route(blocks, meta, context)
     } catch (error) {
       this.logger.warn(
         `Source diagnosis failed for ${articleId}: ${

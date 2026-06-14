@@ -1,39 +1,34 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import {
+  ARTICLE_GENERATION_ENV,
+  type ArticleGenerationContext,
+  type ArticleGenerationFlags,
+  LEGACY_MASTER_FLAG_ENV,
+  readArticleGenerationFlags,
+  routeArticleGeneration,
+} from './article-generation-router'
 import type {
   ArticleRoutingDecision,
-  SourceArticleShape,
   SourceDiagnosis,
   SourceDiagnosisMetadata,
-  SourceKind,
 } from './source-diagnosis.types'
 import { diagnoseSource } from './source-diagnosis.util'
 import type { ClassifiedBlockInput } from './structure-model.service'
 
 /**
- * Source-diagnosis service (DET-345). Thin injectable wrapper over the pure
- * detector that (a) runs the deterministic diagnosis and (b) applies the
- * feature-flag-gated v3 ROUTING on top of it.
+ * Source-diagnosis service (DET-345). Thin injectable wrapper that (a) runs the
+ * deterministic diagnosis and (b) applies the feature-flag-gated v3 ROUTING
+ * (DET-362) on top of it.
  *
- * Routing follows the ticket's architecture note exactly:
- *  - v2 is the default fallback for every source.
- *  - v3 is selected ONLY when the rollout flag is on AND the detected kind is one
- *    of the two initially-targeted broken kinds (`transcript_lesson`,
- *    `structured_web_article`).
- *  - `unknown` (and every other kind) always stays on v2 — the conservative
- *    source-grounded path with no external enrichment.
- *
- * The diagnosis is computed for EVERY article regardless of routing, so it is
- * available to both pipelines and to analytics; only the pipeline CHOICE is gated.
+ * Routing follows the ticket's architecture note: v2 is the default fallback for
+ * every source, and v3 is selected only when the flags allow it for the detected
+ * kind (see `article-generation-router.ts` for the full flag matrix). The diagnosis
+ * is computed for EVERY article regardless of routing, so it is available to both
+ * pipelines and to analytics; only the pipeline CHOICE is gated.
  */
 @Injectable()
 export class SourceDiagnosisService {
-  private readonly logger = new Logger(SourceDiagnosisService.name)
-
-  /** Kinds the v3 router targets first (the two known-broken source types). */
-  private static readonly V3_TARGET_KINDS: ReadonlySet<SourceKind> =
-    new Set<SourceKind>(['transcript_lesson', 'structured_web_article'])
-
   constructor(private readonly config: ConfigService) {}
 
   /** Run the deterministic diagnosis for a source's blocks + metadata. */
@@ -46,51 +41,54 @@ export class SourceDiagnosisService {
 
   /**
    * Diagnose, then decide which pipeline runs. Pure aside from reading the rollout
-   * flag; never throws.
+   * flags; never throws. `context.internalPreview` lets a preview job opt into v3
+   * while the rollout is still in internal-preview-only mode.
    */
   route(
     blocks: ClassifiedBlockInput[],
     metadata: SourceDiagnosisMetadata = {},
+    context: ArticleGenerationContext = {},
   ): ArticleRoutingDecision {
     const diagnosis = this.diagnose(blocks, metadata)
-    return this.decideRouting(diagnosis)
+    return this.decideRouting(diagnosis, context)
   }
 
-  /** Apply the flag + kind gate to a diagnosis. Exposed for direct testing. */
-  decideRouting(diagnosis: SourceDiagnosis): ArticleRoutingDecision {
-    const v3Enabled = this.isV3Enabled()
-    const targeted = SourceDiagnosisService.V3_TARGET_KINDS.has(
+  /** Apply the flag matrix to a diagnosis. Exposed for direct testing. */
+  decideRouting(
+    diagnosis: SourceDiagnosis,
+    context: ArticleGenerationContext = {},
+  ): ArticleRoutingDecision {
+    const routing = routeArticleGeneration(
       diagnosis.sourceKind,
+      this.readFlags(),
+      context,
     )
-
-    if (v3Enabled && targeted) {
-      return {
-        pipeline: 'v3',
-        diagnosis,
-        reason: `v3 routing: flag on and ${diagnosis.sourceKind} is a v3-target kind (shape=${shapeLabel(
-          diagnosis.articleShape,
-        )})`,
-      }
+    return {
+      pipeline: routing.pipeline,
+      diagnosis,
+      reason: routing.reason,
+      fallbackToV2OnFailure: routing.fallbackToV2OnFailure,
     }
-
-    const reason = !v3Enabled
-      ? `v2 fallback: v3 rollout flag off (kind=${diagnosis.sourceKind})`
-      : `v2 fallback: ${diagnosis.sourceKind} is not a v3-target kind`
-    return { pipeline: 'v2', diagnosis, reason }
   }
 
   /**
-   * Whether v3 routing is enabled. Off by default — opt-in via the
-   * `TRANSFORMER_V3_ENABLED` env var (truthy: "1"/"true"/"yes"/"on"). This is the
-   * single rollout control; an internal preview mode can flip it per-deploy.
+   * Whether the v3 MASTER gate is on. Off by default; opt-in via
+   * `ARTICLE_GENERATION_V3_ENABLED` (legacy alias `TRANSFORMER_V3_ENABLED`). Note a
+   * `true` here does NOT mean every source routes to v3 — the per-kind +
+   * preview-only flags still apply (see `route`).
    */
   isV3Enabled(): boolean {
-    const raw = this.config.get<string>('TRANSFORMER_V3_ENABLED')
-    if (!raw) return false
-    return ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase())
+    return this.readFlags().v3Enabled
   }
-}
 
-function shapeLabel(shape: SourceArticleShape | null): string {
-  return shape ?? 'source_grounded'
+  /** Project the router-relevant env via ConfigService into a flag config. */
+  private readFlags(): ArticleGenerationFlags {
+    const keys = [
+      ...Object.values(ARTICLE_GENERATION_ENV),
+      LEGACY_MASTER_FLAG_ENV,
+    ]
+    const env: Record<string, string | undefined> = {}
+    for (const key of keys) env[key] = this.config.get<string>(key)
+    return readArticleGenerationFlags(env)
+  }
 }
