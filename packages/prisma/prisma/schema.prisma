@@ -1484,6 +1484,11 @@ model TransformedArticle {
   // stay NULL (the pipeline degrades to no-segmentation around a failure).
   segments        Json?
   reshapingPlan   Json?
+  // Learning-first article outline (DET-348): a teaching arc, concept-led sections,
+  // source furniture (references/bibliography/external links) demoted to source
+  // notes. Built between the reshaping plan and the rewrite (generator) and passed
+  // to it. Additive nullable lane; old rows stay NULL.
+  learningOutline Json?
   articleJson     Json?
   fidelityReport  Json?
   fidelityScore   Int?

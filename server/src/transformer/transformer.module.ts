@@ -14,6 +14,7 @@ import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningOutlineService } from './learning-outline.service'
 import { LearningPromptsService } from './learning-prompts.service'
 import { PipelineService } from './pipeline.service'
 import { ReshapingPlanService } from './reshaping-plan.service'
@@ -48,6 +49,7 @@ import { V3GeneratorService } from './v3/v3-generator.service'
     ConceptualSegmentationService,
     ReshapingPlanService,
     RewriteService,
+    LearningOutlineService,
     ArticleGeneratorService,
     CalloutGeneratorService,
     TableGeneratorService,

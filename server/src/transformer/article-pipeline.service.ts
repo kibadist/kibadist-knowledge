@@ -18,6 +18,8 @@ import { EditorialLayoutService } from './editorial-layout.service'
 import { FidelityCheckerService } from './fidelity-checker.service'
 import { IllustrationPlannerService } from './illustration-planner.service'
 import { LearningLayerService } from './learning-layer.service'
+import { LearningOutlineService } from './learning-outline.service'
+import { deriveLearningShape, deriveSourceKind } from './learning-outline.util'
 import type { PromptConceptCandidate } from './learning-prompts.prompt'
 import { LearningPromptsService } from './learning-prompts.service'
 import { buildReadingAids } from './reading-aids.util'
@@ -39,6 +41,7 @@ import type {
   SourceDiagnosisMetadata,
 } from './source-diagnosis.types'
 import { buildSourceNotes } from './source-notes.util'
+import { buildSourceSegments } from './source-segments.util'
 import type { ClassifiedBlockInput } from './structure-model.service'
 import { StructureModelService } from './structure-model.service'
 import { TableGeneratorService } from './table-generator.service'
@@ -92,6 +95,7 @@ export class ArticlePipelineService {
     private readonly structureModel: StructureModelService,
     private readonly segmentation: ConceptualSegmentationService,
     private readonly reshapingPlan: ReshapingPlanService,
+    private readonly learningOutline: LearningOutlineService,
     private readonly generator: ArticleGeneratorService,
     private readonly callouts: CalloutGeneratorService,
     private readonly tables: TableGeneratorService,
@@ -220,9 +224,26 @@ export class ArticlePipelineService {
       reshapingPlan: plan as unknown as Prisma.InputJsonValue,
     })
 
+    // --- 7b. Learning-first outline (DET-348) -------------------------------
+    // Build a LEARNING structure over the same blocks — a teaching arc, concept-led
+    // sections, source furniture (references/bibliography/external links) demoted to
+    // source notes — and persist it. It is handed to the rewrite (generator) so the
+    // article follows the learning outline rather than cloning the source layout.
+    const sourceSegments = buildSourceSegments(blocks)
+    const sourceKind = deriveSourceKind(blocks)
+    const outline = await this.learningOutline.build({
+      sourceKind,
+      articleShape: deriveLearningShape(sourceKind, plan.shape),
+      blocks,
+      segments: sourceSegments,
+    })
+    await this.persist(articleId, {
+      learningOutline: outline as unknown as Prisma.InputJsonValue,
+    })
+
     // --- 8. Article generation ----------------------------------------------
     await this.setStatus(articleId, TransformedArticleStatus.GENERATING)
-    const generated = await this.generator.generate(plan, blocks)
+    const generated = await this.generator.generate(plan, blocks, outline)
     // Inline callout placement (DET-272) is deterministic, computed in code (no
     // LLM): place the end-matter (keyTerms/examples/caveats) against the sections
     // by source-block overlap and attach it to the stored artifact. The top-level
