@@ -1,3 +1,4 @@
+import type { ExecutionContext } from '@nestjs/common'
 import { Injectable } from '@nestjs/common'
 import { ThrottlerGuard } from '@nestjs/throttler'
 
@@ -20,5 +21,14 @@ export class UserThrottlerGuard extends ThrottlerGuard {
     const user = req.user as AuthUser | undefined
     const ip = req.ip as string | undefined
     return Promise.resolve(user?.userId ?? ip ?? 'unknown')
+  }
+
+  /**
+   * Local-dev escape hatch: set THROTTLE_DISABLED=true in server/.env to bypass
+   * rate limiting while hammering the AI pipeline by hand. Defaults to OFF, so
+   * production (where the var is unset) keeps the DET-207 ceilings intact.
+   */
+  protected shouldSkip(_context: ExecutionContext): Promise<boolean> {
+    return Promise.resolve(process.env.THROTTLE_DISABLED === 'true')
   }
 }
