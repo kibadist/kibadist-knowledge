@@ -115,6 +115,43 @@ describe('repairArticleLlmV2', () => {
     }
   })
 
+  it('strips an out-of-vocabulary sectionRole the model echoed from the outline', () => {
+    // The reported failure: the generator, fed the learning outline, emitted
+    // concept_explainer roles (boundaries/mechanism/application) that the narrow
+    // article schema rejects — failing the whole article over a value that is
+    // re-synced from the plan anyway.
+    const repaired = repairArticleLlmV2({
+      sections: [
+        { id: 's0', heading: 'A', sectionRole: 'definition', blocks: [] },
+        { id: 's1', heading: 'B', sectionRole: 'boundaries', blocks: [] },
+        { id: 's2', heading: 'C', sectionRole: 'mechanism', blocks: [] },
+        {
+          id: 's3',
+          heading: 'D',
+          sectionRole: 'application',
+          blocks: [],
+          subsections: [
+            {
+              id: 's3a',
+              heading: 'd0',
+              sectionRole: 'misconception',
+              blocks: [],
+            },
+          ],
+        },
+      ],
+    })
+    const secs = sections(repaired)
+    // A valid role survives untouched.
+    expect(secs[0].sectionRole).toBe('definition')
+    // Out-of-enum roles are dropped (not failed, not coerced).
+    expect(secs[1].sectionRole).toBeUndefined()
+    expect(secs[2].sectionRole).toBeUndefined()
+    expect(secs[3].sectionRole).toBeUndefined()
+    // Subsection roles are normalized too (repairSection recurses).
+    expect((secs[3].subsections as Rec[])[0].sectionRole).toBeUndefined()
+  })
+
   it('returns non-object input untouched (zod will reject it loudly)', () => {
     expect(repairArticleLlmV2(null)).toBeNull()
     expect(repairArticleLlmV2('nope')).toBe('nope')

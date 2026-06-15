@@ -9,7 +9,12 @@
  *   - a container section that carries only `subsections` and omits `blocks`,
  *   - a section / subsection / block missing its anchor `id`,
  *   - an empty `subtitle.text` (the field is optional, so an empty one is best
- *     dropped rather than rejected).
+ *     dropped rather than rejected),
+ *   - a `sectionRole` outside the article's narrow vocabulary — the generator is
+ *     fed the learning outline, whose richer roles (e.g. "boundaries",
+ *     "mechanism", "application") it sometimes echoes here. The LLM's role is
+ *     discarded and re-synced from the plan (DET-273) downstream, so a stray
+ *     value is dropped rather than allowed to FAIL the whole article.
  *
  * This pass normalizes *shape only* — it never invents meaning or provenance.
  * Anchor ids are internal (DOM anchors + learning-event keys), distinct from the
@@ -17,6 +22,10 @@
  * them is safe. Pure and deterministic (a traversal counter, no clocks/RNG), so
  * it can run on every attempt.
  */
+import { SECTION_ROLE_VALUES } from './schemas'
+
+const SECTION_ROLES = new Set<string>(SECTION_ROLE_VALUES)
+
 export function repairArticleLlmV2(parsed: unknown): unknown {
   if (!isRecord(parsed)) return parsed
   const out: Record<string, unknown> = { ...parsed }
@@ -57,6 +66,16 @@ function repairSection(
     out.id = makeId(prefix, out.heading, index, counter)
   }
   const sectionId = out.id as string
+
+  // Drop a sectionRole outside the article's narrow vocabulary (the generator
+  // sometimes echoes a learning-outline role). It is re-synced from the plan in
+  // code, so a stray value is benign drift — not a reason to fail the article.
+  if (
+    out.sectionRole !== undefined &&
+    !SECTION_ROLES.has(out.sectionRole as string)
+  ) {
+    delete out.sectionRole
+  }
 
   // Every section must carry a blocks array — a pure container (subsections only)
   // gets an empty one rather than failing the article.

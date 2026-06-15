@@ -384,6 +384,15 @@ const sectionRole = z.enum([
   'chronology',
 ])
 
+/**
+ * The narrow article `sectionRole` vocabulary (DET-273), exported so the
+ * generator's pre-validation repair can strip any out-of-enum role the model
+ * echoed from the richer learning-outline vocabulary before it FAILS the whole
+ * article. The role is re-synced from the plan in code regardless, so dropping a
+ * stray value here is purely benign shape normalization.
+ */
+export const SECTION_ROLE_VALUES = sectionRole.options
+
 /** Fields shared by every v2 block. */
 const blockBase = {
   id: z.string().min(1),
