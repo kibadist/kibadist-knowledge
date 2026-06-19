@@ -1,0 +1,50 @@
+name: Prisma migrations
+
+# Fails when schema.prisma declares structure that no committed migration
+# creates — the bug that left prod missing transformed_articles.enrichment.
+# See scripts/check-migration-drift.sh.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/prisma/prisma/**'
+      - 'scripts/check-migration-drift.sh'
+      - '.github/workflows/prisma-migrations.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/prisma/prisma/**'
+      - 'scripts/check-migration-drift.sh'
+      - '.github/workflows/prisma-migrations.yml'
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Match docker-compose: PG16 + the `vector` extension the migrations need.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shadow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shadow
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: bash scripts/check-migration-drift.sh
