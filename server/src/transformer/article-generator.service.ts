@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common'
 
 import { AiService } from '../ai/ai.service'
+import {
+  appendVerbatimCoverage,
+  findUncoveredSourceBlocks,
+} from './article-completeness.util'
 import { buildArticlePrompt } from './article-generator.prompt'
 import { repairArticleLlmV2 } from './article-llm-repair.util'
 import type { LearningOutline } from './learning-outline.types'
@@ -119,7 +123,7 @@ export class ArticleGeneratorService {
     // survive, and an empty/absent audit omits the field). Other later-wave fields
     // are absent on the LLM artifact, so the result is a clean native v2 article.
     const reorderings = plan.reorderings ?? []
-    return {
+    const article: ArticleJsonV2 = {
       schemaVersion: ARTICLE_SCHEMA_VERSION,
       mode: llm.mode,
       title: llm.title,
@@ -133,6 +137,24 @@ export class ArticleGeneratorService {
       ...(plan.shape ? { shape: plan.shape } : {}),
       ...(reorderings.length > 0 ? { reorderings } : {}),
     }
+
+    // Generator completeness (DET-252 follow-up): the planner now accounts for
+    // every block, but the model still condenses when it renders — omitting
+    // plan-assigned blocks that the coverage gate (measured on THIS article)
+    // then counts as lost. Recover any non-removable source block the article
+    // cites nowhere by appending its OWN text as a `verbatim` paragraph to the
+    // nearest section. Deterministic and faithful — it can never introduce the
+    // unsupported-claims / lost-information findings an LLM rewrite might.
+    const uncovered = findUncoveredSourceBlocks(
+      article,
+      blocks.map((b) => ({ id: b.id, text: b.text, removable: b.removable })),
+    )
+    if (uncovered.length === 0) return article
+    return appendVerbatimCoverage(
+      article,
+      uncovered,
+      blocks.map((b) => b.id),
+    )
   }
 }
 

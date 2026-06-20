@@ -143,10 +143,15 @@ describe('ArticleGeneratorService traceability guard', () => {
 
   it('drops a block citing only an unknown id instead of failing (DET-319)', async () => {
     const service = new ArticleGeneratorService(stubAi(articleWith(['ghost'])))
-    // Traceability repair prunes the untraceable block before assertKnownIds; the
-    // section survives (its own citation is real) with no blocks left.
+    // Traceability repair prunes the untraceable block before assertKnownIds, so
+    // the article does NOT fail. The generator completeness backstop then recovers
+    // any real source block left uncovered (here b2) as a verbatim paragraph — it
+    // never re-introduces the pruned unknown id.
     const article = await service.generate(plan, blocks)
-    expect(article.sections[0].blocks).toEqual([])
+    const out = article.sections[0].blocks
+    expect(out.every((b) => !b.sourceBlockIds.includes('ghost'))).toBe(true)
+    expect(out.every((b) => b.transformationType === 'verbatim')).toBe(true)
+    expect(out.flatMap((b) => b.sourceBlockIds)).toContain('b2')
   })
 
   it('re-derives originalStructure from real blocks, ignoring the model copy', async () => {

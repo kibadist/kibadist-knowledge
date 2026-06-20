@@ -297,3 +297,88 @@ describe('ArticleGeneratorService', () => {
     expect(article.sections[0].sectionRole).toBeUndefined()
   })
 })
+
+describe('ArticleGeneratorService completeness (DET-252 follow-up)', () => {
+  const covPlan: ReshapingPlan = {
+    titleProposal: { text: 'T', source: 'inferred' },
+    shape: 'explainer',
+    sections: [
+      {
+        heading: 'H',
+        headingSource: 'inferred',
+        headingInferenceReason: 'no headings',
+        sourceBlockIds: ['c1', 'c2'],
+        allowedTransformations: [],
+      },
+    ],
+    removedBlocks: [],
+    warnings: [],
+    reorderings: [],
+  }
+  const covBlocks: ClassifiedBlockInput[] = [
+    {
+      id: 'c1',
+      type: 'PARAGRAPH',
+      classification: 'CORE',
+      text: 'first',
+      removable: false,
+    },
+    {
+      id: 'c2',
+      type: 'PARAGRAPH',
+      classification: 'CORE',
+      text: 'second source text',
+      removable: false,
+    },
+    {
+      id: 'c9',
+      type: 'PARAGRAPH',
+      classification: 'FOOTER',
+      text: 'noise',
+      removable: true,
+    },
+  ]
+
+  it('backstops a non-removable block the model dropped, verbatim', async () => {
+    // The model renders only c1 — dropping c2 (which the plan assigned).
+    const service = makeService({
+      mode: 'source_preserving_article',
+      title: { text: 'T', source: 'inferred' },
+      abstract: [],
+      sections: [
+        {
+          id: 's1',
+          heading: 'H',
+          headingSource: 'inferred',
+          sourceBlockIds: ['c1'],
+          blocks: [
+            {
+              id: 'p1',
+              type: 'paragraph',
+              sourceBlockIds: ['c1'],
+              transformationType: 'verbatim',
+              fidelityRisk: 'low',
+              text: 'first',
+            },
+          ],
+        },
+      ],
+      keyTerms: [],
+      sourceExamples: [],
+      caveats: [],
+    })
+    const article = await service.generate(covPlan, covBlocks)
+    const cited = new Set(
+      article.sections
+        .flatMap((s) => s.blocks)
+        .flatMap((b) => b.sourceBlockIds),
+    )
+    expect(cited.has('c2')).toBe(true) // dropped block recovered
+    expect(cited.has('c9')).toBe(false) // removable noise is never added
+    const cover = article.sections
+      .flatMap((s) => s.blocks)
+      .find((b) => b.sourceBlockIds.includes('c2'))
+    expect(cover?.transformationType).toBe('verbatim')
+    expect((cover as { text?: string }).text).toBe('second source text')
+  })
+})
