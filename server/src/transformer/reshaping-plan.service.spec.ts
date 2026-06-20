@@ -570,3 +570,73 @@ describe('ReshapingPlanService audited reorder (DET-275)', () => {
     expect(plan.reorderings).toEqual([])
   })
 })
+
+/** A service whose AI returns each response in order (plan, then corrective). */
+function makeMultiService(responses: unknown[]) {
+  const complete = jest.fn()
+  for (const r of responses) {
+    complete.mockResolvedValueOnce({ text: JSON.stringify(r), model: 'stub' })
+  }
+  const ai = { complete } as unknown as AiService
+  return { service: new ReshapingPlanService(ai), complete }
+}
+
+// A plan that cites only b1 — leaving b2 (non-removable DEFINITION) silently
+// dropped: neither cited nor in removedBlocks.
+const planDroppingB2 = {
+  titleProposal: { text: 'T', source: 'inferred' },
+  sections: [
+    {
+      heading: 'H',
+      headingSource: 'inferred',
+      headingInferenceReason: 'no source headings',
+      sourceBlockIds: ['b1'],
+      allowedTransformations: [],
+    },
+  ],
+  removedBlocks: [],
+  warnings: [],
+}
+
+const citedIds = (plan: { sections: { sourceBlockIds: string[] }[] }) =>
+  plan.sections.flatMap((s) => s.sourceBlockIds)
+
+describe('ReshapingPlanService completeness (DET-252 follow-up)', () => {
+  it('covers a silently-dropped block via the steered corrective pass', async () => {
+    const { service } = makeMultiService([
+      planDroppingB2,
+      { assignments: [{ blockId: 'b2', sectionIndex: 0 }] },
+    ])
+    const plan = await service.build(structureModel, blocks)
+    expect(citedIds(plan)).toContain('b2')
+  })
+
+  it('backstops a dropped block when the corrective pass places nothing', async () => {
+    const { service } = makeMultiService([planDroppingB2, { assignments: [] }])
+    const plan = await service.build(structureModel, blocks)
+    // Still covered (appended to the nearest section) rather than lost.
+    expect(citedIds(plan)).toContain('b2')
+  })
+
+  it('makes no corrective call when every block is already accounted for', async () => {
+    // Cite b1+b2, remove the removable b9 → nothing left uncovered.
+    const { service, complete } = makeMultiService([
+      {
+        titleProposal: { text: 'T', source: 'inferred' },
+        sections: [
+          {
+            heading: 'H',
+            headingSource: 'inferred',
+            headingInferenceReason: 'no source headings',
+            sourceBlockIds: ['b1', 'b2'],
+            allowedTransformations: [],
+          },
+        ],
+        removedBlocks: [{ blockId: 'b9', reason: 'site footer' }],
+        warnings: [],
+      },
+    ])
+    await service.build(structureModel, blocks)
+    expect(complete).toHaveBeenCalledTimes(1)
+  })
+})

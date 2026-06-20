@@ -313,6 +313,26 @@ export const ReshapingPlanSchema = z.object({
 
 export type ReshapingPlan = z.infer<typeof ReshapingPlanSchema>
 
+/**
+ * Reshaping-plan COMPLETENESS pass (DET-252 follow-up). When the planner
+ * silently dropped non-removable blocks, a steered second pass returns, for each
+ * dropped block, the section to fold it into (`sectionIndex`) or a removal
+ * decision (`sectionIndex: null`). Code re-validates: a removal is honoured only
+ * for genuinely-removable blocks, anything left uncovered hits the backstop.
+ */
+export const ReshapingCompletionLlmSchema = z.object({
+  assignments: z.array(
+    z.object({
+      blockId: z.string().min(1),
+      sectionIndex: z.number().int().nullable(),
+    }),
+  ),
+})
+
+export type ReshapingCompletionLlm = z.infer<
+  typeof ReshapingCompletionLlmSchema
+>
+
 // --- Article (step 8) ------------------------------------------------------
 
 const articleParagraphSchema: z.ZodType<ArticleParagraph> = z.object({

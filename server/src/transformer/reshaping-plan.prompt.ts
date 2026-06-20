@@ -39,6 +39,7 @@ ABSOLUTE RULES:
   - For "original"/"cleanedOriginal", set "headingSourceBlockIds" to the source heading block id(s) from originalOutline.
   - For EVERY "inferred" heading, set "headingInferenceReason" explaining why no source heading applied (e.g. "transcript has no headings", "source heading was a navigation label"). This is required.
   - Preserve the source's heading HIERARCHY: when an outline heading at "level" N+1 falls under a heading at level N, nest its section under the parent as a "subsections" entry (ONE level of nesting only). Use subsections only when the source's levels support it.
+- ACCOUNT FOR EVERY content block: each block id MUST appear in some section's "sourceBlockIds" (or a subsection's) OR — only if it is removable noise — in "removedBlocks". Never silently omit a block. On a long source this means every block lands somewhere; condensing is for FORM (grouping/ordering), not for dropping substance.
 - "removedBlocks" may ONLY list blocks that were flagged removable/noise. NEVER remove a definition, example, main argument, evidence, or uncertain block. Each removed block needs a reason. (Code re-enforces this and will override violations.)
 - Do NOT add facts, examples, conclusions, or metaphors. Do NOT drop caveats.
 - "allowedTransformations" lists the FORM-only edits permitted in each section (grammar_cleanup, light_reword, paragraph_split, paragraph_merge, formatting_only, reorder).

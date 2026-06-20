@@ -3,8 +3,15 @@ import { Injectable } from '@nestjs/common'
 import { AiService } from '../ai/ai.service'
 import { completeJson } from './llm-json.util'
 import { auditPlanReorderCoverage } from './reorder-audit.util'
+import { buildReshapingCompletionPrompt } from './reshaping-completeness.prompt'
+import {
+  applyCorrectiveAssignments,
+  backstopUncovered,
+  findUncoveredBlockIds,
+} from './reshaping-completeness.util'
 import { buildReshapingPlanPrompt } from './reshaping-plan.prompt'
 import {
+  ReshapingCompletionLlmSchema,
   type ReshapingPlan,
   ReshapingPlanSchema,
   type SourceStructureModel,
@@ -214,9 +221,81 @@ export class ReshapingPlanService {
       )
     }
 
+    // Guard G (completeness): the planner silently drops the long tail of
+    // non-removable blocks on long sources — neither cited nor in removedBlocks —
+    // which the coverage gate later counts as lost (below the 85% floor →
+    // BLOCKED) and the regeneration re-plan repeats verbatim. Recover them: one
+    // STEERED corrective pass (fold each into a best-fit section, or remove only
+    // genuine noise), then a deterministic source-order BACKSTOP so coverage can
+    // never fail on silent omission alone. Best-effort — a corrective-call
+    // failure drops straight to the backstop, never failing the article.
+    let completedSections = groundedSections
+    const removedIds = new Set(keptRemovals.map((r) => r.blockId))
+    let uncovered = findUncoveredBlockIds(completedSections, removedIds, blocks)
+    if (uncovered.length > 0) {
+      const removableIds = new Set(
+        blocks.filter((b) => b.removable).map((b) => b.id),
+      )
+      try {
+        const { system: cSystem, prompt: cPrompt } =
+          buildReshapingCompletionPrompt(
+            completedSections.map((s) => ({
+              heading: s.heading,
+              sourceBlockIds: s.sourceBlockIds,
+            })),
+            uncovered.map((id) => {
+              const b = byId.get(id)
+              return {
+                id,
+                type: b?.type ?? 'PARAGRAPH',
+                classification: b?.classification ?? 'BACKGROUND',
+                text: b?.text ?? '',
+              }
+            }),
+          )
+        const completion = await completeJson(this.ai, {
+          system: cSystem,
+          prompt: cPrompt,
+          schema: ReshapingCompletionLlmSchema,
+          maxTokens: 2000,
+        })
+        const applied = applyCorrectiveAssignments(
+          completedSections,
+          completion.assignments,
+          removableIds,
+        )
+        completedSections = applied.sections
+        for (const id of applied.removedBlockIds) {
+          keptRemovals.push({
+            blockId: id,
+            reason: 'completeness pass: removed as noise',
+          })
+          removedIds.add(id)
+        }
+      } catch (err) {
+        warnings.push(
+          `Completeness corrective pass failed; relying on backstop (${
+            err instanceof Error ? err.message : String(err)
+          }).`,
+        )
+      }
+      // Whatever the corrective pass did not place is appended deterministically.
+      uncovered = findUncoveredBlockIds(completedSections, removedIds, blocks)
+      if (uncovered.length > 0) {
+        completedSections = backstopUncovered(
+          completedSections,
+          uncovered,
+          blocks,
+        )
+        warnings.push(
+          `Completeness backstop: appended ${uncovered.length} uncovered source block(s) to their nearest section (${uncovered.join(', ')}).`,
+        )
+      }
+    }
+
     return {
       ...plan,
-      sections: groundedSections,
+      sections: completedSections,
       removedBlocks: keptRemovals,
       warnings,
     }
